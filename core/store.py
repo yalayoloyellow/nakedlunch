@@ -103,7 +103,9 @@ class NakedLunchStore:
                 if "chat" in dyn_raw:
                     self.state.chat = dyn_raw["chat"]
                 if "used_lines" in dyn_raw:
-                    self.state.used_lines = dyn_raw.get("used_lines") or {}
+                    used = dyn_raw.get("used_lines") or {}
+                    # Migrate old state: convert all values to float timestamps
+                    self.state.used_lines = {k: float(v) for k, v in used.items()}
             except Exception:
                 pass
 
@@ -217,13 +219,16 @@ class NakedLunchStore:
         corpora = [Corpus(**c) for c in d.get("corpora", [])]
         fragments = [Fragment(**f) for f in d.get("fragments", [])]
         chat = d.get("chat", {"history": [], "pending_bias": None})
+        used_lines = d.get("used_lines", {}) or {}
+        # Migrate: ensure all timestamps are float
+        used_lines = {k: float(v) for k, v in used_lines.items()}
         return State(
             version=d.get("version", 1),
             updated_at=d.get("updated_at", _now()),
             corpora=corpora,
             fragments=fragments,
             chat=chat,
-            used_lines=d.get("used_lines", {}),
+            used_lines=used_lines,
         )
 
     # ---------- Corpora & Fragments ----------
@@ -471,7 +476,7 @@ class NakedLunchStore:
             count = len(self.state.used_lines)
             self.state.used_lines.clear()
         else:
-            to_keep = {k: v for k, v in self.state.used_lines.items() if v < older_than}
+            to_keep = {k: v for k, v in self.state.used_lines.items() if float(v) < older_than}
             count = len(self.state.used_lines) - len(to_keep)
             self.state.used_lines = to_keep
         self._save()

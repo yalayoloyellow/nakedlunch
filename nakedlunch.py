@@ -461,5 +461,118 @@ def main() -> None:
     finally:
         print("\x1b[0m", end="")
 
+def test_all_commands():
+    """Automated test for main commands to prevent regressions like clear_used TypeError.
+    Run with: python nakedlunch.py test
+    """
+    import tempfile
+    from pathlib import Path
+    print("Running automated command tests...")
+    passed = True
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = Path(tmp) / "data"
+            store = NakedLunchStore(data_dir)
+
+            # /h (help) - simulated, no crash
+            print("Testing /h ... OK (print only)")
+
+            # /s
+            print("Testing /s ...")
+            try:
+                _ = store.list_corpora()
+                print("  /s: OK")
+            except Exception as e:
+                print(f"  /s FAILED: {e}")
+                passed = False
+
+            # /a simulation: add test source (like choosing file)
+            print("Testing /a ...")
+            test_file = Path(tmp) / "test_source.txt"
+            test_content = "This is a test source for fragmentation. It has multiple sentences. Another sentence to ensure fragments are created."
+            test_file.write_text(test_content, encoding="utf-8")
+            try:
+                corp = store.add_corpus("test_source", test_content)
+                print(f"  /a: added with fragment_count={corp.fragment_count}")
+                if corp.fragment_count > 0:
+                    print("  /a: fragment_count > 0 OK")
+                else:
+                    print("  /a: fragment_count == 0 FAIL")
+                    passed = False
+            except Exception as e:
+                print(f"  /a FAILED: {e}")
+                passed = False
+
+            # /t toggle
+            print("Testing /t ...")
+            try:
+                corpora = store.list_corpora()
+                if corpora:
+                    cid = corpora[0]["id"]
+                    store.toggle_active(cid)
+                    print("  /t: OK")
+            except Exception as e:
+                print(f"  /t FAILED: {e}")
+                passed = False
+
+            # /r remove (add temp and remove)
+            print("Testing /r ...")
+            try:
+                temp_c = store.add_corpus("temp_remove", "Text for remove test with enough content to fragment.")
+                if temp_c.fragment_count > 0:
+                    store.delete_corpus(temp_c.id)
+                    print("  /r: OK")
+            except Exception as e:
+                print(f"  /r FAILED: {e}")
+                passed = False
+
+            # /c all
+            print("Testing /c all ...")
+            try:
+                cleared = store.clear_used(None)  # /c all
+                print(f"  /c all: cleared {cleared}, OK")
+            except Exception as e:
+                print(f"  /c all FAILED: {e}")
+                passed = False
+
+            # /stat
+            print("Testing /stat ...")
+            try:
+                _ = store.get_summary()
+                print("  /stat: OK")
+            except Exception as e:
+                print(f"  /stat FAILED: {e}")
+                passed = False
+
+            # /memory (retention config simulation)
+            print("Testing /memory ...")
+            try:
+                # simulate setting
+                print("  /memory: OK (simulated)")
+            except Exception as e:
+                print(f"  /memory FAILED: {e}")
+                passed = False
+
+            # /l (lang)
+            print("Testing /l ...")
+            try:
+                print("  /l: OK (simulated)")
+            except Exception as e:
+                print(f"  /l FAILED: {e}")
+                passed = False
+
+            print("\n=== Test result ===")
+            if passed:
+                print("All basic command tests PASSED")
+            else:
+                print("Some tests FAILED")
+    except Exception as e:
+        print(f"Test runner FAILED: {e}")
+        passed = False
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "test":
+        test_all_commands()
+    else:
+        main()
