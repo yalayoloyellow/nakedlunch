@@ -13,8 +13,35 @@ Cutter: детерминированная нарезка текста на рв
 
 from __future__ import annotations
 
+import html
 import re
 from typing import List
+
+
+def clean_text(text: str) -> str:
+    """Remove HTML tags, unescape entities, normalize whitespace and artifacts.
+    Call this on raw source text before cutting into fragments.
+    """
+    if not text or not text.strip():
+        return ""
+
+    # Remove all HTML/XML tags (e.g. <p>, </emphasis>, <title attr="..">, <br/> etc.)
+    text = re.sub(r'<[^>]+>', ' ', text)
+
+    # Unescape HTML entities: &amp; -> &, &lt; -> <, &gt; -> >, &quot; -> ", etc.
+    text = html.unescape(text)
+
+    # Collapse all whitespace (spaces, newlines, tabs, multiple) into single spaces
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    # Remove some common non-text artifacts that might remain (e.g. stray & or control chars)
+    # but keep punctuation needed for fragments
+    text = re.sub(r'[^\w\s\.\,\!\?\;\:\-\—\–\'\"«»\(\)\[\]\{\}…]', '', text, flags=re.UNICODE)
+
+    # Final whitespace cleanup
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    return text
 
 
 def _normalize(text: str) -> str:

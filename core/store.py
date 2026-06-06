@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.cutter import cut_into_fragments
+from core.cutter import clean_text, cut_into_fragments
 from core.generator import generate_four, generate_four_from_scored, tokens as _tokens
 
 
@@ -241,6 +241,9 @@ class NakedLunchStore:
         self, name: str, text: str, make_active: bool = True
     ) -> Corpus:
         name = name.strip() or "Без названия"
+        # Clean the raw text (remove HTML tags, normalize, etc.) immediately after "reading"
+        # and before any fragmentation. Centralized here so all add paths benefit.
+        text = clean_text(text)
         cid = _make_id("pers")
         # avoid id collisions (rare)
         while any(c.id == cid for c in self.state.corpora):
