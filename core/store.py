@@ -244,35 +244,30 @@ class NakedLunchStore:
         # Clean the raw text (remove HTML tags, normalize, etc.) immediately after "reading"
         # and before any fragmentation. Centralized here so all add paths benefit.
         text = clean_text(text)
+
+        frags = cut_into_fragments(text)
+        if not frags:
+            raise ValueError("no fragments created from the source text")
+
         cid = _make_id("pers")
         # avoid id collisions (rare)
         while any(c.id == cid for c in self.state.corpora):
             cid = _make_id("pers")
 
-        # Add the corpus first (with 0 fragments), then fragment.
-        # This follows the requirement to add, then auto-fragment,
-        # and reject (remove) if no fragments produced.
         corp = Corpus(
             id=cid,
             name=name,
             type="personal",
             active=make_active,
-            fragment_count=0,
+            fragment_count=len(frags),
         )
-        self.state.corpora.append(corp)
-
-        frags = cut_into_fragments(text)
-        if not frags:
-            # remove the just added corpus (never persisted)
-            self.state.corpora = [c for c in self.state.corpora if c.id != cid]
-            raise ValueError("no fragments created from the source text")
 
         new_fragments: List[Fragment] = []
         for ftxt in frags:
             fid = _make_id("f")
             new_fragments.append(Fragment(id=fid, text=ftxt, corpus_id=cid))
 
-        corp.fragment_count = len(new_fragments)
+        self.state.corpora.append(corp)
         self.state.fragments.extend(new_fragments)
         self._rebuild_active_fragments()
         self._save(full=True)
