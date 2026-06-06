@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# nakedlunch 1.0.0
+# nakedlunch 1.0.1
 # Copyright (c) 2026 Шамаев Илья Сергеевич (Yala, @yalayoloyellow). Personal use only.
 
 """
@@ -286,7 +286,7 @@ def main() -> None:
     except Exception:
         print("\x1b[40;37m", end="")
 
-    print("nakedlunch 1.0.0")
+    print("nakedlunch 1.0.1")
     print("Copyright (c) 2026 Шамаев Илья Сергеевич (Yala, @yalayoloyellow)")
     print()
 
