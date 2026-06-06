@@ -399,7 +399,23 @@ def main() -> None:
                         print(tr("c_requires"))
                         continue
                     mode = arg.strip().lower()
-                    cleared = store.clear_used(mode)
+                    if mode == "all":
+                        cleared = store.clear_used(None)
+                    elif mode == "hour":
+                        older = time.time() - 3600
+                        cleared = store.clear_used(older)
+                    elif mode == "day":
+                        older = time.time() - 86400
+                        cleared = store.clear_used(older)
+                    elif mode == "week":
+                        older = time.time() - 7 * 86400
+                        cleared = store.clear_used(older)
+                    elif mode == "month":
+                        older = time.time() - 30 * 86400
+                        cleared = store.clear_used(older)
+                    else:
+                        print(tr("c_requires"))
+                        continue
                     print(tr("unblocked", cleared=cleared, mode=mode))
                 elif cmd in ("stat", "stats"):
                     print(store.get_summary())

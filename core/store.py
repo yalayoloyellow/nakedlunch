@@ -471,12 +471,14 @@ class NakedLunchStore:
         (those with timestamp >= older_than are removed from used), so the fragments shown
         during that period go back into circulation (get_chat_pool will include them again).
         Keeps only usages older than the cutoff.
+        older_than must be float (unix timestamp) or None.
         """
         if older_than is None:
             count = len(self.state.used_lines)
             self.state.used_lines.clear()
         else:
-            to_keep = {k: v for k, v in self.state.used_lines.items() if float(v) < older_than}
+            older_than = float(older_than)  # ensure float
+            to_keep = {k: float(v) for k, v in self.state.used_lines.items() if float(v) < older_than}
             count = len(self.state.used_lines) - len(to_keep)
             self.state.used_lines = to_keep
         self._save()
