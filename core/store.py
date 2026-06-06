@@ -260,13 +260,11 @@ class NakedLunchStore:
             fragment_count=0,
         )
         self.state.corpora.append(corp)
-        self._save(full=True)
 
         frags = cut_into_fragments(text)
         if not frags:
-            # remove the just added corpus
+            # remove the just added corpus (never persisted)
             self.state.corpora = [c for c in self.state.corpora if c.id != cid]
-            self._save(full=True)
             raise ValueError("no fragments created from the source text")
 
         new_fragments: List[Fragment] = []
