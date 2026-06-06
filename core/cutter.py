@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import html
 import re
+import xml.etree.ElementTree as ET
+from pathlib import Path
 from typing import List
 
 
@@ -53,6 +55,43 @@ def clean_text(text: str) -> str:
     text = re.sub(r'\s+', ' ', text).strip()
 
     return text
+
+
+NS = {"fb": "http://www.gribuser.ru/xml/fictionbook/2.0"}
+
+
+def _fb2_to_text(path: Path, skip_first: int = 25) -> str:
+    """Extract clean literary text from FB2 file.
+    Uses body//p and body//v, skips front matter (titles, copyrights etc).
+    """
+    tree = ET.parse(path)
+    root = tree.getroot()
+    parts = []
+    for p in root.findall(".//fb:body//fb:p", NS) + root.findall(".//fb:body//fb:v", NS):
+        t = "".join(p.itertext()).strip()
+        t = re.sub(r"\s+", " ", t).strip()
+        if t and len(t) > 2:
+            parts.append(t)
+    if len(parts) > skip_first:
+        parts = parts[skip_first:]
+    text = "\n\n".join(parts)
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text
+
+
+def parse_source_file(path: str | Path) -> str:
+    """Load source file (.fb2 or plain text), clean it, return plain text ready for fragmentation.
+    Centralized parser so /a and future add methods produce high-quality clean text.
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Source file not found: {p}")
+    if p.suffix.lower() == ".fb2":
+        return _fb2_to_text(p)
+    else:
+        # .txt or other — treat as plain text
+        raw = p.read_text(encoding="utf-8", errors="replace")
+        return clean_text(raw)
 
 
 def _normalize(text: str) -> str:

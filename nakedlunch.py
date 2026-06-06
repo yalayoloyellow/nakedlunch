@@ -33,6 +33,7 @@ else:
 sys.path.insert(0, str(HERE))
 
 from core.store import NakedLunchStore
+from core.cutter import parse_source_file
 
 # User data in ~/Documents/nakedlunch
 def get_user_prog_dir() -> Path:
@@ -223,7 +224,10 @@ def do_add(store: NakedLunchStore) -> None:
             continue
         name = pp.stem
         try:
-            text = pp.read_text(encoding="utf-8", errors="replace")
+            text = parse_source_file(pp)
+            if not text or not text.strip():
+                print(f"источник {name} пустой или не содержит текста — пропущен")
+                continue
             corp = store.add_corpus(name, text)
             print(tr("add_success", name=name, cnt=corp.fragment_count))
         except ValueError as ve:
