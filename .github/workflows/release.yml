@@ -47,7 +47,11 @@ jobs:
           if [ -f "${{ matrix.icon }}" ]; then
             ICON_FLAG="--icon ${{ matrix.icon }}"
           fi
-          python -m PyInstaller --onefile --name nakedlunch${{ matrix.ext }} $ICON_FLAG --add-data "assets:assets" --clean nakedlunch.py
+          TARGET_ARCH=""
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            TARGET_ARCH="--target-arch universal2"
+          fi
+          python -m PyInstaller --onefile --name nakedlunch${{ matrix.ext }} $ICON_FLAG $TARGET_ARCH --add-data "assets:assets" --clean nakedlunch.py
 
       - name: Upload binary as artifact
         uses: actions/upload-artifact@v4
