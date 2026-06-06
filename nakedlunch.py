@@ -248,7 +248,6 @@ def cmd_help(lang: str = "en") -> None:
             ("/r 2 4", "", "удалить по номерам (y/N)"),
             ("/t 1 3", "", "включить/выключить по номерам"),
             ("/c", "all|hour|day|week|month", "очистить использованное"),
-            ("/stat", "", "статистика"),
             ("/dir", "", "открыть ~/Documents/nakedlunch"),
             ("/memory", "never|3m|6m|year", "retention сессий"),
             ("/l", "ru|en", "язык интерфейса"),
@@ -266,7 +265,6 @@ def cmd_help(lang: str = "en") -> None:
             ("/r 2 4", "", "remove by numbers (y/N)"),
             ("/t 1 3", "", "toggle by numbers"),
             ("/c", "all|hour|day|week|month", "clear used"),
-            ("/stat", "", "statistics"),
             ("/dir", "", "open ~/Documents/nakedlunch"),
             ("/memory", "never|3m|6m|year", "sessions retention"),
             ("/l", "ru|en", "UI language"),
@@ -417,8 +415,6 @@ def main() -> None:
                         print(tr("c_requires"))
                         continue
                     print(tr("unblocked", cleared=cleared, mode=mode))
-                elif cmd in ("stat", "stats"):
-                    print(store.get_summary())
                 elif cmd in ("dir", "d"):
                     try:
                         if sys.platform == "darwin":
@@ -549,15 +545,6 @@ def test_all_commands():
                 print(f"  /c all: cleared {cleared}, OK")
             except Exception as e:
                 print(f"  /c all FAILED: {e}")
-                passed = False
-
-            # /stat
-            print("Testing /stat ...")
-            try:
-                _ = store.get_summary()
-                print("  /stat: OK")
-            except Exception as e:
-                print(f"  /stat FAILED: {e}")
                 passed = False
 
             # /memory (retention config simulation)

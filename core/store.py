@@ -499,19 +499,6 @@ class NakedLunchStore:
             "recent": recent,
         }
 
-    # ---------- Misc ----------
-
-    def get_summary(self) -> Dict[str, Any]:
-        active = [c for c in self.state.corpora if c.active]
-        return {
-            "corpora_count": len(self.state.corpora),
-            "active_corpora_count": len(active),
-            "total_fragments": len(self.state.fragments),
-            "active_pool_size": len(self.get_active_pool()),
-            "chat_length": len(self.state.chat.get("history", [])),
-            "has_personal": any(c.type == "personal" for c in self.state.corpora),
-        }
-
     def reset_all(self) -> None:
         self.state = State()
         self._active_fragments = []
