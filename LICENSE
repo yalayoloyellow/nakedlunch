@@ -1,10 +1,23 @@
-nakedlunch
 Copyright (c) 2026 Шамаев Илья Сергеевич (Yala, @yalayoloyellow)
 
-Personal / local use only.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use,
+copy and modify the Software solely for personal, non-commercial purposes,
+subject to the following conditions:
 
-Your texts stay yours. Any texts you add via the program remain under your control.
+1. The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
 
-The application itself (the code, binaries, installers, and packaging) may not be resold, rebranded, or used for commercial purposes.
+2. The Software may not be sold, sublicensed, redistributed, or used for any
+   commercial purpose.
 
-All rights reserved for the specific personal use case described above.
+3. Any texts added by the user through the Software remain the exclusive
+   property of that user.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

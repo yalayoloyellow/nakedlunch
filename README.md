@@ -81,3 +81,8 @@ It starts empty; user adds their own source texts.
 
 All releases are built with the icon you gave — no extra art, no changes to behavior.
 
+## License
+
+This software is licensed for **personal, non-commercial use only**.
+See the [LICENSE](LICENSE) file for full terms.
+
