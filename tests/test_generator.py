@@ -18,13 +18,12 @@ from core.cutter import cut_into_fragments
 
 
 def _demo_pool():
-    texts = []
-    for p in Path("data/base").glob("*.txt"):
-        texts.append(p.read_text(encoding="utf-8"))
-    pool = []
-    for t in texts:
-        pool.extend(cut_into_fragments(t))
-    return pool
+    # Demo pool without any bundled base books.
+    # Uses a small inline sample text so tests run cleanly on empty start.
+    sample = """This is a test fragment one. Another test line here for bias.
+Ragged cut up test. Third fragment example for neutral.
+More text to make pool. Final demo line."""
+    return cut_into_fragments(sample)
 
 
 def test_neutral_returns_4():

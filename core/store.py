@@ -4,11 +4,11 @@
 """
 Store: управление корпусами, фрагментами, состоянием чата, персистенция.
 
-- Поддержка base и personal корпусов.
 - Фрагменты нарезаются один раз при add_corpus.
 - Активный пул = фрагменты из active корпусов.
 - pending_bias сбрасывается сразу после генерации.
 - Автосохранение на каждое изменение.
+- Приложение стартует пустым; пользователь добавляет свои тексты.
 """
 
 from __future__ import annotations
@@ -26,17 +26,6 @@ from core.cutter import cut_into_fragments
 from core.generator import generate_four, generate_four_from_scored, tokens as _tokens
 
 
-# The only base sources: the 4 big books, always present and active for everyone forever.
-# Demo sources removed. This is the single source of truth for "базовые навсегда".
-# Used by ensure in store (terminal CLI path).
-BASE_BOOKS = {
-    "burroughs_naked_lunch": "Уильям Берроуз — Голый завтрак",
-    "ginsberg_howl": "Аллен Гинсберг — Вопль",
-    "bible_new_testament": "Библия — Новый Завет",
-    "limonov_me_edichka": "Эдуард Лимонов — Это я — Эдичка",
-}
-
-
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -49,7 +38,7 @@ def _make_id(prefix: str) -> str:
 class Corpus:
     id: str
     name: str
-    type: str  # "base" | "personal"
+    type: str  # "personal"
     active: bool = True
     added_at: str = field(default_factory=_now)
     fragment_count: int = 0
@@ -93,9 +82,6 @@ class NakedLunchStore:
         self._active_frag_tokens: List[set[str]] = []
         self._load()
         self._rebuild_active_fragments()
-        # Always ensure the 4 eternal base books (desktop launch path and server startup both hit this).
-        # Re-adds from data/base/*.txt even if previously deleted; forces active.
-        self._ensure_base_books()
 
     def _load(self) -> None:
         loaded_full = False
@@ -123,65 +109,12 @@ class NakedLunchStore:
 
     def _rebuild_active_fragments(self) -> None:
         """Rebuild cached active fragments list and their tokens.
-        Call this whenever active corpora set changes (add, toggle, delete, reset, ensure).
+        Call this whenever active corpora set changes (add, toggle, delete, reset).
         This avoids O(N) corpus filtering on every pool request.
         """
         active_ids = {c.id for c in self.state.corpora if c.active}
         self._active_fragments = [f.text for f in self.state.fragments if f.corpus_id in active_ids]
         self._active_frag_tokens = [_tokens(f) for f in self._active_fragments]
-
-    def _ensure_base_books(self) -> None:
-        """Ensure ONLY the 4 big base books are present as active 'base' sources forever.
-        Purge any other 'base' corpora (old demos etc). Re-add the 4 books from files if missing or inactive.
-        Personal sources are never touched. This implements "оставь большие книги как исходные для всех навсегда".
-        Called from __init__ (desktop + server) and after relevant mutations (e.g. delete of a base).
-        """
-        base_names = set(BASE_BOOKS.values())
-        base_dir = self.data_dir / "base"
-
-        # Purge non-book bases from current state (demos etc)
-        to_purge = [c.id for c in list(self.state.corpora) if c.type == "base" and c.name not in base_names]
-        for cid in to_purge:
-            self.delete_corpus(cid)
-
-        existing = {c.name for c in self.state.corpora}
-
-        changed = False
-        for stem, display_name in BASE_BOOKS.items():
-            txt_path = base_dir / f"{stem}.txt"
-            if not txt_path.exists():
-                continue
-            if display_name in existing:
-                # ensure active
-                for c in self.state.corpora:
-                    if c.name == display_name and not c.active:
-                        c.active = True
-                        changed = True
-                continue
-            try:
-                text = txt_path.read_text(encoding="utf-8")
-                if text.strip():
-                    self.add_corpus(display_name, text, is_base=True, make_active=True)
-                    changed = True
-            except Exception:
-                pass
-
-        if changed:
-            self._rebuild_active_fragments()
-            self._save(full=True)
-
-        # Extra safety: if after everything the active pool is empty, force-activate any bases present
-        if not self._active_fragments:
-            activated = 0
-            for c in self.state.corpora:
-                if c.type == "base" and not c.active:
-                    c.active = True
-                    activated += 1
-                    if activated >= 4:
-                        break
-            if activated:
-                self._rebuild_active_fragments()
-                self._save(full=True)
 
     def _sample_non_used(self, k: int, rng: Optional[random.Random] = None) -> List[str]:
         """Fast rejection sampling k non-used fragments from cached active list.
@@ -305,13 +238,13 @@ class NakedLunchStore:
         return None
 
     def add_corpus(
-        self, name: str, text: str, is_base: bool = False, make_active: bool = True
+        self, name: str, text: str, make_active: bool = True
     ) -> Corpus:
         name = name.strip() or "Без названия"
-        cid = _make_id("base" if is_base else "pers")
+        cid = _make_id("pers")
         # avoid id collisions (rare)
         while any(c.id == cid for c in self.state.corpora):
-            cid = _make_id("base" if is_base else "pers")
+            cid = _make_id("pers")
 
         frags = cut_into_fragments(text)
         new_fragments: List[Fragment] = []
@@ -322,7 +255,7 @@ class NakedLunchStore:
         corp = Corpus(
             id=cid,
             name=name,
-            type="base" if is_base else "personal",
+            type="personal",
             active=make_active,
             fragment_count=len(new_fragments),
         )
@@ -342,13 +275,6 @@ class NakedLunchStore:
         return c.active
 
     def delete_corpus(self, cid: str) -> bool:
-        c = self.get_corpus(cid)
-        eternal_base_names = set(BASE_BOOKS.values())
-        if c and c.type == "base" and c.name in eternal_base_names:
-            # The 4 eternal bases ("базовые навсегда") cannot be deleted by user or normal code.
-            # Re-ensure to be safe; return False so UI doesn't think it succeeded.
-            self._ensure_base_books()
-            return False
         before = len(self.state.corpora)
         self.state.corpora = [c for c in self.state.corpora if c.id != cid]
         self.state.fragments = [f for f in self.state.fragments if f.corpus_id != cid]
@@ -465,9 +391,7 @@ class NakedLunchStore:
         return {"entries": [bentry], "pool_size": len(self.get_chat_pool())}
 
     def append_bot_message(self, text: str, reply_markup: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Send a bot message (for menus, status, results). Supports inline reply_markup for TG-like keyboards.
-        # (kept for compatibility with possible future extensions; not used by the pure terminal CLI)
-        """
+        """Send a bot message (for menus, status, results). Supports inline reply_markup for TG-like keyboards."""
         now = _now()
         entry = {
             "id": _make_id("b"),
@@ -494,10 +418,9 @@ class NakedLunchStore:
 
     def clear_chat_history(self, older_than: Optional[float] = None) -> int:
         """Clear chat history.
-        If older_than is None (full clear / "Всё"): removes all chat history.
-        If older_than provided (time period like "час"): does NOT delete any chat messages
-        (per requirement: сами сообщения в чате не должны удаляться). Only the used tracking
-        is affected for periods so that fragments can circulate again.
+        If older_than is None: removes all chat history.
+        Time-based clear of chat messages is a no-op (chat log stays intact).
+        Only used tracking is cleared for the period.
         """
         hist = self.state.chat.get("history", [])
         if older_than is None:

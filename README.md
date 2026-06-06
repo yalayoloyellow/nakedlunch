@@ -1,6 +1,6 @@
 # nakedlunch
 
-Local cut-up recombination tool (Dada + Burroughs). 4 eternal base books always active. Used lines don't repeat until cleared by period (chat log untouched).
+Local cut-up recombination tool. Pure terminal CLI. User adds their own source texts. Used lines don't repeat until cleared by period (session logs untouched).
 
 **Pure terminal CLI only** (radical minimal plain terminal, no TUI, no browser/GUI version — all removed).
 
@@ -14,10 +14,9 @@ nakedlunch
 ```
 Works from any directory (new shell or `source ~/.zshrc`).
 
-Project is now minimal — only the terminal app:
+Project is minimal — only the terminal app:
 - nakedlunch (script)
 - core/ (cutter + generator + store)
-- data/base/ (4 eternal books)
 - README + tests (optional)
 
 All previous GUI/TUI/browser/_legacy/app/ migration code removed. No "old user" artifacts (you are the only user).
@@ -34,7 +33,7 @@ cd /Users/yala/nakedlunch
 - All help via /h only. No extra/aux text on startup. Bare "nakedlunch" header.
 - Sources numbered (see /s). /r and /t accept only numbers (space separated for multi). No names.
 - /a = add (native file chooser immediately, no name prompt, auto name=filename, multi OK)
-- /r = remove (y/N confirm, bases protected)
+- /r = remove (y/N confirm)
 - /t = toggle (no confirm)
 - /dir = open program dir (~/Documents/nakedlunch)
 - /memory [never|3m|...] = sessions retention (delete old session files after N; never = keep forever)
@@ -42,7 +41,7 @@ cd /Users/yala/nakedlunch
 - /q = quit
 
 Data dir (self-created on first run): ~/Documents/nakedlunch/
-- data/ : state + base books
+- data/ : state (user sources)
 - sessions/ : lines output per session (real-time append+fsync)
 - config.json : retention policy
 
@@ -78,7 +77,7 @@ pip still works as a zero-friction alternative (if you have Python):
 python3 -m pip install nakedlunch
 nakedlunch
 ```
-It will populate the 4 eternal base books on first run exactly as the binaries do.
+It starts empty; user adds their own source texts.
 
 All releases are built with the icon you gave — no extra art, no changes to behavior.
 

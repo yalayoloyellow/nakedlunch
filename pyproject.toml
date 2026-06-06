@@ -10,7 +10,7 @@ authors = [
 ]
 description = ""
 readme = "README.md"
-license = { text = "Personal / local use only. Your texts stay yours. The bundled base texts belong to their respective rights holders and are included solely for the specified personal cut-up use within this application. The application itself may not be resold or used for commercial purposes." }
+license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.8"
 classifiers = [
   "Programming Language :: Python :: 3",
