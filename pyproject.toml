@@ -21,6 +21,10 @@ classifiers = [
 [project.scripts]
 nakedlunch = "nakedlunch:main"
 
+[tool.setuptools]
+py-modules = ["nakedlunch"]
+packages = ["core"]
+
 [tool.setuptools.package-data]
 "*" = ["assets/**/*", "data/**/*"]
 
