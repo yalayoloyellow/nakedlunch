@@ -72,6 +72,7 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          replace_existing_assets: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -94,5 +95,6 @@ jobs:
         with:
           files: dist/*
           tag_name: ${{ github.ref_name }}
+          replace_existing_assets: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
