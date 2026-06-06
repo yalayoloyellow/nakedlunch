@@ -49,15 +49,10 @@ jobs:
           fi
           python -m PyInstaller --onefile --name nakedlunch${{ matrix.ext }} $ICON_FLAG --add-data "assets:assets" --clean nakedlunch.py
 
-      - name: Prepare artifact name
-        id: artifact
-        run: |
-          echo "name=nakedlunch-${{ matrix.target }}${{ matrix.ext }}" >> $GITHUB_OUTPUT
-
       - name: Upload binary as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.artifact.outputs.name }}
+          name: nakedlunch-${{ matrix.target }}${{ matrix.ext }}
           path: dist/nakedlunch${{ matrix.ext }}
 
       - name: Upload to GitHub Release (on tag)
