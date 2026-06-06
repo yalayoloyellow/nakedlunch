@@ -246,20 +246,32 @@ class NakedLunchStore:
         while any(c.id == cid for c in self.state.corpora):
             cid = _make_id("pers")
 
-        frags = cut_into_fragments(text)
-        new_fragments: List[Fragment] = []
-        for ftxt in frags:
-            fid = _make_id("f")
-            new_fragments.append(Fragment(id=fid, text=ftxt, corpus_id=cid))
-
+        # Add the corpus first (with 0 fragments), then fragment.
+        # This follows the requirement to add, then auto-fragment,
+        # and reject (remove) if no fragments produced.
         corp = Corpus(
             id=cid,
             name=name,
             type="personal",
             active=make_active,
-            fragment_count=len(new_fragments),
+            fragment_count=0,
         )
         self.state.corpora.append(corp)
+        self._save(full=True)
+
+        frags = cut_into_fragments(text)
+        if not frags:
+            # remove the just added corpus
+            self.state.corpora = [c for c in self.state.corpora if c.id != cid]
+            self._save(full=True)
+            raise ValueError("no fragments created from the source text")
+
+        new_fragments: List[Fragment] = []
+        for ftxt in frags:
+            fid = _make_id("f")
+            new_fragments.append(Fragment(id=fid, text=ftxt, corpus_id=cid))
+
+        corp.fragment_count = len(new_fragments)
         self.state.fragments.extend(new_fragments)
         self._rebuild_active_fragments()
         self._save(full=True)

@@ -223,8 +223,14 @@ def do_add(store: NakedLunchStore) -> None:
             continue
         name = pp.stem
         try:
-            count = store.add_corpus(name, str(pp))
-            print(tr("add_success", name=name, cnt=count))
+            text = pp.read_text(encoding="utf-8", errors="replace")
+            corp = store.add_corpus(name, text)
+            print(tr("add_success", name=name, cnt=corp.fragment_count))
+        except ValueError as ve:
+            if "no fragments" in str(ve).lower():
+                print(f"источник {name} не удалось нарезать (не создано фрагментов)")
+            else:
+                print(tr("add_err", name=name, e=ve))
         except Exception as e:
             print(tr("add_err", name=name, e=e))
 
