@@ -1,4 +1,7 @@
 name: Release (GitHub + binaries)
+permissions:
+  contents: write
+  actions: write
 
 on:
   push:
@@ -39,7 +42,12 @@ jobs:
 
       - name: Build one-file binary (with icon)
         shell: bash
-        run: python -m PyInstaller --onefile --name nakedlunch${{ matrix.ext }} --icon "${{ matrix.icon }}" --add-data "assets:assets" --clean nakedlunch.py
+        run: |
+          ICON_FLAG=""
+          if [ -f "${{ matrix.icon }}" ]; then
+            ICON_FLAG="--icon ${{ matrix.icon }}"
+          fi
+          python -m PyInstaller --onefile --name nakedlunch${{ matrix.ext }} $ICON_FLAG --add-data "assets:assets" --clean nakedlunch.py
 
       - name: Prepare artifact name
         id: artifact
