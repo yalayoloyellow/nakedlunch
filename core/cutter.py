@@ -19,26 +19,37 @@ from typing import List
 
 
 def clean_text(text: str) -> str:
-    """Remove HTML tags, unescape entities, normalize whitespace and artifacts.
-    Call this on raw source text before cutting into fragments.
+    """Aggressively clean HTML, entities, and artifacts from raw text before fragmentation.
+    Centralized cleaning so all sources (via /a or otherwise) are clean.
     """
     if not text or not text.strip():
         return ""
 
-    # Remove all HTML/XML tags (e.g. <p>, </emphasis>, <title attr="..">, <br/> etc.)
-    text = re.sub(r'<[^>]+>', ' ', text)
+    # Remove script and style blocks entirely (with content)
+    text = re.sub(r'<script[^>]*>.*?</script>', ' ', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<style[^>]*>.*?</style>', ' ', text, flags=re.DOTALL | re.IGNORECASE)
 
-    # Unescape HTML entities: &amp; -> &, &lt; -> <, &gt; -> >, &quot; -> ", etc.
+    # Remove HTML comments
+    text = re.sub(r'<!--.*?-->', ' ', text, flags=re.DOTALL)
+
+    # Remove all remaining HTML/XML tags, including self-closing, with attributes, case insensitive
+    text = re.sub(r'</?\s*[^>\s]+(?:\s+[^>]*?)?\s*/?>', ' ', text, flags=re.IGNORECASE)
+
+    # Unescape all HTML entities (&amp; -> &, &lt; -> <, &nbsp; -> space, etc.)
     text = html.unescape(text)
 
-    # Collapse all whitespace (spaces, newlines, tabs, multiple) into single spaces
+    # Replace common entities that unescape might leave as \xa0 etc.
+    text = text.replace('\xa0', ' ').replace('&nbsp;', ' ')
+
+    # Collapse all whitespace (newlines, tabs, multiple spaces) to single space
     text = re.sub(r'\s+', ' ', text).strip()
 
-    # Remove some common non-text artifacts that might remain (e.g. stray & or control chars)
-    # but keep punctuation needed for fragments
+    # Remove other potential markup artifacts, keep letters, digits, basic punctuation for fragments
+    # This is aggressive to kill any remaining < > / etc.
+    text = re.sub(r'[<>]', '', text)
     text = re.sub(r'[^\w\s\.\,\!\?\;\:\-\—\–\'\"«»\(\)\[\]\{\}…]', '', text, flags=re.UNICODE)
 
-    # Final whitespace cleanup
+    # Final normalization
     text = re.sub(r'\s+', ' ', text).strip()
 
     return text
