@@ -1,4 +1,4 @@
-# nakedlunch 1.0.1
+# nakedlunch 1.1
 # Copyright (c) 2026 Шамаев Илья Сергеевич (Yala, @yalayoloyellow). Personal use only.
 
 """
@@ -80,18 +80,21 @@ def _fb2_to_text(path: Path, skip_first: int = 25) -> str:
 
 
 def parse_source_file(path: str | Path) -> str:
-    """Load source file (.fb2 or plain text), clean it, return plain text ready for fragmentation.
-    Centralized parser so /a and future add methods produce high-quality clean text.
+    """Load source file (only .fb2, .txt, .md), clean it, return plain text ready for fragmentation.
+    Strictly limited: we won't decode anything else for you.
     """
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"Source file not found: {p}")
-    if p.suffix.lower() == ".fb2":
+    suffix = p.suffix.lower()
+    if suffix == ".fb2":
         return _fb2_to_text(p)
-    else:
-        # .txt or other — treat as plain text
+    elif suffix in (".txt", ".md"):
+        # plain text or markdown — treat as plain text
         raw = p.read_text(encoding="utf-8", errors="replace")
         return clean_text(raw)
+    else:
+        raise ValueError("unsupported_format")
 
 
 def _normalize(text: str) -> str:

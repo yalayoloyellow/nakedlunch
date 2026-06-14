@@ -1,4 +1,4 @@
-# nakedlunch
+# nakedlunch 1.1
 
 Local cut-up recombination tool. Pure terminal CLI. User adds their own source texts. Used lines don't repeat until cleared by period (session logs untouched).
 
@@ -61,7 +61,7 @@ Local use only. Your texts stay yours.
 (Note: _legacy/ holds removed GUI/browser/TUI code for reference only.)
 
 ## GitHub Releases (binaries + installers for macOS / Windows / Linux)
-1. Go to Releases, pick the v1.0.1 (or latest) tag.
+1. Go to Releases, pick the v1.1 (or latest) tag.
 2. Download the archive for your OS (or the individual binary + scripts/install.*).
 3. Unpack.
 4. Run the installer from the release:

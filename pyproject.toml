@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nakedlunch"
-version = "1.0.1"
+version = "1.1"
 authors = [
   { name = "Шамаев Илья Сергеевич (Yala, @yalayoloyellow)" }
 ]
@@ -12,6 +12,9 @@ description = ""
 readme = "README.md"
 license = { text = "Custom License — Personal Use Only" }
 requires-python = ">=3.8"
+dependencies = [
+    "rich>=13.0.0",
+]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: OS Independent",
@@ -31,5 +34,5 @@ packages = ["core"]
 [project.urls]
 Homepage = "https://github.com/yalayoloyellow/nakedlunch"
 Repository = "https://github.com/yalayoloyellow/nakedlunch"
-# Releases + binaries + installers are attached to GitHub tags (v1.0.1+).
+# Releases + binaries + installers are attached to GitHub tags (v1.1+).
 # pip install nakedlunch remains the easiest cross-platform way.

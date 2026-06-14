@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# nakedlunch 1.0.1
+# nakedlunch 1.1
 # Copyright (c) 2026 Шамаев Илья Сергеевич (Yala, @yalayoloyellow). Personal use only.
 
 """
@@ -34,6 +34,23 @@ sys.path.insert(0, str(HERE))
 
 from core.store import NakedLunchStore
 from core.cutter import parse_source_file
+
+# Beautiful wrapper for video recordings and nice UX (no changes to core logic)
+from rich.console import Console
+from rich.padding import Padding
+
+console = Console()
+
+def app_print(renderable, **kwargs):
+    """Print content centered in the middle 2/3 of the terminal width.
+    Text remains left-aligned inside the band.
+    Apple-style minimal: no borders, clean spacing.
+    """
+    term_w = console.width or 80
+    content_w = max(30, min(100, int(term_w * 2 / 3)))
+    left = (term_w - content_w) // 2
+    indented = Padding(renderable, (0, 0, 0, left))
+    console.print(indented, width=term_w, **kwargs)
 
 # User data in ~/Documents/nakedlunch
 def get_user_prog_dir() -> Path:
@@ -127,6 +144,7 @@ def tr(key: str, **kwargs) -> str:
             "paths_fallback": "paths (space, fallback): ",
             "toggle_state": "{name}: {state}",
             "c_requires": "specify period: /c all|hour|day|week|month",
+            "unsupported_format": "we won't decode anything for you — only .fb2, .txt, .md accepted, nothing else",
         },
         "ru": {
             "sources_not_found": "Используй номера из /s (пример: /r 2 4). Только номера.",
@@ -151,6 +169,7 @@ def tr(key: str, **kwargs) -> str:
             "paths_fallback": "пути (через пробел, запасной ввод): ",
             "toggle_state": "{name}: {state}",
             "c_requires": "укажи период: /c all|hour|day|week|month",
+            "unsupported_format": "ничего не будем вам расшифровывать — принимаем только .fb2, .txt, .md, другое не примем",
         },
     }
     s = T.get(lang, T["en"]).get(key, key)
@@ -208,87 +227,80 @@ end tell'''
     except Exception as e:
         logging.warning(f"tkinter failed: {e}")
 
-    print(tr("paths_fallback"), end="", flush=True)
+    app_print(tr("paths_fallback"), end="", style="dim")
     line = sys.stdin.readline().strip()
     return [p.strip() for p in line.split() if p.strip()]
 
 def do_add(store: NakedLunchStore) -> None:
     paths = _choose_files()
     if not paths:
-        print(tr("no_files"))
+        app_print(tr("no_files"), style="yellow")
         return
     for p in paths:
         pp = Path(p)
         if not pp.is_file():
-            print(tr("skip_not_file", p=p))
+            app_print(tr("skip_not_file", p=p), style="yellow")
             continue
         name = pp.stem
         try:
             text = parse_source_file(pp)
             if not text or not text.strip():
-                print(f"источник {name} пустой или не содержит текста — пропущен")
+                app_print(f"источник {name} пустой или не содержит текста — пропущен", style="yellow")
                 continue
             corp = store.add_corpus(name, text)
-            print(tr("add_success", name=name, cnt=corp.fragment_count))
+            app_print(tr("add_success", name=name, cnt=corp.fragment_count), style="green")
         except ValueError as ve:
-            if "no fragments" in str(ve).lower():
-                print(f"источник {name} не удалось нарезать (не создано фрагментов)")
+            msg = str(ve)
+            if msg == "unsupported_format":
+                app_print(tr("unsupported_format"), style="red")
+            elif "no fragments" in msg.lower():
+                app_print(f"источник {name} не удалось нарезать (не создано фрагментов)", style="red")
             else:
-                print(tr("add_err", name=name, e=ve))
+                app_print(tr("add_err", name=name, e=ve), style="red")
         except Exception as e:
-            print(tr("add_err", name=name, e=e))
+            app_print(tr("add_err", name=name, e=e), style="red")
 
 def cmd_help(lang: str = "en") -> None:
     if lang == "ru":
-        print("Команды (только цифры из /s через пробел):\n")
+        app_print("Команды (только цифры из /s через пробел):\n")
         rows = [
             ("/h", "", "эта справка"),
             ("/s", "", "список источников с номерами"),
-            ("/a", "", "добавить (окно выбора файлов, multi OK)"),
+            ("/a", "", "добавить (только .fb2, .txt, .md)"),
             ("/r 2 4", "", "удалить по номерам (y/N)"),
             ("/t 1 3", "", "включить/выключить по номерам"),
             ("/c", "all|hour|day|week|month", "очистить использованное"),
-            ("/dir", "", "открыть ~/Documents/nakedlunch"),
+            ("/dir", "", "открыть папку"),
             ("/memory", "never|3m|6m|year", "retention сессий"),
-            ("/l", "ru|en", "язык интерфейса"),
+            ("/l", "ru|en", "язык"),
             ("/q", "", "выход"),
         ]
         for cmd, var, desc in rows:
-            print(f"  {cmd:<14}{var:<28} {desc}")
-        print("\nEnter — 4 строки случайно из пула\nтекст — bias (3 лучших + 1 дикая)\n")
+            app_print(f"[white]  {cmd:<12}{var:<20} {desc}[/white]")
+        app_print("\nEnter — 4 строки из пула\nтекст — bias\n")
     else:
-        print("Commands (numbers from /s only, space separated):\n")
+        app_print("Commands (numbers from /s only):\n")
         rows = [
             ("/h", "", "this help"),
             ("/s", "", "list sources with numbers"),
-            ("/a", "", "add (file chooser window, multi OK)"),
+            ("/a", "", "add (only .fb2, .txt, .md)"),
             ("/r 2 4", "", "remove by numbers (y/N)"),
             ("/t 1 3", "", "toggle by numbers"),
             ("/c", "all|hour|day|week|month", "clear used"),
-            ("/dir", "", "open ~/Documents/nakedlunch"),
+            ("/dir", "", "open folder"),
             ("/memory", "never|3m|6m|year", "sessions retention"),
-            ("/l", "ru|en", "UI language"),
+            ("/l", "ru|en", "language"),
             ("/q", "", "quit"),
         ]
         for cmd, var, desc in rows:
-            print(f"  {cmd:<14}{var:<28} {desc}")
-        print("\nEnter — 4 random from pool\ntext — bias (3 best + 1 wild)\n")
+            app_print(f"[white]  {cmd:<12}{var:<20} {desc}[/white]")
+        app_print("\nEnter — 4 lines from pool\ntext — bias\n")
 
 def main() -> None:
-    # theme
-    try:
-        cfg_early = load_config()
-        theme = cfg_early.get("terminal_theme", "dark")
-        if theme == "light":
-            print("\x1b[47;30m", end="")
-        else:
-            print("\x1b[40;37m", end="")
-    except Exception:
-        print("\x1b[40;37m", end="")
-
-    print("nakedlunch 1.0.1")
-    print("Copyright (c) 2026 Шамаев Илья Сергеевич (Yala, @yalayoloyellow)")
-    print()
+    # Rich wrapper provides beautiful output for videos/demos (old ANSI theme removed)
+    app_print("[bright_white]nakedlunch 1.1[/bright_white]")
+    app_print("Copyright (c) 2026 Шамаев Илья Сергеевич (Yala, @yalayoloyellow)", style="dim")
+    app_print("")
 
     log_file = setup_detailed_logging()
 
@@ -319,14 +331,18 @@ def main() -> None:
     except Exception:
         pass
 
-    print("nakedlunch")
+    app_print("[bright_white]nakedlunch 1.1[/bright_white]")
 
     try:
         while True:
             try:
-                raw = input("> ").strip()
+                # Prompt padded to the middle band
+                term_w = console.width or 80
+                content_w = max(30, min(100, int(term_w * 2 / 3)))
+                left = (term_w - content_w) // 2
+                raw = console.input(" " * max(0, left) + "> ").strip()
             except (EOFError, KeyboardInterrupt):
-                print(tr("exit"))
+                app_print(tr("exit"), style="dim")
                 break
 
             if not raw:
@@ -334,8 +350,9 @@ def main() -> None:
                     lines = store.generate(None, for_chat=True)
                     store.mark_lines_used(lines)
                     store._save()
+                    # Minimal beautiful output: 4 lines in the middle 2/3, left aligned
                     for i, line in enumerate(lines, 1):
-                        print(f"{i}. {line}")
+                        app_print(f"[bright_white]{i}. {line}[/bright_white]")
                     try:
                         with open(current_sess_file, "a", encoding="utf-8") as sf:
                             sf.write(f"[{datetime.now().strftime('%H:%M:%S')}] bias=neutral\n")
@@ -344,7 +361,7 @@ def main() -> None:
                     except Exception:
                         pass
                 except Exception as e:
-                    print(tr("error", e=e))
+                    app_print(tr("error", e=e), style="red")
                 continue
 
             if raw.startswith("/"):
@@ -359,29 +376,30 @@ def main() -> None:
                 if cmd in ("h", "help", "?"):
                     cmd_help(get_lang())
                 elif cmd == "s":
+                    # Sources in the middle band, left aligned, minimal
                     for i, c in enumerate(store.list_corpora(), 1):
                         state = "active" if c.get("active") else "inactive"
-                        print(f"{i}. [{state}] {c.get('name')} ({c.get('fragment_count', 0)})")
+                        app_print(f"{i}. [{state}] {c.get('name', '')} ({c.get('fragment_count', 0)})")
                 elif cmd == "a":
                     do_add(store)
                 elif cmd in ("r", "remove"):
                     corpora_list = store.list_corpora()
                     idxs = parse_indices(arg, len(corpora_list))
                     if not idxs:
-                        print(tr("sources_not_found"))
+                        app_print(tr("sources_not_found"), style="red")
                         continue
                     names = [corpora_list[i].get("name", str(i)) for i in idxs]
-                    print(tr("really_delete", n=len(names), names=", ".join(names)), end="", flush=True)
+                    app_print(tr("really_delete", n=len(names), names=", ".join(names)), end="", style="yellow")
                     ans = sys.stdin.readline().strip().lower()
                     if ans != "y":
-                        print(tr("cancel"))
+                        app_print(tr("cancel"), style="dim")
                         continue
                     for i in sorted(idxs, reverse=True):
                         try:
                             cid = corpora_list[i]["id"]
                             store.delete_corpus(cid)
                         except Exception as e:
-                            print(tr("err_remove", name=str(i)))
+                            app_print(tr("err_remove", name=str(i)), style="red")
                 elif cmd in ("t", "toggle"):
                     corpora_list = store.list_corpora()
                     for i in parse_indices(arg, len(corpora_list)):
@@ -389,12 +407,12 @@ def main() -> None:
                             cid = corpora_list[i]["id"]
                             new_state = store.toggle_active(cid)
                             c = corpora_list[i]
-                            print(tr("toggle_state", name=c.get("name"), state="active" if new_state else "inactive"))
+                            app_print(tr("toggle_state", name=c.get("name"), state="active" if new_state else "inactive"), style="yellow")
                         except Exception as e:
-                            print(tr("error", e=e))
+                            app_print(tr("error", e=e), style="red")
                 elif cmd == "c":
                     if not arg:
-                        print(tr("c_requires"))
+                        app_print(tr("c_requires"), style="red")
                         continue
                     mode = arg.strip().lower()
                     if mode == "all":
@@ -412,9 +430,9 @@ def main() -> None:
                         older = time.time() - 30 * 86400
                         cleared = store.clear_used(older)
                     else:
-                        print(tr("c_requires"))
+                        app_print(tr("c_requires"), style="red")
                         continue
-                    print(tr("unblocked", cleared=cleared, mode=mode))
+                    app_print(tr("unblocked", cleared=cleared, mode=mode), style="green")
                 elif cmd in ("dir", "d"):
                     try:
                         if sys.platform == "darwin":
@@ -423,34 +441,34 @@ def main() -> None:
                             os.startfile(str(PROG_DIR))
                         else:
                             subprocess.run(["xdg-open", str(PROG_DIR)], check=False)
-                        print(tr("prog_dir", path=str(PROG_DIR)))
+                        app_print(tr("prog_dir", path=str(PROG_DIR)), style="blue")
                     except Exception as e:
-                        print(tr("error", e=e))
+                        app_print(tr("error", e=e), style="red")
                 elif cmd in ("memory", "set"):
                     if not arg:
-                        print(tr("retention_show", val=cfg.get("session_retention", DEFAULT_RETENTION)))
+                        app_print(tr("retention_show", val=cfg.get("session_retention", DEFAULT_RETENTION)), style="cyan")
                         continue
                     val = arg.strip().lower()
                     if val not in ("never", "month", "3m", "6m", "year"):
-                        print("bad value: never / 3m / 6m / year")
+                        app_print("bad value: never / 3m / 6m / year", style="red")
                         continue
                     cfg["session_retention"] = val
                     save_config(cfg)
-                    print(tr("retention_show", val=val))
+                    app_print(tr("retention_show", val=val), style="cyan")
                 elif cmd in ("l", "lang"):
                     if not arg:
-                        print(tr("lang_show", lang=get_lang()))
+                        app_print(tr("lang_show", lang=get_lang()), style="cyan")
                         continue
                     new = "ru" if arg.lower().startswith("r") else "en"
                     cfg = load_config()
                     cfg["language"] = new
                     save_config(cfg)
-                    print(tr("lang_set", lang=new))
+                    app_print(tr("lang_set", lang=new), style="cyan")
                 elif cmd in ("q", "quit", "exit"):
-                    print(tr("session_ended"))
+                    app_print(tr("session_ended"), style="dim")
                     break
                 else:
-                    print(tr("unknown_cmd"))
+                    app_print(tr("unknown_cmd"), style="red")
                 continue
 
             # bias text
@@ -458,8 +476,9 @@ def main() -> None:
                 lines = store.generate(raw, for_chat=True)
                 store.mark_lines_used(lines)
                 store._save()
+                # Minimal beautiful output: 4 lines in the middle 2/3, left aligned
                 for i, line in enumerate(lines, 1):
-                    print(f"{i}. {line}")
+                    app_print(f"[bright_white]{i}. {line}[/bright_white]")
                 try:
                     with open(current_sess_file, "a", encoding="utf-8") as sf:
                         sf.write(f"[{datetime.now().strftime('%H:%M:%S')}] bias={raw[:30]}\n")
@@ -468,10 +487,11 @@ def main() -> None:
                 except Exception:
                     pass
             except Exception as e:
-                print(tr("error", e=e))
+                app_print(tr("error", e=e), style="red")
 
     finally:
-        print("\x1b[0m", end="")
+        # rich handles terminal reset
+        pass
 
 def test_all_commands():
     """Automated test for main commands to prevent regressions like clear_used TypeError.
