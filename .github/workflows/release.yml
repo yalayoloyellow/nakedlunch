@@ -40,8 +40,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install PyInstaller
-        run: python -m pip install --upgrade pip pyinstaller
+      - name: Install dependencies and PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install pyinstaller
 
       - name: Build one-file binary (with icon)
         shell: bash
