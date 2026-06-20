@@ -1,4 +1,4 @@
-# nakedlunch 1.1
+# nakedlunch 1.2 (with Ghostty CRT design)
 
 Local cut-up recombination tool. Pure terminal CLI. User adds their own source texts. Used lines don't repeat until cleared by period (session logs untouched).
 
@@ -78,6 +78,22 @@ python3 -m pip install nakedlunch
 nakedlunch
 ```
 It starts empty; user adds their own source texts.
+
+## Beautiful CRT mode with Ghostty (recommended for the full experience)
+
+The terminal is wrapped in a custom Ghostty setup with:
+
+- Custom CRT shaders (lens/curve, animated film grain, top/bottom blur+distort, micro drift, light VHS wobble+wear, etc.)
+- 4:3 centered text area on full 16:9 screen
+- Warm orange on #050505, block cursor, no blink, fullscreen native macOS
+- All tuned for adult stylish retro cyberpunk look, pure dark background
+
+The complete design (config + shaders + wrapper + instructions) is saved in the `design/` folder.
+
+To apply:
+See `design/README.md` for exact steps (copy 3 files).
+
+It uses the same `nakedlunch` binary inside the pretty Ghostty terminal. The visual layer is completely independent.
 
 All releases are built with the icon you gave — no extra art, no changes to behavior.
 

@@ -1,0 +1,43 @@
+# nakedlunch — ретро оранжевый терминал
+# in-game-crt + bloom (1.0) + glow-rgbsplit
+# + размытие+искажение сверху/снизу + анимированное зерно (vhs) + micro drift + light VHS
+# 4:3 в центре для текста (шейдеры на весь 16:9). Чистый фон за текстом.
+# насыщенный оранжевый, линза слабее, все эффекты лёгкие.
+
+font-family = "JetBrains Mono"
+font-size = 22
+font-feature = -liga
+
+# Тёплая оранжевая ретро-палитра (насыщенный красивый amber)
+background = "#050505"
+foreground = "#ffaa00"
+
+# === ADULT STACK
+# in-game-crt (линза слабее + top/bottom + grain + micro drift + light VHS) + bloom + glow-rgbsplit
+custom-shader = "/Users/yala/.ghostty-shaders/in-game-crt.glsl"
+custom-shader = "/Users/yala/.ghostty-shaders/bloom.glsl"
+custom-shader = "/Users/yala/.ghostty-shaders/glow-rgbsplit-twitchy.glsl"
+
+custom-shader-animation = always
+
+# 4:3 в центре для текста (шейдеры на полный 16:9 экран)
+# padding подобран для пропорций 4:3 (шире, не узкий столбик)
+window-padding-x = 320
+window-padding-y = 60
+window-padding-balance = true
+
+# Прозрачный тайтл — кнопки на ховер
+macos-titlebar-style = "transparent"
+title = "NAKED LUNCH"
+
+# Нативный fullscreen
+fullscreen = true
+macos-non-native-fullscreen = false
+
+# Полная непрозрачность
+background-opacity = 1.0
+
+# Удобства
+macos-option-as-alt = true
+cursor-style = "block"
+cursor-style-blink = false
