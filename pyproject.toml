@@ -34,5 +34,5 @@ packages = ["core"]
 [project.urls]
 Homepage = "https://github.com/yalayoloyellow/nakedlunch"
 Repository = "https://github.com/yalayoloyellow/nakedlunch"
-# Releases + binaries + installers are attached to GitHub tags (v1.1+).
+# Releases + binaries + installers are attached to GitHub tags (v1.2+).
 # pip install nakedlunch remains the easiest cross-platform way.

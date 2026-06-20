@@ -1,35 +1,26 @@
-# Naked Lunch CRT Design (Ghostty + Shaders)
+# nakedlunch v1.2 + Ghostty CRT setup
 
-This preserves the exact visual design we settled on:
-- Fullscreen Ghostty with custom CRT shaders (in-game-crt + bloom + glow-rgbsplit)
-- Narrow 4:3 centered text area via padding (for the "window" feel on 16:9)
-- Specific font, colors (warm orange on near-black), cursor, etc.
-- Subtle effects: top/bottom blur+distort, micro drift, light VHS wobble+wear, animated grain, vignette, etc.
-- All tuned for adult stylish premium retro look, pure dark bg, no cheap effects.
+Exact files for the setup that runs when executing `nakedlunch` on this machine.
 
-## Files
-- ghostty-nakedlunch-config : the full Ghostty config (copy to ~/.config/ghostty/nakedlunch )
-- crt-shaders/ : the three active .glsl files (copy to ~/.ghostty-shaders/ )
-- nakedlunch-ghostty-wrapper : the launch script (copy to ~/.local/bin/nakedlunch and chmod +x)
+## Contents of this design
+- nakedlunch-ghostty-wrapper (the launcher)
+- ghostty-nakedlunch-config
+- crt-shaders/ (in-game-crt.glsl, bloom.glsl, glow-rgbsplit-twitchy.glsl)
 
-## How to restore / apply
-1. cp ghostty-nakedlunch-config ~/.config/ghostty/nakedlunch
-2. cp crt-shaders/*.glsl ~/.ghostty-shaders/
-3. cp nakedlunch-ghostty-wrapper ~/.local/bin/nakedlunch && chmod +x ~/.local/bin/nakedlunch
-4. source ~/.zshrc or open new terminal
-5. Run `nakedlunch` (it will launch Ghostty with the design)
+## Restore on a machine
+```bash
+cp nakedlunch-ghostty-wrapper ~/.local/bin/nakedlunch
+chmod +x ~/.local/bin/nakedlunch
+cp ghostty-nakedlunch-config ~/.config/ghostty/nakedlunch
+mkdir -p ~/.ghostty-shaders
+cp crt-shaders/* ~/.ghostty-shaders/
+hash -r
+```
 
-## Notes
-- Shaders run on full 16:9.
-- Text area is padded to ~4:3 centered.
-- Wrapper forces new Ghostty window + native fullscreen.
-- To update the inner app: just change the REAL= path in the wrapper (the design is independent).
-- Using freshly built binary from v1.2 source (with Ghostty wrapper)
-- The local dist/ and old nakedlunch-real are kept for reference.
-- Current design as of 2026-06 (4:3 centered text via padding, full-screen shaders, all subtle effects).
-- Design is independent of which nakedlunch binary is used inside.
+Then `nakedlunch` will launch Ghostty with the current design and run the binary.
 
-To use a different version: edit REAL= in the wrapper.
-The backup here is the complete design snapshot.
+The wrapper uses `nakedlunch` (from PATH after `pip install .` or from release binary). Edit REAL if using custom binary path.
 
-Keep this folder in git to never lose the visual.
+This folder is committed so the exact visual can be restored without loss.
+
+Version: 1.2 (source and binary).

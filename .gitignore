@@ -1,24 +1,26 @@
-.venv/
+# Python
 __pycache__/
 *.pyc
-data/state.json
-data/*.json
-!data/base/
-data/fragments/
-*.log
-.DS_Store
+*.pyo
+*.egg-info/
+.venv/
+env/
+venv/
+
+# Build
 dist/
 build/
 *.app
-*.spec
-dist/
-build/
+
+# Logs and temp
 logs/
 *.log
 .DS_Store
+
+# Project data (user specific)
 data/state.json
 data/*.json
+data/fragments/
+
+# Keep example base
 !data/base/
-__pycache__/
-*.pyc
-.venv/

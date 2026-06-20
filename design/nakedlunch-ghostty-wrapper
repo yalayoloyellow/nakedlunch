@@ -1,21 +1,15 @@
 #!/bin/zsh
-# Wrapper to launch nakedlunch in beautiful Ghostty CRT visual
-# Design saved in /Users/yala/nakedlunch/design/ (config, shaders, this script, restore instructions)
-# Now using freshly built binary from latest source (v1.2)
-# Built locally with PyInstaller (rich and deps bundled).
-# Visual design completely independent of the inner CLI.
-# Old nakedlunch-real kept as backup.
-# User will test, then decide on renaming/commit/release.
+# nakedlunch Ghostty CRT wrapper (v1.2)
+# Runs nakedlunch inside a custom Ghostty with CRT shaders, 4:3 centered text, etc.
+# Design files (exact config and shaders) are in the repo under design/
 
 CONFIG="/Users/yala/.config/ghostty/nakedlunch"
-REAL="/Users/yala/nakedlunch/dist/nakedlunch"  # new built binary
+REAL="nakedlunch"  # the installed command (pip install .) or full path to binary
 
-# Force new Ghostty window with our config and run the real binary inside
 open -n -a /Applications/Ghostty.app --args \
   --config-file="$CONFIG" \
   --command="$REAL"
 
-# Force native macOS fullscreen (hides menu bar + dock, Ctrl+Cmd+F behavior)
 sleep 1
 osascript -e '
 tell application "Ghostty" to activate

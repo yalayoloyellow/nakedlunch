@@ -60,15 +60,12 @@ Local use only. Your texts stay yours.
 
 (Note: _legacy/ holds removed GUI/browser/TUI code for reference only.)
 
-## GitHub Releases (binaries + installers for macOS / Windows / Linux)
-1. Go to Releases, pick the v1.1 (or latest) tag.
-2. Download the archive for your OS (or the individual binary + scripts/install.*).
-3. Unpack.
-4. Run the installer from the release:
-   - macOS / Linux: `sh scripts/install.sh`
-   - Windows: PowerShell `.\scripts\install.ps1`
-5. The binary is placed in ~/bin (or %LOCALAPPDATA%\nakedlunch) and made executable.
-6. Icon: the one you provided (logo.jpeg) is used for the builds. After install on mac: right-click the binary in Finder → Get Info → drag assets/icon/nakedlunch.icns or logo.jpeg onto the file icon in the top-left. On Windows assign the .ico to the exe or shortcut. Linux uses the .png via .desktop if you use the full installer bits.
+## GitHub Releases
+- v1.2 is the clean release matching the local machine setup.
+- Source + design/ folder (exact Ghostty CRT visual).
+- Attached working macOS binary.
+- For the beautiful look: copy from `design/` as described in design/README.md.
+- pip install nakedlunch==1.2 also works (then apply the design).
 
 The same icon assets live in `assets/icon/` (icns / png ready; .ico you can generate from the png in 10 seconds when needed for a Windows build).
 
@@ -79,23 +76,13 @@ nakedlunch
 ```
 It starts empty; user adds their own source texts.
 
-## Beautiful CRT mode with Ghostty (recommended for the full experience)
+## Ghostty CRT design
 
-The terminal is wrapped in a custom Ghostty setup with:
+The exact visual setup (shaders, 4:3 centered text area, effects) is preserved in the `design/` folder in this repo.
 
-- Custom CRT shaders (lens/curve, animated film grain, top/bottom blur+distort, micro drift, light VHS wobble+wear, etc.)
-- 4:3 centered text area on full 16:9 screen
-- Warm orange on #050505, block cursor, no blink, fullscreen native macOS
-- All tuned for adult stylish retro cyberpunk look, pure dark background
+See design/README.md for the files and how to apply the wrapper + config.
 
-The complete design (config + shaders + wrapper + instructions) is saved in the `design/` folder.
-
-To apply:
-See `design/README.md` for exact steps (copy 3 files).
-
-It uses the same `nakedlunch` binary inside the pretty Ghostty terminal. The visual layer is completely independent.
-
-All releases are built with the icon you gave — no extra art, no changes to behavior.
+The design works with the nakedlunch binary from the release. Visual is independent.
 
 ## License
 
