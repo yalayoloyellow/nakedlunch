@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# nakedlunch 1.1
+# nakedlunch 1.2
 # Copyright (c) 2026 Шамаев Илья Сергеевич (Yala, @yalayoloyellow). Personal use only.
 
 """
@@ -37,20 +37,16 @@ from core.cutter import parse_source_file
 
 # Beautiful wrapper for video recordings and nice UX (no changes to core logic)
 from rich.console import Console
-from rich.padding import Padding
 
 console = Console()
 
 def app_print(renderable, **kwargs):
-    """Print content centered in the middle 2/3 of the terminal width.
-    Text remains left-aligned inside the band.
-    Apple-style minimal: no borders, clean spacing.
+    """Full-width print on the entire window.
+    Explicit bg for clean shader look, no centering.
     """
-    term_w = console.width or 80
-    content_w = max(30, min(100, int(term_w * 2 / 3)))
-    left = (term_w - content_w) // 2
-    indented = Padding(renderable, (0, 0, 0, left))
-    console.print(indented, width=term_w, **kwargs)
+    if "style" not in kwargs:
+        kwargs["style"] = "on #050505"
+    console.print(renderable, **kwargs)
 
 # User data in ~/Documents/nakedlunch
 def get_user_prog_dir() -> Path:
@@ -298,7 +294,7 @@ def cmd_help(lang: str = "en") -> None:
 
 def main() -> None:
     # Rich wrapper provides beautiful output for videos/demos (old ANSI theme removed)
-    app_print("[bright_white]nakedlunch 1.1[/bright_white]")
+    app_print("[bright_white]nakedlunch 1.2[/bright_white]")
     app_print("Copyright (c) 2026 Шамаев Илья Сергеевич (Yala, @yalayoloyellow)", style="dim")
     app_print("")
 
@@ -331,16 +327,12 @@ def main() -> None:
     except Exception:
         pass
 
-    app_print("[bright_white]nakedlunch 1.1[/bright_white]")
+    app_print("[bright_white]nakedlunch 1.2[/bright_white]")
 
     try:
         while True:
             try:
-                # Prompt padded to the middle band
-                term_w = console.width or 80
-                content_w = max(30, min(100, int(term_w * 2 / 3)))
-                left = (term_w - content_w) // 2
-                raw = console.input(" " * max(0, left) + "> ").strip()
+                raw = console.input("> ").strip()
             except (EOFError, KeyboardInterrupt):
                 app_print(tr("exit"), style="dim")
                 break
@@ -350,9 +342,9 @@ def main() -> None:
                     lines = store.generate(None, for_chat=True)
                     store.mark_lines_used(lines)
                     store._save()
-                    # Minimal beautiful output: 4 lines in the middle 2/3, left aligned
+                    # Full width output on the whole window
                     for i, line in enumerate(lines, 1):
-                        app_print(f"[bright_white]{i}. {line}[/bright_white]")
+                        app_print(f"[bright_white on #050505]{i}. {line}[/bright_white on #050505]")
                     try:
                         with open(current_sess_file, "a", encoding="utf-8") as sf:
                             sf.write(f"[{datetime.now().strftime('%H:%M:%S')}] bias=neutral\n")
@@ -376,7 +368,7 @@ def main() -> None:
                 if cmd in ("h", "help", "?"):
                     cmd_help(get_lang())
                 elif cmd == "s":
-                    # Sources in the middle band, left aligned, minimal
+                    # Sources, full width
                     for i, c in enumerate(store.list_corpora(), 1):
                         state = "active" if c.get("active") else "inactive"
                         app_print(f"{i}. [{state}] {c.get('name', '')} ({c.get('fragment_count', 0)})")
@@ -476,7 +468,7 @@ def main() -> None:
                 lines = store.generate(raw, for_chat=True)
                 store.mark_lines_used(lines)
                 store._save()
-                # Minimal beautiful output: 4 lines in the middle 2/3, left aligned
+                # Full width output on the whole window
                 for i, line in enumerate(lines, 1):
                     app_print(f"[bright_white]{i}. {line}[/bright_white]")
                 try:

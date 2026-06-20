@@ -1,4 +1,4 @@
-# nakedlunch 1.1
+# nakedlunch 1.2
 # Copyright (c) 2026 Шамаев Илья Сергеевич (Yala, @yalayoloyellow). Personal use only.
 
 """

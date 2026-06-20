@@ -24,7 +24,7 @@ This preserves the exact visual design we settled on:
 - Text area is padded to ~4:3 centered.
 - Wrapper forces new Ghostty window + native fullscreen.
 - To update the inner app: just change the REAL= path in the wrapper (the design is independent).
-- Using official latest release binary: nakedlunch-official-macos (downloaded from GitHub v1.1)
+- Using freshly built binary from v1.2 source (with Ghostty wrapper)
 - The local dist/ and old nakedlunch-real are kept for reference.
 - Current design as of 2026-06 (4:3 centered text via padding, full-screen shaders, all subtle effects).
 - Design is independent of which nakedlunch binary is used inside.
