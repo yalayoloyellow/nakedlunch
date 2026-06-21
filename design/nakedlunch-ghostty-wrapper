@@ -1,10 +1,35 @@
 #!/bin/zsh
-# nakedlunch Ghostty CRT wrapper (v1.2)
+# nakedlunch Ghostty CRT wrapper (v1.2.1)
 # Runs nakedlunch inside a custom Ghostty with CRT shaders, 4:3 centered text, etc.
 # Design files (exact config and shaders) are in the repo under design/
+#
+# 1.2.1: Uses auto-discovered *absolute* path to real entrypoint (not "nakedlunch" name)
+#        to survive macOS Ghostty's restricted login shell and prevent recursion.
 
 CONFIG="/Users/yala/.config/ghostty/nakedlunch"
-REAL="nakedlunch"  # the installed command (pip install .) or full path to binary
+
+# Compute the absolute path to the *real* nakedlunch entrypoint script.
+# We deliberately use a full path because:
+#   - The wrapper itself lives as "nakedlunch" in PATH (caused the infinite launch loop).
+#   - Ghostty uses `login ... bash --noprofile --norc -c ...` for the initial command.
+#     Bare names and complex quoted python -c strings frequently get mangled.
+#   - An absolute path to the small setuptools script works reliably.
+REAL=$(python3 -c '
+import sysconfig, site, os
+dirs = [
+    sysconfig.get_path("scripts", "posix_user"),
+    (getattr(site, "USER_BASE", None) or "") and os.path.join(site.USER_BASE, "bin"),
+    "/Users/yala/Library/Python/3.9/bin",
+]
+for d in dirs:
+    if d:
+        cand = os.path.join(d, "nakedlunch")
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            print(cand)
+            break
+else:
+    print("/Users/yala/Library/Python/3.9/bin/nakedlunch")
+' )
 
 open -n -a /Applications/Ghostty.app --args \
   --config-file="$CONFIG" \

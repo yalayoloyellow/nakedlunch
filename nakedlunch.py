@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# nakedlunch 1.2
+# nakedlunch 1.2.1
 # Copyright (c) 2026 Шамаев Илья Сергеевич (Yala, @yalayoloyellow). Personal use only.
 
 """
@@ -294,7 +294,7 @@ def cmd_help(lang: str = "en") -> None:
 
 def main() -> None:
     # Rich wrapper provides beautiful output for videos/demos (old ANSI theme removed)
-    app_print("[bright_white]nakedlunch 1.2[/bright_white]")
+    app_print("[bright_white]nakedlunch 1.2.1[/bright_white]")
     app_print("Copyright (c) 2026 Шамаев Илья Сергеевич (Yala, @yalayoloyellow)", style="dim")
     app_print("")
 
@@ -327,7 +327,7 @@ def main() -> None:
     except Exception:
         pass
 
-    app_print("[bright_white]nakedlunch 1.2[/bright_white]")
+    app_print("[bright_white]nakedlunch 1.2.1[/bright_white]")
 
     try:
         while True:

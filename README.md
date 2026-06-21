@@ -1,8 +1,12 @@
-# nakedlunch 1.2 (with Ghostty CRT design)
+# nakedlunch 1.2.1 (with Ghostty CRT design)
 
 Local cut-up recombination tool. Pure terminal CLI. User adds their own source texts. Used lines don't repeat until cleared by period (session logs untouched).
 
 **Pure terminal CLI only** (radical minimal plain terminal, no TUI, no browser/GUI version — all removed).
+
+### 1.2.1 fixes (Ghostty users)
+- Fixed infinite Ghostty windows spawning when using the CRT design wrapper (`nakedlunch` shadowing itself in PATH).
+- Fixed "Ghostty failed to launch the requested command" (macOS `login --noprofile --norc` mangled `python3 -c` and bare names). Wrapper now uses absolute path to the real entrypoint.
 
 ## Run
 
@@ -61,11 +65,11 @@ Local use only. Your texts stay yours.
 (Note: _legacy/ holds removed GUI/browser/TUI code for reference only.)
 
 ## GitHub Releases
-- v1.2 is the clean release matching the local machine setup.
+- v1.2.1 is the current release (includes critical Ghostty wrapper fixes).
 - Source + design/ folder (exact Ghostty CRT visual).
 - Attached working macOS binary.
 - For the beautiful look: copy from `design/` as described in design/README.md.
-- pip install nakedlunch==1.2 also works (then apply the design).
+- pip install nakedlunch==1.2.1 also works (then apply the design).
 
 The same icon assets live in `assets/icon/` (icns / png ready; .ico you can generate from the png in 10 seconds when needed for a Windows build).
 
