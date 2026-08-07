@@ -1,0 +1,130 @@
+# Сборка приложения под три системы.
+#
+# ПРИНЦИП: скачал, запустил, работает. Внутри артефакта всё, что нужно
+# программе, — интерфейс, таблицы, акцентуатор. Ни питона, ни node, ни
+# докачки на машине человека.
+#
+# Каждая система собирается на своей: кросс-компиляции для питона с нативным
+# окном не существует. Отсюда матрица, а не один прогон.
+#
+# Модели акцентуатора на сборочной машине пустые: пакет тянет их при первом
+# запуске. Забираем ровно те, к которым обращается код, — 21 МБ вместо 1.4 ГБ
+# (см. tools/скачать_акцентуатор.py).
+
+name: сборка
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: сборка · ${{ matrix.id }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            id: macos
+          - os: windows-latest
+            id: windows
+          - os: ubuntu-latest
+            id: linux
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: interface/react-app/package-lock.json
+
+      - name: системные библиотеки (Linux)
+        if: matrix.id == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgirepository1.0-dev gir1.2-webkit2-4.1 \
+                                  python3-gi python3-gi-cairo gir1.2-gtk-3.0
+
+      - name: зависимости питона
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller ruaccent "transformers<5"
+
+      - name: модели акцентуатора
+        run: python tools/скачать_акцентуатор.py
+
+      - name: интерфейс
+        working-directory: interface/react-app
+        run: |
+          npm ci
+          npm run build
+
+      - name: сборка приложения
+        run: pyinstaller --noconfirm nakedlunch.spec
+
+      # --- упаковка под каждую систему ---------------------------------------
+      - name: упаковка (macOS)
+        if: matrix.id == 'macos'
+        run: |
+          hdiutil create -volname nakedlunch -srcfolder dist/nakedlunch.app \
+                         -ov -format UDZO nakedlunch-macos.dmg
+
+      - name: упаковка (Windows)
+        if: matrix.id == 'windows'
+        run: Compress-Archive -Path dist/nakedlunch/* -DestinationPath nakedlunch-windows.zip
+
+      - name: упаковка (Linux)
+        if: matrix.id == 'linux'
+        run: tar -czf nakedlunch-linux.tar.gz -C dist nakedlunch
+
+      # Дым-проверка: собранный файл существует и запускается. Полноценно
+      # проверить работу на сборочной машине нельзя — там нет ни корпуса, ни
+      # окна, — но упавший на старте артефакт до релиза доходить не должен.
+      - name: дым-проверка (macOS, Linux)
+        if: matrix.id != 'windows'
+        run: |
+          test -x dist/nakedlunch/nakedlunch
+          ls -la dist/nakedlunch/nakedlunch
+          echo "исполняемый файл на месте"
+
+      - name: дым-проверка (Windows)
+        if: matrix.id == 'windows'
+        run: |
+          if (-not (Test-Path dist/nakedlunch/nakedlunch.exe)) { exit 1 }
+          echo "исполняемый файл на месте"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nakedlunch-${{ matrix.id }}
+          path: |
+            nakedlunch-macos.dmg
+            nakedlunch-windows.zip
+            nakedlunch-linux.tar.gz
+          if-no-files-found: ignore
+
+  release:
+    name: черновик релиза
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          draft: true
+          generate_release_notes: false
