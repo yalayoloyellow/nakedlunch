@@ -5,7 +5,7 @@
 # run the accentuator ONCE at build time, write a plain dict-lookup cache, so
 # the runtime generate path never touches ruaccent.
 #
-# WHY this exists at all: the owner explicitly rejected exempting nakedlunch
+# WHY this exists at all: the user explicitly rejected exempting nakedlunch
 # fragments from rhyme (2026-07-13) — "база нейкедланча одинаково подвержена
 # фильтрам всем должна быть". But a rhyme key needs to know which syllable is
 # STRESSED, and that's only known for the generator's OWN lexicon (baked into
@@ -29,14 +29,14 @@
 #
 # Output: core/data/nl_rhyme.json = {fragment_text: {"key", "span", "banal",
 # "taut", "lemmas", "tokens"}}. "span" (2026-07-14) is the RAW character range
-# of the rhyme tail within fragment_text, for the owner's rhyme-highlight UI
+# of the rhyme tail within fragment_text, for the user's rhyme-highlight UI
 # (bold+color the actual substring, not just show the abstract key — see
 # scan._rhyme_tail's docstring). "banal"/"taut"/"lemmas"/"tokens" (2026-07-14,
 # same round) move banality/tautology/diversify-lemmas/theme-bias-matching OFF
 # the request path entirely — filters._nl_scored used to call lemmatize() +
 # zipf_frequency() + a tautology scan on every fetched fragment on EVERY
 # generate(), which is why the runtime only ever looked at a small sample
-# instead of the owner's whole active pool ("пусть обрабатывается... полная
+# instead of the user's whole active pool ("пусть обрабатывается... полная
 # база абсолютно везде"). Precomputing them once here (a benchmark of 200k
 # synthetic entries with these fields already computed took ~24ms to filter —
 # see DECISIONS.md) makes a full-pool scan on every request cheap instead of
@@ -97,7 +97,7 @@ def _write_status(cached: int, state: str, mode: str, error: str | None = None) 
     while, e.g. the machine slept) as "stalled" — that judgment belongs to
     the reader, not the writer, since only the reader knows what "a while"
     means to it. `mode` ("full"|"incremental") lets the topbar say WHICH kind
-    of run is/was in progress — found 2026-07-14: the owner's manual "прогнать
+    of run is/was in progress — found 2026-07-14: the user's manual "прогнать
     ударения" button looked broken because it silently did the same
     skip-everything-already-cached incremental pass as the auto-trigger, so
     clicking it when the cache was already ~100% complete finished in
@@ -129,9 +129,9 @@ _TOKEN_RE = re.compile(r"\S+")
 def _highlight_span(text: str, idx: int, surface: str, key: str) -> list[int] | None:
     """Absolute [start, end) range in `text` of the RAW (unreduced) rhyme
     tail — same length as `key` (scan.rhyme_key's reduction/devoicing never
-    changes length) — for the owner's rhyme-highlight UI: bold+color the
+    changes length) — for the user's rhyme-highlight UI: bold+color the
     actual substring driving the match in the rendered line, not just an
-    abstract key off to the side (2026-07-14 — the owner's own proposed fix
+    abstract key off to the side (2026-07-14 — the user's own proposed fix
     after spotting a mismatched pair by eye once the real text was on
     screen). `_TOKEN_RE.finditer` mirrors `text.split()`'s whitespace-run
     segmentation exactly, so its match at position `idx` IS `tokens[idx]`,
@@ -309,7 +309,7 @@ def build(existing: dict, mode: str = "incremental") -> dict:
 def в_строчный() -> int:
     """Одноразовая миграция: старый кэш → построчный формат (Раунд 57).
 
-    Старый файл НЕ удаляется. Пока владелец не убедился, что всё работает,
+    Старый файл НЕ удаляется. Пока пользователь не убедился, что всё работает,
     откат — это удалить один новый файл, а не восстанавливать час работы модели
     ударений."""
     import кэш
@@ -370,7 +370,7 @@ def reban(existing: dict) -> dict:
     Главное отличие от `--full`: НЕ ГРУЗИТСЯ модель ударений. Она и составляет
     почти всё время полной перепечки, а к банальности отношения не имеет вовсе.
     Проход идёт минуты вместо часа — значит формулу качества можно пробовать, а
-    не бояться. Владелец: «может, мы не весь инструментарий используем ещё, чтоб
+    не бояться. Пользователь: «может, мы не весь инструментарий используем ещё, чтоб
     грамотно всё делать».
 
     Ключи, ударения, span, леммы и токены не трогаются ни одним байтом."""
@@ -449,7 +449,7 @@ def main() -> int:
     parser.add_argument("--full", action="store_true",
                          help="ignore the existing cache and recompute EVERY "
                               "fragment from scratch, not just new ones (the "
-                              "owner's manual '↻ прогнать ударения' button)")
+                              "user's manual '↻ прогнать ударения' button)")
     parser.add_argument("--rekey", action="store_true",
                          help="пересчитать только key/span у закэшированных "
                               "фрагментов (когда изменилось ПРАВИЛО ключа, а "
@@ -479,7 +479,7 @@ def main() -> int:
             except BaseException:
                 # ПРЕРВАЛИ — ЭТО НЕ «ИДЁТ» (Раунд 58). Ctrl-C и любой сигнал
                 # проходят мимо `except Exception`, статус оставался «running»,
-                # и шапка навсегда показывала владельцу красное «встало» на
+                # и шапка навсегда показывала пользователю красное «встало» на
                 # работе, которой давно нет. Убрать это из интерфейса было
                 # нельзя ничем — только правкой файла руками.
                 _write_status(0, "error", "reban", error="пересчёт прерван")

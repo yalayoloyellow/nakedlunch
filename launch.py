@@ -41,7 +41,7 @@ ICON = HERE / "interface" / "icon" / "nakedlunch.icns"   # см. tools/make_icon
 # давал: запускатель бандла делал exec, питон наследовал PID оболочки бандла, и
 # LaunchServices считал com.yala.nakedlunch запущенным. Повторный клик сводился
 # к «активировать уже запущенное» и до launch.py не доходил вовсе (измерено:
-# PID процессов до и после клика те же — 45333/45335). Владелец видел старое
+# PID процессов до и после клика те же — 45333/45335). Пользователь видел старое
 # окно и делал верный вывод: «через ярлык новый нейкедланч не открывается с
 # апдейтами».
 #
@@ -183,7 +183,7 @@ def activate(pid: int) -> bool:
     """Поднять окно уже запущенного экземпляра. NSRunningApplication, а не
     AppleScript через System Events: активация чужого приложения по PID не
     требует разрешений, а System Events требует «Универсальный доступ» — и
-    молча ничего не делал бы, пока владелец его не выдаст."""
+    молча ничего не делал бы, пока пользователь его не выдаст."""
     try:
         from AppKit import NSRunningApplication
         app = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
@@ -301,7 +301,7 @@ def free_port() -> int:
 
 
 class ExportApi:
-    """Exposed to the front end as `window.pywebview.api.*` (owner 2026-07-14:
+    """Exposed to the front end as `window.pywebview.api.*` (user 2026-07-14:
     an <a download> link inside pywebview's embedded webview just navigates
     the WHOLE window to the raw file — no downloads manager, no back button
     to return to the app with. `save_file` opens a real native Save-As dialog
@@ -332,7 +332,7 @@ class ExportApi:
     # --- мост записи -----------------------------------------------------------
     # Контракт у всех пяти одинаков: {"ok": True, …} либо {"ok": False,
     # "error": "русский текст"}. Ошибки НЕ глотаются и не превращаются в
-    # молчаливое «всё хорошо» — испорченную запись владелец должен увидеть
+    # молчаливое «всё хорошо» — испорченную запись пользователь должен увидеть
     # сразу, а не при монтаже.
 
     def rec_start(self, track: str, params: dict = None) -> dict:

@@ -183,7 +183,7 @@ export function renderDoc(c) {
         <div style={s('position: absolute; left: 50%; bottom: 172px; transform: translateX(-50%); z-index: 65; display: flex; align-items: center; gap: 14px; background: var(--menu-bg); backdrop-filter: var(--glass-fx); -webkit-backdrop-filter: var(--glass-fx-fallback); contain: paint; isolation: isolate; box-shadow: 0 14px 34px -22px rgba(0,0,0,0.45); border-radius: var(--radius); padding: 10px 14px; font-size: 10.5px; color: var(--muted); white-space: nowrap;')}>
         {/* КНИГА ВЫДЕЛЕННОЙ СТРОКИ (Раунд 57). Одна строка выделена и она из
             корпуса — показываем, откуда, и даём отключить источник прямо
-            отсюда. Владелец: «если он мне докучает — мог бы отключить». */}
+            отсюда. Пользователь: «если он мне докучает — мог бы отключить». */}
         {(function () {
           var от = c.выделеннаяКнига ? c.выделеннаяКнига() : null;
           if (!от) return null;

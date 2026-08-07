@@ -1,12 +1,12 @@
-# extendo — the owner's own persistent state: favorites (permanent, never
+# extendo — the user's own persistent state: favorites (permanent, never
 # auto-removed) and history (every line actually shown on screen — hidden from
 # future output, but reversible: searchable, restorable one-by-one or by
 # theme, and auto-returns to circulation after a configurable retention
 # period). Replaces the old permanent seen-set + accept/reject + λ-distance
-# scoring (2026-07-14, owner: "всё что отвечает за алгоритмическую оценку
+# scoring (2026-07-14, user: "всё что отвечает за алгоритмическую оценку
 # предпочтений и коррекцию выдачи — убрать"; "показанные строчки перемещать
 # в историю, можно восстановить, настроить срок хранения"). One JSON file,
-# atomic writes, one source of truth (invariant #3 — owner's own data only).
+# atomic writes, one source of truth (invariant #3 — user's own data only).
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ _HOMOGRAPH_FLOOR = 0.05   # a content-POS parse below this is noise (e.g. 'и' a
 
 # ИМЯ СОБСТВЕННОЕ — ПОМЕТА МОРФОЛОГИИ, А НЕ ЗАГЛАВНАЯ БУКВА (Раунд 57).
 #
-# Первая версия опознавала имена по заглавной. Владелец: «я думаю, это не плохо,
+# Первая версия опознавала имена по заглавной. Пользователь: «я думаю, это не плохо,
 # что оно капсом; там главное не имя». И он прав: в строке целиком капсом
 # «ТИМОН» от «ЖИЗНЬ» по регистру не отличить вовсе, а строки капсом — нормальный
 # материал, не мусор.
@@ -93,7 +93,7 @@ def _lemma_of(tok: str) -> str | None:
 
 # Пунктуация, которую надо снять с краёв токена. 2026-07-17: сюда добавлены
 # «…» (U+2026) и «–» (U+2013, КОРОТКОЕ тире) — их не было, хотя длинное «—»
-# (U+2014) обрабатывалось. Найдено спайком на реальных данных владельца: 75 из
+# (U+2014) обрабатывалось. Найдено спайком на реальных данных пользователя: 75 из
 # 2406 строк теряли слова ЦЕЛИКОМ («ночь…» → [], «морфия…» → []), потому что
 # pymorphy3 не знает словоформу с прилипшим многоточием, а `_lemma_of` честно
 # возвращает None. Бьёт именно по nakedlunch-фрагментам — это сырые куски книг
@@ -150,7 +150,7 @@ def _tags_of(theme: str) -> list[str]:
 @dataclass
 class Corpus:
     accepted: list = field(default_factory=list)    # [{text, lemmas, rhyme, ts}] — favorites, PERMANENT
-    # Чёрного списка тут больше нет (вырезан 2026-08-03, Раунд 39). Владелец:
+    # Чёрного списка тут больше нет (вырезан 2026-08-03, Раунд 39). Пользователь:
     # «он, по идее, функционально и не нужен, можно его вырезать» — за всё
     # время в нём было НОЛЬ записей, а стоил он подстрочной проверки на
     # каждый фрагмент в каждом из трёх путей отбора. Старые файлы корпуса с
@@ -197,7 +197,7 @@ class Corpus:
         return True
 
     def unaccept(self, text: str) -> bool:
-        """The owner's own explicit removal — the only way a favorite ever
+        """The user's own explicit removal — the only way a favorite ever
         disappears ("никуда не пропадает никогда пока я сам не удалю")."""
         n = len(self.accepted)
         self.accepted = [a for a in self.accepted if a["text"] != text]
@@ -205,14 +205,14 @@ class Corpus:
 
     # ---- history — reversible, searchable, time-limited hiding -------------
     def mark_shown(self, items, theme: str = "") -> None:
-        """Record lines actually DISPLAYED to the owner right now — called at
+        """Record lines actually DISPLAYED to the user right now — called at
         the moment of display, not at generation time (2026-07-14: a freestyle
         stanza sitting in a prefetch buffer, not yet on screen, must NOT count
         — only what's "непосредственно на экране в данный момент"). `items` is
         [{"text":..., "template":...}, ...]. Already-favorited or
         already-recorded texts are skipped, not re-timestamped — re-showing
         something already in history (e.g. a restored line) shouldn't reset
-        its clock without the owner re-generating it as fresh content."""
+        its clock without the user re-generating it as fresh content."""
         now = time.time()
         tags = _tags_of(theme)
         have = {h["text"] for h in self.history}
@@ -235,7 +235,7 @@ class Corpus:
     def hidden_set(self) -> set:
         """Texts currently excluded from generation — the old seen_set()'s
         job, but time-limited: an entry ages out on its own past the
-        retention period, or the owner restores it explicitly. Favorites are
+        retention period, or the user restores it explicitly. Favorites are
         ALWAYS included too — a favorited line stays out of fresh candidate
         pools permanently, same as before, just via a separate permanent list
         rather than duplicated bookkeeping in history."""

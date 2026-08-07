@@ -1,4 +1,4 @@
-# extendo — append-only analytics log (owner 2026-07-14: "лимит клода
+# extendo — append-only analytics log (user 2026-07-14: "лимит клода
 # кончается... это чтоб потом проанализировать и инсайды получить"). Pure
 # observation: every /api/generate, favorite (+remove), and история action
 # writes one JSON line to data/stats.jsonl. Never read back by filters.py or
@@ -175,7 +175,7 @@ def summary() -> dict:
     }
 
 
-# ---- raw export (2026-07-14, owner: "статистика... для дальнейшего анализа")
+# ---- raw export (2026-07-14, user: "статистика... для дальнейшего анализа")
 # The RAW event log, not summary()'s aggregates — aggregation is for the
 # in-app tab; real offline analysis wants the individual events.
 

@@ -173,7 +173,7 @@ TEMPLATES = ("adj_noun", "adj_noun_verb", "noun_verb_prep_np",
              "verb_prep_obryv", "kotory_obryvok", "sravnenie_obryv",
              "dva_glagola", "soyuz_nachalo", "dlinnaya_tsepochka")
 
-# ragged/uneven shapes (2026-07-19, owner: «нужно больше разнообразных
+# ragged/uneven shapes (2026-07-19, user: «нужно больше разнообразных
 # всевозможных форм в том числе неровных как неровная обрезка в кат апе»).
 # The first 6 templates are all grammatically CLOSED — complete noun phrases,
 # complete clauses. Real cut-up text is the opposite: a slice cut at an
@@ -251,7 +251,7 @@ def warm_caches() -> None:
 def vocab_size() -> int:
     """How many unique lemmas the generator draws from — the honest 'pool' the
     grammar pipeline samples candidate lines out of, shown in the funnel
-    infographic (2026-07-14, owner: counters must say from how many things
+    infographic (2026-07-14, user: counters must say from how many things
     each pipeline actually picks). Re-added after Round 13 removed it as an
     n-formula input; here it's display-only, not wired into candidate count."""
     v = _vocab()
@@ -300,7 +300,7 @@ def _verb_past(lemma: str, gender: str, number: str) -> Word | None:
     # alone for singular ("masc|past", not "masc|past|sing" — gender already
     # implies singular in Russian past tense; plural has no gender, hence
     # "past|plur"). Including "sing" here made every singular lookup miss the
-    # table entirely (found 2026-07-19, owner: generation reads monotonous,
+    # table entirely (found 2026-07-19, user: generation reads monotonous,
     # "no more complex constructions with several parts of speech" — verified
     # live: adj_noun_verb/noun_verb_prep_np only succeeded on the 25% of
     # draws that happened to land on PLURAL by chance; verb_prep_np, always

@@ -123,7 +123,7 @@ const BASE_CSS = `
   [data-chrome]:hover, [data-chrome]:has(:focus-visible) { opacity: 1; transition: opacity 170ms var(--ease); }
   /* РЕЖИМ ЗАПИСИ: хром заперт наглухо, пока на корне висит data-reclock="1".
      Не «прячется до наведения», а не проявляется ВООБЩЕ — случайно вывести
-     интерфейс в кадр нельзя (решение владельца по видео, 2026-08-01).
+     интерфейс в кадр нельзя (решение пользователя по видео, 2026-08-01).
      Гасим три пути разом: hover, focus-visible и сами клики (pointer-events),
      иначе панель, открытая клавиатурой или оставшимся фокусом, всё равно
      влезла бы в запись. !important обязателен: правило выше поднимает opacity
@@ -142,7 +142,7 @@ const BASE_CSS = `
   @keyframes streamIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   /* строка-заполнитель на месте будущей строфы: прогон идёт секунды, и он
      должен быть виден ТАМ, КУДА вставится текст, а не только строкой статуса
-     в углу (2026-08-02, владелец: «хочу видеть прям в строке») */
+     в углу (2026-08-02, пользователь: «хочу видеть прям в строке») */
   @keyframes nlGenPulse { 0%, 100% { opacity: 0.32; } 50% { opacity: 0.9; } }
   [data-genrow] { animation: nlGenPulse 1.15s var(--ease) infinite; }
   @media (prefers-reduced-motion: reduce) { [data-genrow] { animation: none; opacity: 0.7; } }
@@ -160,12 +160,12 @@ const BASE_CSS = `
   /* без @property смена --panel считается дискретной и transition её не анимирует */
   @property --panel { syntax: '<color>'; inherits: true; initial-value: transparent; }
   /* строки пресетов, свотчи палитры и класс .active рисует сам движок — дотянуться инлайном нельзя */
-  /* Общий список (Раунд 40). Владелец про выпадашку строф: «отвратительно
+  /* Общий список (Раунд 40). Пользователь про выпадашку строф: «отвратительно
      показан… гораздо лаконичнее выглядел список пресетов во фристайле, вот он
      там красиво реализован». Так что правила пресетов вынесены в класс и
      переиспользуются: формы строф, избранное, история. */
   .nl-list { display: flex; flex-direction: column; gap: 1px; max-height: 300px; overflow-y: auto; }
-  /* Время — СЛЕВА от текста (владелец: «мы время показываем слева от
+  /* Время — СЛЕВА от текста (пользователь: «мы время показываем слева от
      текста, какого хуя оно там»). Пустая ячейка схлопывается вместе с
      просветом, поэтому в избранном, где времени нет, ряд не съезжает. */
   .nl-list .nl-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 3px; }
@@ -176,7 +176,7 @@ const BASE_CSS = `
   .nl-list .nl-name { min-width: 0; font-size: 10px; line-height: 1.5; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; background: none; border: none; padding: 0; text-align: left; font-family: inherit; }
   .nl-list .nl-row:hover .nl-name, .nl-list .nl-row.current .nl-name { color: var(--ink); }
   /* Тег — подпись В ЦВЕТЕ ТЕМЫ, без плашки. Жёлтая плашка, которую увидел
-     владелец, приезжала из мёртвого index.css: там был свой .nl-tag
+     пользователь, приезжала из мёртвого index.css: там был свой .nl-tag
      старого интерфейса (#d9a441). Файл вычищен, имя теперь наше. */
   .nl-list .nl-tag { font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-soft); background: none; white-space: nowrap; }
   .nl-list .nl-tag:empty { display: none; }

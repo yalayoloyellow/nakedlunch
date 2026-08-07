@@ -37,7 +37,7 @@ export function renderSheets(c) {
   var vaultTitle = 'папка «Документы» вашей системы · листы хранятся как .md · текущий файл: ' + (curSheet ? curSheet.id : '—');
   // ДЕЙСТВИЯ СТРОКИ ВИДНЫ ВСЕГДА (Раунд 55). Здесь стояло `opacity: var(--sh, 0)`
   // — то есть переименовать, переложить, продублировать и выбросить можно было
-  // только наведя курсор ровно на строку. Владелец: «у меня кнопок удаления
+  // только наведя курсор ровно на строку. Пользователь: «у меня кнопок удаления
   // папок и листов нет вообще», и он прав: контрол, которого не видно, для
   // пользователя не существует. Тихие 0.55, при наведении — полные.
   var actStyle = s('appearance: none; background: none; border: none; padding: 4px 3px; font-size: 10.5px; line-height: 1; color: var(--muted-soft); cursor: pointer; opacity: var(--sh, 0.55); transition: opacity 0.12s var(--ease); flex-shrink: 0;');

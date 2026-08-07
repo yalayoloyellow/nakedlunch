@@ -123,7 +123,7 @@ def clausula(key: str) -> int:
     номер слога от конца. Отдельного разбора ударений не нужно, и для
     2.87 млн фрагментов это важно — ключи уже посчитаны на сборке.
 
-    Замер трёх референсных текстов владельца (2026-08-03): женская клаузула
+    Замер трёх референсных текстов пользователя (2026-08-03): женская клаузула
     77% / 93% / 100%. Самый устойчивый признак его поэтики из всех, что
     удалось померить, — и до этого раунда машина им не управляла вовсе.
     """
@@ -136,7 +136,7 @@ def _rhyme_tail(words) -> tuple[str, tuple[int, int] | None]:
     rhyme_key), plus its RAW character range in the joined line text
     (Line.text == ' '.join(w.surface for w in words)) so the UI can bold+
     color the actual substring driving the match instead of only showing the
-    abstract (reduced/devoiced) key off to the side. Owner's own proposed
+    abstract (reduced/devoiced) key off to the side. User's own proposed
     fix for chasing rhyme bugs (2026-07-14): "если жирным раскрасить ударную
     рифму — сразу видно, где проблема" — a key alone hid exactly the kind of
     mismatch he spotted by eye once it was in the actual rendered line.

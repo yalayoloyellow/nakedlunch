@@ -604,7 +604,7 @@ export function renderFsLinePanel(c) {
     <div data-pa="down" data-po={st.closing === 'fsline' ? '1' : null} onInput={(e) => call(c, 'onCardInput', e)} style={s(fsPanel(st.fsLineOpen))}>
       {/* СВОЯ ТЕМА У СЦЕНЫ (Раунд 57). Раньше её не было вовсе: фристайл брал
           `_lastKey` — ключ последней генерации в редакторе, то есть ходил по
-          чужой теме и молча менялся, когда владелец работал с текстом. */}
+          чужой теме и молча менялся, когда пользователь работал с текстом. */}
       <div style={s(CAP)}>темы сцены</div>
       <input type="text" value={st.fsTheme || ''} placeholder="через запятую"
         onChange={(e) => c.setState({ fsTheme: e.target.value }, function () { c._fsBuf = []; c._fsQ = []; })}
@@ -754,7 +754,7 @@ function renderRecBtn(c, st) {
   var can = typeof c.recBridge === 'function' && !!c.recBridge();
   var on = !!st.recOn;
   var title = can ? (on ? 'стоп (Esc / R)' : 'запись окна') : (c.recWhyNot ? c.recWhyNot() : 'запись только в приложении');
-  // recPulse живёт в style.js — пульсирующий кружок виден только владельцу:
+  // recPulse живёт в style.js — пульсирующий кружок виден только пользователю:
   // сам хром во время записи заперт и в кадр не попадает
   var css = fsBtn(on, true) + (on ? ' animation: recPulse 1.6s infinite;' : '')
     + (can ? '' : ' opacity: 0.45; cursor: default;');
@@ -818,7 +818,7 @@ export function renderFsBar(c) {
           className={hov(HOVINK)} style={s(fsBtn(!!st.synthOn))}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12h3l2-5 3 10 3-13 3 16 2-8h4"></path></svg>
         </button>
-        {/* ПЕРЕЗАПУСК ДВИЖКА (Раунд 56). Владелец: «когда он сбивается, было
+        {/* ПЕРЕЗАПУСК ДВИЖКА (Раунд 56). Пользователь: «когда он сбивается, было
             бы славно его перезапускать, не перезапуская само приложение».
             Контекст WebGL2 браузер вправе отобрать в любой момент — сцена
             чернеет молча, и до этой кнопки лечилось только перезапуском окна. */}
@@ -828,7 +828,7 @@ export function renderFsBar(c) {
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"></path><path d="M21 3v6h-6"></path></svg>
         </button>
         {/* ПАПКА ЗАПИСЕЙ — ПОСТОЯННО (Раунд 56). Была только в итоге
-            законченной записи; владелец: «а она может быть перманентна? это
+            законченной записи; пользователь: «а она может быть перманентна? это
             было бы славно». Открывает корень, а не последнюю сессию. */}
         <button type="button" id="btnRecDir"
           onClick={() => { fetch('/api/rec/open-dir', { method: 'POST' }).catch(() => {}); }}

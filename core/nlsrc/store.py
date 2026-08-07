@@ -299,7 +299,7 @@ class NakedLunchStore:
         # and before any fragmentation. Centralized here so all add paths benefit.
         if шаг: шаг("чищу текст")
         text = clean_text(text)
-        # Strip real "Имя Фамилия" pairs before cutting (2026-07-19, owner's
+        # Strip real "Имя Фамилия" pairs before cutting (2026-07-19, user's
         # own ask) — a name never even reaches the sliding-window cuts below.
         if шаг: шаг("разбираю имена")
         text = strip_full_names(text)
@@ -343,12 +343,12 @@ class NakedLunchStore:
         """Включить/выключить книгу.
 
         РАУНД 56. Здесь стоял `_save(full=True)` — то есть перезапись ВСЕГО
-        state.json ради одного булева. На корпусе владельца это 549 МБ:
+        state.json ради одного булева. На корпусе пользователя это 549 МБ:
         json.dumps по 2.87 млн фрагментов плюс запись полугигабайта. Чтение
         того же файла замерено в 7.6 с, запись с сериализацией дороже — и всё
         это на клик по точке рядом с названием книги.
 
-        Владелец 2026-08-05: «жму отключить книгу и непонятно вообще,
+        Пользователь 2026-08-05: «жму отключить книгу и непонятно вообще,
         отключится или нет… иногда после нажатия отключить книгу она не
         отключается». Второе — прямое следствие первого: ответа нет десятки
         секунд, он жмёт ещё раз, и книга переключается обратно.
@@ -390,7 +390,7 @@ class NakedLunchStore:
 
     def strip_names(self) -> Dict[str, int]:
         """Retroactive pass over ALREADY-STORED fragments, applying
-        strip_full_names to each (2026-07-19, owner's own ask) — the source
+        strip_full_names to each (2026-07-19, user's own ask) — the source
         text a corpus was cut FROM isn't kept once add_corpus has run (see
         Corpus/Fragment above: no source_text field), so re-cutting existing
         books from scratch with the new name filter isn't possible; this is
@@ -422,7 +422,7 @@ class NakedLunchStore:
 
     def strip_index_junk(self) -> Dict[str, int]:
         """Retroactive pass over ALREADY-STORED fragments, dropping the ones
-        is_index_junk flags (2026-08-01, owner's own ask after «141, 573
+        is_index_junk flags (2026-08-01, user's own ask after «141, 573
         Хазан В. II 468, 670 торн и контратака» leaked into live extendo
         output) — same rationale as strip_names above: the raw source text
         isn't retained after add_corpus, so re-cutting with the new filter

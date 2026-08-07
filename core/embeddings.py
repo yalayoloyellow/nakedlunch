@@ -1,10 +1,10 @@
 # extendo — semantic theme relevance via static Russian word vectors (navec,
 # natasha project, MIT: https://github.com/natasha/navec). Built 2026-07-17 to
-# fix theme stuffing: owner typed "деньги" and got it back literally in 19 of
+# fix theme stuffing: user typed "деньги" and got it back literally in 19 of
 # 20 lines (core/filters.py._nl_scored used to score a fragment 0.6+1 for
 # containing the LITERAL theme word and 0.6+0 for everything else — with
 # hundreds of literal matches in a 274k-fragment pool, they filled the
-# shortlist almost entirely). Owner: "может не встречаться напрямую даже, но
+# shortlist almost entirely). User: "может не встречаться напрямую даже, но
 # всё равно явно захватывать запрошенную тему" — a fragment should rank by
 # whether it carries the theme's MEANING, not whether it contains its exact
 # spelling. See PLAN.md 0.2 for the full decision record.
@@ -115,7 +115,7 @@ def lemma_centroid(lemmas):
     (core/filters.py: _select_with_rhyme): the no-repeat rule already bans
     sharing a LEMMA with the stanza's anchor line, but two lines can be
     near-copies without sharing a single lemma ('деньги пропали' / 'бабки
-    исчезли') — the owner's rule is "ни одна строка не должна быть похожа на
+    исчезли') — the user's rule is "ни одна строка не должна быть похожа на
     константную", and 'похожа' needs a meaning-level check, not a
     spelling-level one. None if the model isn't loaded or no lemma is in
     vocabulary — callers must treat that as 'no opinion', never as
@@ -134,7 +134,7 @@ def relevance(sims, lemmas) -> float:
     """How much of the theme's MEANING a line's content words carry — MEAN
     precomputed cosine similarity (see theme_similarities) over words
     actually in vocabulary, in [-1, 1]. Mean rather than max: a line needs
-    more than one coincidentally-close word to read as on-theme (owner's own
+    more than one coincidentally-close word to read as on-theme (user's own
     complaint was about matches that don't feel related despite word overlap
     — a single lucky cosine shouldn't buy the same trust as it would for
     max). 0.0 if the model, theme, or line has nothing usable — a themed run

@@ -11,7 +11,7 @@
 # ~1.96 млн активных фрагментов). Один и тот же корпус читают и приложение,
 # и старый CLI, если он кому-то ещё нужен, — файлы общие, схема та же.
 #
-# По прямому решению владельца: подмешивание берёт из ВСЕХ активных корпусов,
+# По прямому решению пользователя: подмешивание берёт из ВСЕХ активных корпусов,
 # а не только из своих (см. project-notes/DECISIONS.md).
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ NAKEDLUNCH_PROG_DIR = Path.home() / "Documents" / "nakedlunch"
 # Переопределяется переменной среды — тем же приёмом, что NAKEDLUNCH_VAULT у
 # листов и NAKEDLUNCH_RECORDINGS у записей (Раунд 56). Нужно ровно затем, чтобы
 # проверять заливку книг на ВРЕМЕННОМ корпусе, а не на настоящем: боевой
-# state.json весит 549 МБ и содержит книги владельца.
+# state.json весит 549 МБ и содержит книги пользователя.
 NAKEDLUNCH_DATA = Path(os.environ["NAKEDLUNCH_DATA"]) if os.environ.get("NAKEDLUNCH_DATA") \
     else NAKEDLUNCH_PROG_DIR / "data"
 NAKEDLUNCH_CONFIG = NAKEDLUNCH_PROG_DIR / "config.json"
@@ -63,7 +63,7 @@ def _nl_modules():
     return NakedLunchStore, _weighted_sample
 
 
-# ХРАНИЛИЩЕ ГРУЗИТСЯ ФОНОМ (Раунд 54). state.json владельца — 550 МБ, и его
+# ХРАНИЛИЩЕ ГРУЗИТСЯ ФОНОМ (Раунд 54). state.json пользователя — 550 МБ, и его
 # разбор стоит 13-16 с. Раньше эта цена платилась на уровне модуля api/server.py,
 # то есть ДО того, как Flask открывал порт: окно ждало здоровья сервера 39.4 с
 # при потолке ожидания 40 с — и однажды не дождалось («сервер не поднялся за
@@ -108,7 +108,7 @@ def warm_background() -> None:
             open_store()
         except Exception as e:                                   # noqa: BLE001
             # Молчать нельзя: без корпуса не работает ни генерация, ни статус,
-            # и владелец должен увидеть причину в логе, а не пустую выдачу.
+            # и пользователь должен увидеть причину в логе, а не пустую выдачу.
             print(f"nakedlunch: корпус не загрузился ({e})", flush=True)
     threading.Thread(target=работа, name="nl-store-warm", daemon=True).start()
 

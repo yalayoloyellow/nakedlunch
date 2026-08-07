@@ -353,7 +353,7 @@ def test_mux_real_ffmpeg_produces_playable_file(rec_root):
     assert res["ok"] is True, res
     out = Path(res["path"])
     assert out.exists() and out.stat().st_size > 0
-    # исходники не тронуты — это условие владельца, а не пожелание
+    # исходники не тронуты — это условие пользователя, а не пожелание
     for name in ("video.webm", "mic.wav", "loop.wav"):
         assert (s.dir / name).exists()
     with wave.open(str(s.dir / "loop.wav"), "rb") as f:

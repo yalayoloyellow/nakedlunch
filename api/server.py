@@ -62,7 +62,7 @@ filters.warm_caches()
 embeddings.warm_caches()   # navec (~0.3s) — see core/embeddings.py
 wordsuggest.warm_caches()  # rhyme_index.json — попап по слову
 # Карта «текст → номер» колоночного индекса: 9.8с на 2.87 млн записей. Раньше
-# её платил ПЕРВЫЙ запрос генерации, то есть владелец; теперь она строится
+# её платил ПЕРВЫЙ запрос генерации, то есть пользователь; теперь она строится
 # фоном, пока он открывает окно. Не готова к первому запросу — он просто
 # подождёт на замке внутри nlindex, а не построит вторую карту.
 # ПРОГРЕВ — ОДИН, ПО ПОРЯДКУ И НА ВИДУ (Раунд 57).
@@ -77,7 +77,7 @@ wordsuggest.warm_caches()  # rhyme_index.json — попап по слову
 #      целостности (9.2 с). На пассивно охлаждаемой машине они мешали друг
 #      другу и растягивались втрое.
 #   2. Генерация ЖДЁТ обоих — `_nl()` встаёт на замке хранилища, а filters
-#      встают на тех же картах внутри nlindex. Владелец в это время сидел во
+#      встают на тех же картах внутри nlindex. Пользователь в это время сидел во
 #      фристайле перед пустой сценой: замерено с его машины — первая пачка
 #      56 с, вторая 72 с, а через десять минут тот же запрос отвечает за
 #      0.25 с. Медленной генерации не было ни одной секунды; был невидимый
@@ -97,7 +97,7 @@ def _прогрев() -> None:
             работа()
         except Exception as e:                                   # noqa: BLE001
             # Молчать нельзя: без корпуса не работает ни генерация, ни статус,
-            # и владелец должен увидеть причину в логе, а не пустую выдачу.
+            # и пользователь должен увидеть причину в логе, а не пустую выдачу.
             print(f"nakedlunch: прогрев «{имя}» не удался ({e})", flush=True)
         сек = round(time.time() - t, 1)
         _ПРОГРЕВ["этапы"].append([имя, сек])
@@ -137,7 +137,7 @@ def _nl_ready() -> bool:
 # «Once» он при этом не был НИ РАЗУ. Отметку о переносе он писал через
 # settings.write, а тот молча выбрасывал ключ, которого нет в своём белом
 # списке, — ровно та ловушка, что уже описана в /api/settings: «фильтра два, и
-# второй молча съедал ключ, пропущенный в первом». В логе владельца перенос
+# второй молча съедал ключ, пропущенный в первом». В логе пользователя перенос
 # отметился десять раз, по разу на запуск, и каждый раз тянул за собой
 # загрузку 550 МБ ДО открытия порта. Заодно он значил, что «очистить историю»
 # отменялось следующим запуском: 16 862 строки вернулись бы обратно.
@@ -156,14 +156,14 @@ _NL_RHYME_PROC = None            # this process's own handle — avoids double-s
 def _nl_rhyme_ensure_running(full: bool = False, reban: bool = False) -> None:
     """Spawn the rhyme-cache build in the background if it isn't already
     running. Called after a source is added — new fragments should start
-    getting covered without the owner having to open a terminal. Safe to call
+    getting covered without the user having to open a terminal. Safe to call
     repeatedly: a Popen handle we still hold and haven't seen exit means
     skip; the script's own incremental skip-logic (tools/build_nl_rhyme.py)
     means even a slightly-overlapping second run would just re-skip
     already-cached text, never corrupt it — but avoiding two ONNX sessions
     fighting over the same CPU is the actual point here.
 
-    `full=True` (only the owner's manual button passes this) passes --full
+    `full=True` (only the user's manual button passes this) passes --full
     through to the script, which ignores the existing cache and recomputes
     EVERY fragment from scratch. Found 2026-07-14: the manual button called
     this with the default incremental mode, same as the auto-trigger — when
@@ -178,7 +178,7 @@ def _nl_rhyme_ensure_running(full: bool = False, reban: bool = False) -> None:
         return False
     if _NL_RHYME_PROC is not None and _NL_RHYME_PROC.poll() is None:
         return False
-    # A build from OUTSIDE this process (the owner's own terminal, or a
+    # A build from OUTSIDE this process (the user's own terminal, or a
     # previous run of this same server) may already be writing nl_rhyme.json
     # right now — this process's own _NL_RHYME_PROC handle only knows about
     # builds IT started. A fresh updated_at means skip; two ONNX sessions
@@ -188,10 +188,9 @@ def _nl_rhyme_ensure_running(full: bool = False, reban: bool = False) -> None:
         try:
             s = json.loads(_NL_RHYME_STATUS_PATH.read_text(encoding="utf-8"))
             if s.get("state") == "running" and time.time() - s.get("updated_at", 0) < _NL_RHYME_STALE_SECONDS:
-                # ВЕРНУТЬ False, А НЕ ПРОСТО ВЫЙТИ (Раунд 56). Владелец нажал
-                # «прогнать всё заново», сборка уже шла — и его просьба
-                # исчезала БЕЗ СЛЕДА: «я прогнать заново запустил, а оно нихуя
-                # не отображается». Молчаливый отказ хуже отказа.
+                # ВЕРНУТЬ False, А НЕ ПРОСТО ВЫЙТИ (Раунд 56). Нажатие «прогнать
+                # всё заново» при уже идущей сборке исчезало БЕЗ СЛЕДА: ни отказа,
+                # ни отметки в интерфейсе. Молчаливый отказ хуже отказа.
                 return False
         except Exception:
             pass
@@ -214,7 +213,7 @@ def _nl_rhyme_ensure_running(full: bool = False, reban: bool = False) -> None:
     # ЧЕСТНАЯ СМЕРТЬ ВМЕСТО «ВСТАЛО» (Раунд 57). Ребёнок читает весь кэш в
     # память и на 16 ГБ вместе с открытым приложением его иногда убивает
     # система — молча, не написав в статус ни строки. Сайдкар оставался в
-    # «идёт», сервер через минуту называл это «встало», и владелец видел
+    # «идёт», сервер через минуту называл это «встало», и пользователь видел
     # «1 / 2 434 632 (0%)» без единого намёка на причину.
     #
     # Теперь смерть ловится и записывается: «не удалось, код такой-то». Это не
@@ -246,7 +245,7 @@ _NL_INDEX_PROC = None
 # ВЫВОД СБОРОК — В ФАЙЛ, А НЕ В НИКУДА (Раунд 56).
 #
 # Обе сборки запускались с stdout и stderr в DEVNULL. Значит УПАВШАЯ сборка
-# выглядела ровно так же, как не запускавшаяся, и на вопрос владельца «почему
+# выглядела ровно так же, как не запускавшаяся, и на вопрос пользователя «почему
 # 251 727 строк вне индекса» ответить было нечем: следов не осталось.
 _СБОРКИ_ЛОГ = ROOT / "data" / "сборки.log"
 
@@ -327,8 +326,7 @@ _ИНДЕКС_ПРОБОВАЛИ: tuple | None = None
 def _nl_active_texts() -> set:
     """Разные тексты АКТИВНОГО пула (Раунд 56).
 
-    Владелец: «почему это там написано, если я отключил книгу, в чём смысл
-    показывать это как жёлтое или красное вообще». И он прав: строка «столько-то
+    Отключённая книга не должна попадать в предупреждение. Строка «столько-то
     вне индекса — в выдачу они не попадут» считалась по ВСЕМ фрагментам
     хранилища, вместе с выключенными книгами. Но выключенная книга в выдачу и
     так не попадает — он сам её выключил. Панель тревожилась о том, чего он
@@ -349,7 +347,7 @@ def _nl_active_texts() -> set:
 def _nl_texts() -> set:
     """РАЗНЫЕ ТЕКСТЫ хранилища.
 
-    Фрагментов больше, чем текстов: на машине владельца 2 874 175 против
+    Фрагментов больше, чем текстов: на машине пользователя 2 874 175 против
     2 856 289 — 17 886 дублей (одна и та же строка нарезана из двух книг). И
     кэш рифм, и колоночный индекс ключуются ТЕКСТОМ. Значит сравнивать их с
     числом ФРАГМЕНТОВ — это вычитать разное, и обе строки статуса именно так
@@ -357,7 +355,7 @@ def _nl_texts() -> set:
     ноль.
 
     0.4 с на 2.87 млн, кэш по числу фрагментов: состав меняется только когда
-    владелец трогает источники, а это двигает и число."""
+    пользователь трогает источники, а это двигает и число."""
     global _NL_TEXTS_CACHE
     фрагменты = _nl().state.fragments
     n = len(фрагменты)
@@ -378,7 +376,7 @@ def _nl_store_status() -> dict | None:
     пусто».
 
     Раунд 57: строка знала только про корпус и гасла, когда он загрузился, —
-    а генерация после этого ждала ещё карты индекса, и владелец опять сидел
+    а генерация после этого ждала ещё карты индекса, и пользователь опять сидел
     перед пустой сценой без объяснений. Теперь строка живёт ровно столько,
     сколько генерация не готова, и называет текущий этап и его секунды."""
     if _ПРОГРЕВ["готов"]:
@@ -405,8 +403,8 @@ def _подхватить_свежий_индекс() -> None:
     Раунд 56. `nlindex.reload()` звался только тогда, когда перепечку запустил
     ЭТОТ процесс. Испекли иначе — из терминала, прошлым инстансом, любым другим
     способом — и сервер продолжал показывать старую дату «испечён» и работать
-    по старым колонкам до перезапуска окна. Владелец это и увидел: «старое
-    время перепечки».
+    по старым колонкам до перезапуска окна: в панели висело время предыдущей
+    сборки.
 
     Сверка по `built_at` из meta.json: дёшево (маленький ключ в уже читаемом
     файле) и честно — это ровно то, что показывается в панели."""
@@ -437,13 +435,13 @@ def _nl_index_status() -> dict | None:
     idx = nlindex.load()
     отстал = nlindex.lag(тексты, всего)
     база = {"id": "nl_index", "label": "Индекс корпуса", "total": всего}
-    # ЖИВОЙ ПРОГРЕСС ИЗ САЙДКАРА (Раунд 56). Владелец: «хочу, чтоб всё чётко
-    # отображалось и в реальном времени из реальных данных подтягивалось».
-    # Раньше здесь было «перепекается» и ноль процентов на все сорок секунд.
+    # ЖИВОЙ ПРОГРЕСС ИЗ САЙДКАРА (Раунд 56). Требование: показывать состояние в
+    # реальном времени и из реальных данных. Раньше здесь было «перепекается» и
+    # ноль процентов на все сорок секунд.
     #
     # Сайдкар главнее живости процесса: перепечку мог запустить и не этот
     # процесс (ручной прогон из терминала, прошлый инстанс сервера), а видеть
-    # её владелец обязан в любом случае.
+    # её пользователь обязан в любом случае.
     сб = _индекс_сборка()
     идёт = (_NL_INDEX_PROC is not None and _NL_INDEX_PROC.poll() is None) or \
            (сб.get("state") == "running" and time.time() - сб.get("updated_at", 0) < 120)
@@ -470,17 +468,17 @@ def _nl_index_status() -> dict | None:
         return {**база, "state": "done", "done": done, "pct": 100,
                 "detail": f"испечён {idx.built_at}"}
 
-    # ОТСТАВАНИЕ ЛЕЧИТСЯ САМО (Раунд 56). Владелец: «почему мне вручную надо
-    # дополнительно что-то прожимать». И правда незачем: приложение уже умеет
+    # ОТСТАВАНИЕ ЛЕЧИТСЯ САМО (Раунд 56). Ручное подтверждение здесь не нужно:
+    # приложение уже умеет
     # перепекать фоном и делает это после заливки книги. Заметить отставание и
-    # попросить разрешения — значит переложить свою недоделку на владельца.
+    # попросить разрешения — значит переложить свою недоделку на пользователя.
     #
     # Побочное действие в функции статуса — цена осознанная: отдельный сторож
     # был бы третьим механизмом опроса рядом с двумя имеющимися. Замок от
     # повторов — `_ИНДЕКС_ПРОБОВАЛИ`: на одну композицию пула одна попытка.
     # Уже идёт сборка ударений — значит цепочка в пути, и никакой «перепечки
     # после которой не помогло» ещё не было. Раньше здесь этого различия не
-    # было, и панель через секунду после запуска сообщала владельцу вывод,
+    # было, и панель через секунду после запуска сообщала пользователю вывод,
     # которого никто не делал.
     if _NL_RHYME_PROC is not None and _NL_RHYME_PROC.poll() is None:
         return {**база, "state": "running", "done": done, "pct": pct,
@@ -568,7 +566,7 @@ def _nl_rhyme_status() -> dict | None:
         state = "stalled"
     # МЁРТВЫЙ САЙДКАР НЕ ИМЕЕТ ПРАВА ВРАТЬ ВЕЧНО (Раунд 58).
     #
-    # Владелец прислал шапку: «Рифма nakedlunch · встало · 1 / 2 434 632 (0%)».
+    # В шапке висело: «Рифма nakedlunch · встало · 1 / 2 434 632 (0%)».
     # На диске при этом лежал ПОЛНЫЙ кэш на 2 434 632 записи — все тексты до
     # единого. Врал сайдкар: прерванный пересчёт оставил «running, cached=1» и
     # больше его никто не переписал. А шапка другого источника правды не знала,
@@ -596,7 +594,7 @@ def _nl_rhyme_status() -> dict | None:
                 "detail": str(s["error"])[:200]}
     # Записей в кэше может быть БОЛЬШЕ, чем текстов в хранилище: тексты
     # удалённых источников из него не вычищаются (2 868 100 против 2 856 289 у
-    # владельца). Показывать «2 868 100 из 2 856 289» — значит просить читателя
+    # пользователя). Показывать «2 868 100 из 2 856 289» — значит просить читателя
     # объяснить себе, как сделано больше, чем есть; лишнее — не прогресс.
     done = min(s.get("cached", 0), total)
     # Процент ВНИЗ, а не round (Раунд 52): «100%» обязано значить «не осталось
@@ -606,12 +604,12 @@ def _nl_rhyme_status() -> dict | None:
     # 2 755 698», а здесь стоит 2 434 632, и читатель честно спрашивает, почему
     # числа не сходятся. Не сходятся они потому, что считают РАЗНОЕ: там штуки,
     # тут разные тексты, разница — дубли (одна строка нарезана из двух книг).
-    # Владелец 2026-08-05 спросил ровно это; подпись дешевле, чем объяснение.
+    # Вопрос возникает сразу; подпись дешевле, чем объяснение.
     detail = s.get("error") or f"{done:,} / {total:,} ({pct}%) · разных строк".replace(",", " ")
     # "mode" sticks in the status file until the NEXT run overwrites it — so
     # after a manual full rebuild finishes, the topbar keeps saying "полный
     # пересчёт" instead of going back to looking like every other tiny
-    # incremental pass (owner: "показывать какой мы сделали").
+    # incremental pass (user: "показывать какой мы сделали").
     label = base["label"]
     if s.get("mode") == "full":
         label += " (полный пересчёт)"
@@ -647,7 +645,7 @@ def _pipeline_status() -> dict | None:
 def _nl_pool_counts() -> tuple[int, int, int]:
     """(active_sources, fragments_in_active, available_not_yet_shown) — the
     real numbers behind the nakedlunch funnel's top, so the UI can say from
-    how big a base each request actually samples (owner 2026-07-14: "из
+    how big a base each request actually samples (user 2026-07-14: "из
     скольки источников по факту, а не нарисовано"). Same methods /api/nl/state
     uses, so the two views can't disagree."""
     if _nl() is None:
@@ -707,11 +705,11 @@ def api_status():
 
 @app.post("/api/nl/rhyme/run")
 def api_nl_rhyme_run():
-    """Manual trigger (owner: "есть смысл добавить кнопку... прогнать ударения
+    """Manual trigger (user: "есть смысл добавить кнопку... прогнать ударения
     вручную") — always a FULL rebuild (found 2026-07-14: this used to call
     _nl_rhyme_ensure_running() with the same incremental mode as the
     auto-trigger, which was a no-op in seconds once the cache was already
-    ~100% complete — the button looked broken. "Ручной" is the owner
+    ~100% complete — the button looked broken. "Ручной" is the user
     explicitly asking for a from-scratch recompute, not a repeat of what
     already happens automatically)."""
     err = _nl_guard()
@@ -728,7 +726,7 @@ def api_nl_rhyme_run():
 def api_nl_rhyme_reban():
     """Пересчитать только формулу качества (banal/content) по всему кэшу.
 
-    Отдельная кнопка, а не режим полного прогона: владелец должен видеть, что
+    Отдельная кнопка, а не режим полного прогона: пользователь должен видеть, что
     это ДРУГАЯ по цене работа. Полный прогон — час (нейросетевые ударения);
     этот проход ударений не касается и идёт минуты, поэтому формулу качества
     можно пробовать, а не бояться."""
@@ -745,8 +743,8 @@ def api_nl_rhyme_reban():
 def _подписать_источники(shortlist) -> None:
     """Дописать каждой строке выдачи имя книги, откуда она (Раунд 57).
 
-    Владелец: «было бы славно, если бы, выбирая строку, я видел название
-    источника — чтоб, если он мне докучает, мог бы отключить».
+    Требование: при выделении строки видно, из какой она книги, и книгу можно
+    отсюда же отключить.
 
     Делается ЗДЕСЬ, а не в отборе, и это не срезка угла: отбору источник не
     нужен ни для одного решения, а у сервера уже есть и карта «текст → номер
@@ -821,20 +819,20 @@ def api_nl_blacklist_remove():
 def api_nl_funnel():
     """Карта воронки: сколько фрагментов и книг доживает до каждой ступени.
 
-    Раунд 57. Владелец: «нам в целом надо понимать, как именно что работает,
-    чтоб потом этим управлять». До этого цена каждой ручки была известна только
+    Раунд 57. Требование: видеть, как работает каждая ступень отбора, чтобы
+    ею управлять. До этого цена каждой ручки была известна только
     на словах — и три правки подряд били по симптомам ровно потому, что
     посмотреть было некуда.
 
     Считается по колонкам индекса, без похода в отбор: это карта ПУЛА. Ручки
-    берутся из запроса, чтобы владелец видел цену СВОИХ настроек, а не средних.
+    берутся из запроса, чтобы пользователь видел цену СВОИХ настроек, а не средних.
     """
     if not _ПРОГРЕВ["готов"]:
         return {"ready": False}
     # ПОЛОЖЕНИЕ РУЧКИ, А НЕ ВЫВЕДЕННЫЙ ИЗ НЕЁ ПОТОЛОК (Раунд 58). Раньше
     # интерфейс считал `6.5 − 2.5·ручка` сам и слал результат — вторая копия
     # формулы, живущая на фронте. Теперь формула одна (nlindex), а сюда
-    # приезжает то, что владелец реально видит на экране.
+    # приезжает то, что пользователь реально видит на экране.
     try:
         ручка = float(request.args.get("banality", 0.5))
     except (TypeError, ValueError):
@@ -858,7 +856,7 @@ def api_nl_funnel():
     )
     if данные is None:
         return {"ready": False, "detail": "индекс не испечён"}
-    # Идентификатор книги владельцу ничего не говорит — подставляем имя.
+    # Идентификатор книги пользователю ничего не говорит — подставляем имя.
     for и in данные.get("источники", []):
         и["источник"] = имена.get(и["источник"], и["источник"])
     return {"ready": True, **данные}
@@ -934,10 +932,10 @@ def api_generate():
     nl_frags = []
     if nl_active:
         # The WHOLE active-and-not-yet-shown pool, every request — not a
-        # sample (2026-07-14, owner: "пусть обрабатывается и перебирается
+        # sample (2026-07-14, user: "пусть обрабатывается и перебирается
         # всегда именно полная база абсолютно везде"). Previously fetched a
         # capped random/weighted slice (as few as 320 of 257,630 fragments for
-        # an unthemed max-real_text request — the owner's own "это бред"
+        # an unthemed max-real_text request — the user's own "это бред"
         # finding); that cap only existed because scoring needed live
         # pymorphy3/zipf calls per fragment. tools/build_nl_rhyme.py now
         # precomputes banal/taut/lemmas/tokens offline, so filters._nl_scored
@@ -978,7 +976,7 @@ def api_generate():
         result["funnel"]["pool_available"] = len(
             set(_nl().get_active_pool()) - CORPUS.hidden_set())
 
-    # Only the owner-facing sliders (matching App.jsx's KNOBS) — clean.knobs()
+    # Only the user-facing sliders (matching App.jsx's KNOBS) — clean.knobs()
     # also carries old-name aliases (explore/meter/banal/nl_mix) for the same
     # values plus non-slider fields (shortlist), which would double-count and
     # add a meaningless average if logged as-is.
@@ -1007,8 +1005,8 @@ def api_generate():
 def api_pipeline_profile():
     """Референс → профиль и готовая цепочка (Раунд 45).
 
-    Владелец: «в пайплайн можно будет засунуть референтный текст и выбирать
-    процент референтности, и она сама назначает структуру пайплайна». Роут
+    Требование: по референтному тексту и проценту референтности пайплайн сам
+    назначает себе структуру. Роут
     ничего не генерирует и ничего не сохраняет — только меряет текст и
     отдаёт то, чем его можно повторить."""
     payload = request.get_json(force=True, silent=True) or {}
@@ -1076,7 +1074,7 @@ def api_pipeline_run():
         try:
             result = pipeline.run_pipeline(spec, CORPUS, nl_frags, progress=_progress)
         except clean.BadInput as e:
-            # resolve_chain: владелец назвал несуществующую форму — это 400
+            # resolve_chain: пользователь назвал несуществующую форму — это 400
             # запроса, не 500 сервера; finally ниже честно погасит статус.
             return {"error": str(e)}, 400
         _PIPELINE_PROGRESS.update(state="done",
@@ -1123,7 +1121,7 @@ def api_favorite():
 
 @app.post("/api/favorite/remove")
 def api_favorite_remove():
-    """The owner's own explicit removal — the only way a favorite ever
+    """The user's own explicit removal — the only way a favorite ever
     disappears ("никуда не пропадает никогда пока я сам не удалю")."""
     payload = request.get_json(force=True, silent=True) or {}
     text = (payload.get("text") or "").strip()
@@ -1218,7 +1216,7 @@ def api_stats():
 
 @app.get("/api/stats/export.json")
 def api_stats_export_json():
-    """The RAW event log, not summary()'s aggregates (owner 2026-07-14:
+    """The RAW event log, not summary()'s aggregates (user 2026-07-14:
     "чтобы потом проанализировать" — aggregation is for the in-app tab only;
     real offline analysis wants individual events)."""
     return Response(stats_mod.export_json(), mimetype="application/json",
@@ -1234,7 +1232,7 @@ def api_stats_export_csv():
 @app.get("/api/corpus/export.json")
 def api_corpus_export():
     """избранное + история + чёрный список, as one downloadable file — the
-    owner's only copy of this data lives in data/corpus.json, outside git
+    user's only copy of this data lives in data/corpus.json, outside git
     (no repo here at all), so a one-click backup costs nothing and saves
     everything if the machine ever loses that file."""
     CORPUS.save()   # make sure the file on disk matches in-memory state
@@ -1258,13 +1256,13 @@ def api_corpus_export():
 
 @app.get("/api/settings")
 def api_settings_get():
-    """The owner's own slider positions AND stanza spec (2026-07-18) — see
+    """The user's own slider positions AND stanza spec (2026-07-18) — see
     core/settings.py for why a file and not localStorage. `knobs` and
     `stanza` both go back through their clean.py validators on the way out,
     so a stale-schema or hand-edited file is clamped/defaulted exactly like
     a live value arriving from the UI, never trusted raw.
 
-    `stanza: null` is a MEANINGFUL stored value — the owner's own "нет"
+    `stanza: null` is a MEANINGFUL stored value — the user's own "нет"
     (no scheme) choice — not the same as the key being absent (never saved
     at all, or a hand-edited file dropped it). clean.stanza_spec(None)
     returns None too, so this line does double duty: normalize a real spec,
@@ -1283,11 +1281,11 @@ def api_settings_post():
     anything is persisted, so the file can't end up holding a value the
     domain would reject.
 
-    `stanza: null` is stored AS null (2026-07-18) — the owner's own "нет"
+    `stanza: null` is stored AS null (2026-07-18) — the user's own "нет"
     (no scheme) choice is a real, persistable preference, not just "ignore
     this key." Gating on truthiness here (`if spec: ...`) would silently
     keep whatever non-null spec was saved last, so choosing "нет" and
-    reopening the app later would revert to an old scheme the owner
+    reopening the app later would revert to an old scheme the user
     explicitly moved away from — settings_mod.write() merges by key, so an
     omitted key means "leave the old value," but an explicit None means
     "clear it," and only sending the key when spec is truthy could never
@@ -1325,7 +1323,7 @@ def api_settings_post():
 @app.get("/api/stanza/profiles")
 def api_stanza_profiles_get():
     """Built-in verse forms (core/data/stanza_forms.json, read-only, 24
-    classical/eastern/modern/folk forms) + the owner's own saved profiles
+    classical/eastern/modern/folk forms) + the user's own saved profiles
     (data/stanza_profiles.json) — see core/stanza_profiles.py. Every
     profile's `lines` is re-validated through clean.stanza_spec() here, not
     trusted raw from either file — a hand-edited custom profile that no
@@ -1342,7 +1340,7 @@ def api_stanza_profiles_get():
 
 # Раунд 50: _PROFILE_PARAMS вырезан. Профиль строфы хранил рядом со схемой и
 # положения крутилок, и выбор формы молча двигал ползунки — то самое смешение
-# каркаса с настройками, которое владелец разделил на две полки. Заодно ушёл
+# каркаса с настройками, которое пользователь разделил на две полки. Заодно ушёл
 # белый список, который УЖЕ разошёлся с фронтом: в нём не было ни «Отбор», ни
 # «Мат», и обе крутилки месяцами не сохранялись (видно в data/settings.json).
 
@@ -1370,8 +1368,8 @@ def api_stanza_profiles_delete():
 
 
 # ---- профили настроек: вторая полка (Раунд 50) ---------------------------
-# Владелец: «можно делать строфы, и можно сделать профиль настроек — как
-# расположены крутилки; и то, и то можно ставить отдельно». Роуты зеркалят
+# Требование: каркас строфы и положения крутилок сохраняются РАЗДЕЛЬНО, двумя
+# независимыми полками. Роуты зеркалят
 # строфовые один в один: та же форма ответа {builtin, custom}, та же
 # перезапись по имени, то же удаление — две полки не должны требовать двух
 # разных привычек.
@@ -1439,7 +1437,7 @@ def api_chains_delete():
 
 def _series_out(items: list[dict]) -> dict:
     """Полка плюс оценка времени на каждую серию. Оценку считает домен
-    (core/series.py: estimate) — число берётся из замеров прогона, и владелец
+    (core/series.py: estimate) — число берётся из замеров прогона, и пользователь
     обязан видеть его ДО запуска, а не утром."""
     return {"custom": [{**s, "estimate": series_mod.estimate(s)} for s in items],
             # Секунды на текст едут ЧИСЛОМ, а не зеркалятся на фронте: пока
@@ -1473,11 +1471,11 @@ def api_series_delete():
 
 # --- ПРОГОН серии ----------------------------------------------------------
 #
-# Живёт ВНУТРИ окна (решение владельца 2026-08-04): второй демон потребовал бы
+# Живёт ВНУТРИ окна (решение пользователя 2026-08-04): второй демон потребовал бы
 # своего замка на данные, а выигрыш был бы только «можно закрыть окно».
 #
 # ЗАМОК БЕРЁТСЯ НА ОДИН ТЕКСТ, а не на всю серию: иначе она держала бы его
-# часами и владелец не смог бы сгенерировать ничего руками. Ручной прогон
+# часами и пользователь не смог бы сгенерировать ничего руками. Ручной прогон
 # получит 409 только на те ~15 секунд, пока считается очередной текст серии.
 _SERIES_PROGRESS: dict = {"state": None, "done": 0, "total": 0, "detail": "",
                           "name": "", "link": None, "beda": {}}
@@ -1487,10 +1485,9 @@ _SERIES_THREAD = None
 
 # ЗАЛИВКА КНИГИ ИДЁТ ФОНОМ (Раунд 56).
 #
-# Владелец 2026-08-05: «очень долгая неинформативная заливка книг… жмёшь и
-# ждёшь в надежде что сработает, никакой информации что даже нажатие сработало
-# и реально что-то происходит нет… почему бы книгам сразу не добавиться в
-# список и в фоне не обрабатываться».
+# Требование (2026-08-05): заливка книг долгая и до этого шла без единого
+# признака жизни — нажатие не подтверждалось ничем. Книга должна появляться в
+# списке сразу, а обработка идти фоном и быть видимой.
 #
 # Раньше роут делал ВСЁ внутри HTTP-запроса: разбор файла, `strip_full_names`
 # (pymorphy3 по всему тексту книги — большая часть времени), нарезку и полную
@@ -1503,9 +1500,8 @@ _SERIES_THREAD = None
 # пришлось: новый пункт добавляется здесь одной функцией.
 _IMPORT: dict = {"state": None, "files": [], "i": 0, "n": 0, "detail": "",
                  "added": [], "errors": [], "done_at": 0.0}
-# Сколько держать ЗАКОНЧЕННУЮ заливку в списке работ. Владелец 2026-08-05:
-# «фоновые работы по книгам прошли, и вот этот некрасивый кал остаётся висеть,
-# это до след. перезапуска? мб кнопку добавить, чтоб очистить?»
+# Сколько держать ЗАКОНЧЕННУЮ заливку в списке работ. Законченная работа не
+# должна висеть в панели до перезапуска (замечание 2026-08-05).
 #
 # Кнопки не будет — по той же причине, что и у перепечки индекса: убирать за
 # собой должно приложение. Заливка это СОБЫТИЕ, а не состояние (в отличие от
@@ -1516,7 +1512,7 @@ _IMPORT_LOCK = threading.Lock()
 
 
 def _коротко(имя: str, сколько: int = 24) -> str:
-    """Имя книги для строки статуса. Файлы у владельца называются
+    """Имя книги для строки статуса. Файлы у пользователя называются
     «Blavatskaya_Teosofiya_2_Razoblachennaya_Izida_Tom_II_7dLwng_1…» — целиком
     они разносят панель, а хвост с хэшем не говорит ничего."""
     имя = str(имя or "").rsplit(".", 1)[0]
@@ -1568,7 +1564,7 @@ def _import_worker(payload: list) -> None:
         # Коротко и читаемо. Раньше сюда выкладывались ПОЛНЫЕ имена файлов со
         # своими хэшами — три книги давали простыню на четыре строки, которая
         # вылезала за панель. Сколько книг и сколько строк — это и есть ответ
-        # на «залилось ли»; имена владелец видит в списке источников рядом.
+        # на «залилось ли»; имена пользователь видит в списке источников рядом.
         фраг = sum(a.get("fragment_count") or 0 for a in added)
         чего = "книга" if len(added) == 1 else ("книги" if len(added) < 5 else "книг")
         хвост = f"добавлено {len(added)} {чего} · {фраг:,} фрагментов".replace(",", " ") if added else ""
@@ -1594,7 +1590,7 @@ def _series_status() -> dict | None:
 # СКОЛЬКО НА САМОМ ДЕЛЕ СТОИТ ТЕКСТ (Раунд 55).
 #
 # Константа в 15 секунд была замерена на цепочке из четырёх коротких звеньев.
-# На цепочке владельца («тест2»: Частушка, Рубаи, Одическая строфа в десять
+# На цепочке пользователя («тест2»: Частушка, Рубаи, Одическая строфа в десять
 # строк, 7200 сочетаний в переборе) один текст идёт СОРОК ОДНУ секунду — и
 # панель обещала ему 22 минуты там, где работы на час.
 #
@@ -1625,8 +1621,8 @@ def _series_worker(name: str) -> None:
         # и бросить весь план из-за одной ручной генерации было бы глупо.
         #
         # ПРОГРЕСС ВНУТРИ ТЕКСТА (Раунд 55). Здесь стояло `run_pipeline(...)`
-        # БЕЗ progress — и это и есть жалоба владельца «прогресс серии
-        # нормально не идёт, по-моему завис»: один текст на его цепочке идёт
+        # БЕЗ progress — отсюда и «прогресс серии завис»: один текст на длинной
+        # цепочке идёт
         # сорок-сто секунд, и всё это время строка в шапке не менялась вовсе.
         # Теперь видно, на каком пуле стоим: «дорога 1 из 10 · пулы 2/3».
         хвост = _SERIES_PROGRESS.get("detail") or ""
@@ -1749,7 +1745,7 @@ def api_nl_state():
     if err:
         return err
     # Two different numbers were collapsing into one misleading "pool_size"
-    # (found 2026-07-14, owner spotted it not adding up): get_chat_pool() is
+    # (found 2026-07-14, user spotted it not adding up): get_chat_pool() is
     # the ACTIVE-corpus total MINUS nakedlunch's own "used" tracking (lines
     # already shown in ITS chat history, e.g. via the standalone CLI at
     # ~/nakedlunch — a persistent, shared state file, not anything extendo
@@ -1978,7 +1974,7 @@ def api_sheets_open_dir():
 def api_ui_log():
     """Ошибки ИНТЕРФЕЙСА — в файл (Раунд 56).
 
-    Окно владельца — WKWebView внутри pywebview, консоли у него нет, и я его не
+    Окно пользователя — WKWebView внутри pywebview, консоли у него нет, и я его не
     вижу. Три захода подряд на «движок не работает» уперлись ровно в это: я
     чинила по догадке, потому что настоящего сообщения из ЕГО окна не было ни
     разу. Пусть окно говорит само.
@@ -2004,8 +2000,7 @@ def api_rec_open_dir():
     """Открыть каталог записей в Finder (Раунд 56).
 
     Папка была всегда — ~/Documents/nakedlunch/записи/<дата время>/, и путь
-    даже писался под каждой дорожкой в панели. Но владелец спросил «должна
-    быть папка сохранения», то есть путь строкой в панели её для него не
+    даже писался под каждой дорожкой в панели. Но путь строкой панель не
     заменяет: нужна дверь, а не адрес. Третий такой роут в проекте — тот же
     образец, что у корпуса и у листов.
 

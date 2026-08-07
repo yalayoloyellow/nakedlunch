@@ -3,7 +3,7 @@
 # скрывают строки из будущих прогонов, обратимо (история) или навсегда
 # (избранное). Run: python tests/test_realpath.py (or: pytest tests/).
 #
-# 2026-07-14: rewritten after the owner asked to remove all λ-based
+# 2026-07-14: rewritten after the user asked to remove all λ-based
 # preference/history-distance scoring and replace the permanent seen-set with
 # reversible История (see core/corpus.py, core/filters.py). The old
 # `test_accepted_corpus_steers_next_run` tested exactly the mechanism that was
@@ -43,7 +43,7 @@ def test_theme_produces_shortlist():
 
 def test_favorites_never_resurface():
     """Accepting (favoriting) a line excludes it from every later run, forever
-    — no retention period, no restore needed (owner: "избранное... никуда не
+    — no retention period, no restore needed (user: "избранное... никуда не
     пропадает никогда", and the flip side of that permanence is it never
     comes BACK as fresh output either)."""
     tags = clean.theme("ночь, город, холод")
@@ -64,7 +64,7 @@ def test_favorites_never_resurface():
 def test_history_hides_then_restore_reverses_it():
     """Every shown line moves to История automatically and is excluded from
     later runs — but (unlike favorites) it's reversible: restoring it makes
-    it eligible again (owner: "но пока это не сделано они не показываются
+    it eligible again (user: "но пока это не сделано они не показываются
     больше в выдаче" — the key word is "пока", not "никогда")."""
     tags = clean.theme("ночь, город, холод")
     corp = Corpus()
@@ -102,7 +102,7 @@ def test_adjacent_lines_differ():
 
 @нет_векторов
 def test_theme_stuffing_is_capped_and_semantic_lines_surface():
-    """Найдено владельцем вживую 2026-07-17: тема «деньги» → слово буквально
+    """Найдено пользователем вживую 2026-07-17: тема «деньги» → слово буквально
     в 19 из 20 строк ("я же говорил что не хочу так"). Причина —
     core/filters.py._nl_scored раньше давало ЛЮБОМУ фрагменту с буквальным
     совпадением фиксированный +1 к баллу против +0 у всех остальных; при
@@ -132,7 +132,7 @@ def test_theme_stuffing_is_capped_and_semantic_lines_surface():
         tags = clean.theme("деньги")
         # cohesion=1.0 — explicit (2026-07-18, cohesion became bipolar, see
         # filters.run's theme_pull docstring): the knob's default 0.5 is now
-        # deliberately NEUTRAL (zero theme pull, by owner's own request — a
+        # deliberately NEUTRAL (zero theme pull, by user's own request — a
         # true midpoint between "консонанс" and "диссонанс"), so at the old
         # implicit default every row here would score identically and this
         # assertion would depend on random.shuffle's draw. This test is
@@ -154,7 +154,7 @@ def test_theme_stuffing_is_capped_and_semantic_lines_surface():
 
 
 def test_select_with_rhyme_avoids_lemma_repeat_within_stanza():
-    """Найдено владельцем вживую 2026-07-18 (скриншот): «Два гонорара» /
+    """Найдено пользователем вживую 2026-07-18 (скриншот): «Два гонорара» /
     «получил два чека» / «Вот два чека» — «чек» дважды в одной строфе абаб,
     хотя `_select_with_rhyme` (АКТИВНЫЙ путь при схеме — дефолт приложения,
     "абаб") про повторы вообще не знал, только про рифму и балл. Первая
@@ -185,7 +185,7 @@ def test_select_with_rhyme_avoids_lemma_repeat_within_stanza():
 
 
 def test_forced_word_hard_guarantee():
-    """!слово (PLAN.md 0.2b, реализовано 2026-07-17) — владелец: «!слово...
+    """!слово (PLAN.md 0.2b, реализовано 2026-07-17) — пользователь: «!слово...
     это обязательный показ именно этого слова в одной из строк если в базе
     есть это слово». В отличие от обычной темы (0.2a: ≈1 на строфу,
     вероятностно), forced-слово — ГАРАНТИЯ, проверяется на уже собранном
@@ -242,7 +242,7 @@ def test_forced_word_hard_guarantee():
 
 
 def test_typographic_punctuation_does_not_eat_words():
-    """Найдено спайком 2026-07-17 на реальных данных: 75 из 2406 строк владельца
+    """Найдено спайком 2026-07-17 на реальных данных: 75 из 2406 строк пользователя
     теряли слова ЦЕЛИКОМ, потому что `lemmatize` не снимала «…» и короткое «–».
     Сценарий, а не функция: строка с типографской пунктуацией должна давать те
     же леммы, что и без неё — иначе тема, тавтология и разнообразие соседей
@@ -255,7 +255,7 @@ def test_typographic_punctuation_does_not_eat_words():
 
 
 def test_scheme_typed_in_latin_or_digits_is_the_same_rhyme():
-    """Владелец: «возможность прописывать её цифрами и латиницей» (PLAN.md 0.6).
+    """Пользователь: «возможность прописывать её цифрами и латиницей» (PLAN.md 0.6).
     Сценарий, а не функция: набранная латиницей/цифрами схема должна давать ТУ ЖЕ
     рифмовку, что кириллицей — до 2026-07-17 `aabb` молча превращалось в "none"
     (некириллица проваливала _SCHEME_RE), то есть поле съедало ввод и выдавало
@@ -276,12 +276,12 @@ def test_scheme_typed_in_latin_or_digits_is_the_same_rhyme():
     assert res["shortlist"], "латинская схема не должна убивать выдачу"
 
     # Чистую кириллицу не трогаем: «баба» остаётся «бабой», а не канонизируется
-    # в «абаб» — иначе поле спорило бы с владельцем на полуслове.
+    # в «абаб» — иначе поле спорило бы с пользователем на полуслове.
     assert clean.rhyme_scheme("баба") == "баба"
 
 
 def test_cohesion_percentile_spans_the_whole_range():
-    """Найдено владельцем вживую 2026-07-18 (тема «секс», ползунок 50→55%):
+    """Найдено пользователем вживую 2026-07-18 (тема «секс», ползунок 50→55%):
     «разница в выдаче огромная и очень резкая». Причина — `theme_pull` был
     ПОЛОЖИТЕЛЬНЫМ МНОЖИТЕЛЕМ на монотонную функцию sem, а сортировка
     инвариантна к умножению на любую положительную константу: cohesion=0.55
@@ -338,7 +338,7 @@ def test_cohesion_percentile_spans_the_whole_range():
 
 @нет_векторов
 def test_theme_anchor_present_on_topic_and_not_a_duplicate():
-    """Владелец (2026-07-18): «даже при диссонансе должна быть строка которая
+    """Пользователь (2026-07-18): «даже при диссонансе должна быть строка которая
     точно в тему по запросу одна чтоб с ней диссонировать, а консонирующие ни
     в коем случае не должны быть идентичными основной но быть рядом... ни
     одна строка не должна быть похожа на константную запрашиваемую». Сценарий:
@@ -384,7 +384,7 @@ def test_theme_anchor_present_on_topic_and_not_a_duplicate():
 
 
 def test_all_grammar_templates_actually_produce_output():
-    """Найдено владельцем вживую 2026-07-19 (скриншот: 14 строк алгоритма,
+    """Найдено пользователем вживую 2026-07-19 (скриншот: 14 строк алгоритма,
     почти все adj_noun/noun_and_noun — «постоянное и», «нет более сложных
     конструкций с несколькими частями речи»). Причина не в дизайне
     (недостаточно шаблонов), а в баге: `_verb_past` строил ключ поиска
@@ -396,7 +396,7 @@ def test_all_grammar_templates_actually_produce_output():
     noun_verb_prep_np выживали только на тех ~25% черновиков, что случайно
     попадали на множественное число.
 
-    Позже владелец попросил ещё разнообразия, «в том числе неровных как
+    Позже пользователь попросил ещё разнообразия, «в том числе неровных как
     неровная обрезка в кат апе» — добавлены 6 «рваных» шаблонов
     (verb_prep_obryv/kotory_obryvok/sravnenie_obryv/dva_glagola/
     soyuz_nachalo/dlinnaya_tsepochka, 2026-07-19), намеренно НЕзакрытых
@@ -417,7 +417,7 @@ def test_all_grammar_templates_actually_produce_output():
 
 
 def test_stanza_syllable_length_prefers_but_never_beats_rhyme():
-    """Конструктор строф (PLAN.md 0.7) — владелец: «выбор минимального и
+    """Конструктор строф (PLAN.md 0.7) — пользователь: «выбор минимального и
     максимального количества слогов в каждой строке», и на прямой вопрос
     «если для позиции не находится кандидата нужной длины, чем жертвовать в
     последнюю очередь» — «рифма важнее». Два сценария: (1) длина
@@ -454,7 +454,7 @@ def test_stanza_syllable_length_prefers_but_never_beats_rhyme():
 
 
 def test_syllable_reserve_survives_the_score_cap():
-    """Найдено владельцем вживую 2026-07-19 (скриншот Онегинской строфы):
+    """Найдено пользователем вживую 2026-07-19 (скриншот Онегинской строфы):
     NL_SELECT_CAP резал nl_survivors по COHESION-баллу ДО того, как
     syllable_spec вообще успевал заглянуть в пул — так строка нужной длины
     и рифмы могла реально существовать (859 подходящих «ом»-кандидатов), но
@@ -478,7 +478,7 @@ def test_syllable_reserve_survives_the_score_cap():
 
 
 def test_splice_fills_a_too_short_slot_with_a_rhyming_tail():
-    """Идея владельца 2026-07-19: «когда не достает слогов в строку —
+    """Идея пользователя 2026-07-19: «когда не достает слогов в строку —
     добавлять доп строку ту которая по количеству слогов и по рифме
     подходит». Позиция 2 схемы "аа" может получить нужную длину только
     склейкой: единственный кандидат её рифмо-бакета короче диапазона, но
@@ -506,7 +506,7 @@ def test_splice_fills_a_too_short_slot_with_a_rhyming_tail():
 
 
 def test_trim_shortens_an_overlong_candidate_without_touching_the_rhyme():
-    """Идея владельца 2026-07-19: «слишком длинные строки — отрезать самые
+    """Идея пользователя 2026-07-19: «слишком длинные строки — отрезать самые
     незначимые слова оттуда». Единственный кандидат позиции 2 (25 слогов)
     сильно превышает диапазон 8-9 — механизм должен обрезать ведущие слова,
     никогда не трогая последнее (рифмующееся) слово."""

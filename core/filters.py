@@ -1,7 +1,7 @@
 # extendo — the smart filter. Turns thousands of dumb candidates into a ranked
 # shortlist. Cascade order is cheapest → most expensive (drop the bulk early so
 # the costly checks see few lines). Every stage is data-free — no step reads
-# accepted/favorited history to steer future output (removed 2026-07-14, owner:
+# accepted/favorited history to steer future output (removed 2026-07-14, user:
 # "всё что отвечает за алгоритмическую оценку предпочтений пользователя и из
 # этого коррекции выдачи текста — стоит убрать"). Ranking uses only intrinsic,
 # per-candidate properties (meter for grammar lines; nothing learned for real
@@ -37,7 +37,7 @@ VOWELS = "аеёиоуыэюя"
 # ЗАТРАВКА КЛИШЕ ПОЧИНЕНА И СВЕДЕНА К ЧЕСТНОЙ (Раунд 57).
 #
 # Карта воронки показала: эта ступень отсекала 54 строки из 2 434 632 — то есть
-# была выключена, а владелец об этом не знал. Разбор показал почему:
+# была выключена, а пользователь об этом не знал. Разбор показал почему:
 #   · «сердце боль» и «любовь кровь» искались ПОДСТРОКОЙ ПОДРЯД. В живом тексте
 #     между этими словами всегда что-то стоит («сердце от боли»), и совпадения
 #     не бывало никогда;
@@ -45,13 +45,13 @@ VOWELS = "аеёиоуыэюя"
 #     Одна из четырёх записей работала, и работала неправильно.
 #
 # В комментарии рядом с рождения стояло: «крошечная затравка, настоящий список
-# растит чёрный список владельца». Чёрного списка тогда не существовало — он
+# растит чёрный список пользователя». Чёрного списка тогда не существовало — он
 # появился в этом же раунде и делает ровно это: слово или сочетание, по
 # начальным формам, целыми словами, со счётчиком «сколько строк убирает».
 #
 # Поэтому здесь остаётся ЧЕСТНАЯ затравка: пары слов, стоящие рядом с точностью
 # до одного слова между ними, и никаких чисел. Всё остальное — в чёрный список,
-# где владелец видит цену каждого правила и может его снять.
+# где пользователь видит цену каждого правила и может его снять.
 _CLICHE_SEED = (
     r"сердц\w*\s+(?:\w+\s+)?(?:боль|бол\w+)",
     # Скобки обязательны: без них ветка «любв\w*» срабатывала САМА ПО СЕБЕ, и
@@ -169,7 +169,7 @@ def warm_caches() -> None:
     and caches it for the process lifetime. Force that here at server startup so
     the first /api/generate doesn't pay it.
 
-    2026-08-01: nl_rhyme.json вырос до 946MB / 2 868 100 записей (владелец
+    2026-08-01: nl_rhyme.json вырос до 946MB / 2 868 100 записей (пользователь
     залил ~40 книг в июне-июле; кэш строится по ВСЕМ корпусам стора, включая
     выключенные — см. tools/build_nl_rhyme.py). Эта загрузка теперь ~9-11s
     и ~5.5GB RSS на весь срок жизни процесса — главный вклад в память
@@ -205,7 +205,7 @@ def warm_caches() -> None:
 #
 # Банальность — частота САМОГО РЕДКОГО слова строки: чем реже, тем выше балл.
 # Имя собственное в языке почти не встречается, поэтому любая строка с ним
-# получала лучший балл по редкости и лезла в первый слот строфы. Владелец
+# получала лучший балл по редкости и лезла в первый слот строфы. Пользователь
 # прислал четыре строфы подряд, начинающиеся репликой одного персонажа: «у меня
 # везде почему-то Г-ЖА ДЕ СЕНТ-АНЖ, хотя у меня два миллиона фрагментов; причём
 # это пустая строка, это имя персонажа, это бред».
@@ -287,7 +287,7 @@ _PCTL_SCALE = 0.8
 _ANCHOR_SIM_CEILING = 0.92
 
 # Потолок шкалы «связность соседних строк» (Раунд 44). Замер трёх референсных
-# текстов владельца: 0.35 / 0.18 / 0.17 по косинусу центроидов лемм соседних
+# текстов пользователя: 0.35 / 0.18 / 0.17 по косинусу центроидов лемм соседних
 # строк. То есть даже у самого связного его текста соседство держится втрое
 # слабее единицы — линейная шкала 0..1 означала бы, что верхняя половина
 # ползунка недостижима в принципе. Поэтому ползунок 0..1 переводится в цель
@@ -324,7 +324,7 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
                no_mat=False, only_mat=False, clausula=0):
     """Score raw nakedlunch fragments (real cut-up text, no Word/stress
     structure) for the SAME shortlist grammar-candidates land in: banality,
-    blacklist/cliché, tautology apply, same as generated lines — the owner
+    blacklist/cliché, tautology apply, same as generated lines — the user
     explicitly rejected exempting nakedlunch from filters generated lines get
     (2026-07-13). No preference/history-distance term (removed 2026-07-14,
     see module docstring) and no meter (a regularity score over FABRICATED
@@ -339,13 +339,13 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
     the theme-relevant fragments among 150k+ candidates now surface by score
     instead of by luck of the sample.
 
-    Theme-bias is TWO signals, not one (2026-07-17 — owner: набрал «деньги»,
+    Theme-bias is TWO signals, not one (2026-07-17 — user: набрал «деньги»,
     получил «деньги» буквально в 19 из 20 строк, "я же говорил что не хочу
     так"). The old bias was `len(tags & tokens)`: any fragment containing the
     LITERAL theme word scored 0.6+1 against 0.6+0 for everything else — with
     hundreds of literal matches sitting in a 274k-fragment pool, they filled
     the shortlist almost entirely, drowning out fragments that carry the
-    theme's MEANING without its exact spelling (owner: "может не встречаться
+    theme's MEANING without its exact spelling (user: "может не встречаться
     напрямую даже, но всё равно явно захватывать запрошенную тему"). Now:
     `embeddings.relevance` (core/embeddings.py, navec word vectors) scores how
     much of the theme's meaning the fragment's lemmas carry — smooth, works
@@ -408,7 +408,7 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
     the theme, not just pull less toward it — real progress, but still a
     POSITIVE-OR-NEGATIVE SCALAR MULTIPLIER on a monotonic function of `sem`,
     and sort order is invariant to multiplying every item's key by the same
-    positive constant. Owner, live-testing cohesion 0.50→0.55 on theme
+    positive constant. User, live-testing cohesion 0.50→0.55 on theme
     «секс»: "разница в выдаче огромная и очень резкая". Measured why:
     cohesion=0.55 (pull=+0.1) and cohesion=1.00 (pull=+1.0) picked the SAME
     top-8 fragments (7/8 overlap, identical top-4) — the whole 0.55..1.00
@@ -451,7 +451,7 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
     only the final bias does) — a bonus of this fix: dragging the cohesion
     slider no longer busts the cache or re-scores the ~135k-fragment pool at
     all, only the final `bias`/`score` per already-cached row, which is
-    orders of magnitude cheaper. 2026-07-18: owner reported 5-10s per stanza;
+    orders of magnitude cheaper. 2026-07-18: user reported 5-10s per stanza;
     after fixing the O(n²) rhyme-anchor bug (see _select_with_rhyme) this
     function's own per-fragment loop was the next-largest cost (~0.3-0.6s of
     a ~2s request, cProfile-measured), and it repeats almost EXACTLY the same
@@ -459,7 +459,7 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
     freestyle re-prefetching its next 3 stanzas, all score the same
     ~135k-fragment pool against the same theme over and over. Splitting the
     (cacheable) scoring pass over `_NL_RHYME`'s full pool (~274k entries
-    when this was written; 2 868 100 на 2026-08-01 — владелец залил ~40 книг
+    when this was written; 2 868 100 на 2026-08-01 — пользователь залил ~40 книг
     в июне-июле) from the (per-call, can't-cache) `hidden`/blacklist
     filtering over the CURRENT `fragments` means a cache hit skips
     embeddings.relevance/cliché/banal/tautology entirely and does only
@@ -473,7 +473,7 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
     жёсткий содержательный фильтр по началу токена (см. has_mat). В STRICT
     он живёт внутри кэшируемой таблицы (рядом с клише), в «классике» —
     здесь, рядом с blacklist: в отличие от банальности/тавтологии это не
-    мнение о качестве, а явный запрос владельца, поэтому действует в ОБОИХ
+    мнение о качестве, а явный запрос пользователя, поэтому действует в ОБОИХ
     режимах."""
     tags = set(tags) if tags else set()
     forced = set(forced) if forced else set()
@@ -486,7 +486,7 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
     # пустым циклом ниже.
     if not fragments:
         return out, forced_candidates
-    # Чёрный список пуст у владельца (0 записей) — а вызов шёл на каждый из
+    # Чёрный список пуст у пользователя (0 записей) — а вызов шёл на каждый из
     # ~1.7М фрагментов: 1.2с на запрос под профайлером. Поведение то же:
     # any() по пустому списку — всегда False.
     if light:
@@ -495,7 +495,7 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
                 continue
             # «Без мата» действует и в «классике» (в отличие от банальности/
             # клише/тавтологии): это не мнение extendo о качестве, а явный
-            # запрос владельца на СОДЕРЖАНИЕ — та же категория жёстких
+            # запрос пользователя на СОДЕРЖАНИЕ — та же категория жёстких
             # инвариантов, что blacklist и never-repeat.
             if no_mat and has_mat(text):
                 continue
@@ -521,7 +521,7 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
             # выше по циклу и читала `key` ДО присваивания: на первом фрагменте
             # UnboundLocalError, на остальных — отсев по клаузуле ПРЕДЫДУЩЕГО
             # фрагмента. Баг был скрыт тем, что этот путь (классика без
-            # колоночного индекса) на машине владельца не исполняется — индекс
+            # колоночного индекса) на машине пользователя не исполняется — индекс
             # испечён, и режим уходит в nlindex.select_light. Найдено картой
             # Раунда 50: как только у клаузулы появляется своя ручка, путь
             # становится достижимым.
@@ -579,7 +579,7 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
 
 
 # Cache for _score_strict_table — see that function and _nl_scored's own
-# docstring for why (owner: 5-10s per stanza; repeated calls within one
+# docstring for why (user: 5-10s per stanza; repeated calls within one
 # theme/knob session, which is the overwhelmingly common case — a buffer
 # refill or freestyle's own prefetch queue — otherwise redo the SAME
 # full-pool scoring pass from scratch every time). Bounded to a handful of
@@ -637,7 +637,7 @@ def _score_strict_table(tags: set, theme_sims, forced: set, ворота,
     `fragments`/pool or `hidden`/blacklist state: a fragment's relevance
     depends only on its own precomputed properties and the theme — not on
     which OTHER fragments happen to be in the currently active pool, or
-    which lines the owner has since seen — so the exact same table is valid
+    which lines the user has since seen — so the exact same table is valid
     for every call in a theme/knob session even as the active pool and
     hidden set keep changing underneath it. `_nl_scored` applies
     `hidden`/blacklist filtering itself, fresh, on every call — those
@@ -647,7 +647,7 @@ def _score_strict_table(tags: set, theme_sims, forced: set, ворота,
     `cohesion` is NOT in this table or its cache key (2026-07-18, see
     _nl_scored's own docstring for the full percentile-target story) — a
     row's `_pctl` (percentile rank of its `sem` within THIS pool) is a
-    property of the theme alone, not of where the owner's cohesion slider
+    property of the theme alone, not of where the user's cohesion slider
     happens to sit; `_nl_scored` turns `_pctl` into a `score` per-call using
     whatever `cohesion` it was actually called with. This is why dragging
     the slider no longer busts this cache at all.
@@ -657,7 +657,7 @@ def _score_strict_table(tags: set, theme_sims, forced: set, ворота,
     ~24s; с темой ~28-33s (правка почти не помогает — доминируют
     relevance() по 2.6M строк и постройка 2.6M row-dict'ов, это уже не
     точечная территория). Всё плавает до ~2× под своп-давлением: один
-    _NL_RHYME держит ~5.5GB RSS — 43s из замера владельца это ~24s счёта +
+    _NL_RHYME держит ~5.5GB RSS — 43s из замера пользователя это ~24s счёта +
     своп. Промах платится на каждую НОВУЮ комбинацию (тема, банальность,
     no_mat, forced) за пределами 2 кэш-слотов — осознанная цена решения
     Раунда 20 («всегда полная база»); отвергнутые альтернативы (урезание
@@ -771,7 +771,7 @@ def _diversify(pool: list, k: int, div: float) -> list:
     fragments, which can be near-duplicate overlapping cuts of one sentence.
 
     A shared lemma with a recent pick is a HARD exclusion, not just a soft
-    penalty in the score/diversity objective (2026-07-18 — owner screenshot:
+    penalty in the score/diversity objective (2026-07-18 — user screenshot:
     «два чека» / «получил два чека» / «вот два чека» — the SAME salient word
     landed in 2 of 4 lines of one stanza, at the cohesion knob's own
     "diссонанс" extreme where a user reading the label would expect MORE
@@ -779,7 +779,7 @@ def _diversify(pool: list, k: int, div: float) -> list:
     0), and objective = `(1-div)*score + div*(1-sim)` still lets a high-score
     repeat outscore a lower-score original when the pool is thematically
     narrow — the sim PENALTY was too weak to ever fully rule anything out.
-    Owner: «такого никогда быть не должно вообще и близко» — not "less
+    User: «такого никогда быть не должно вообще и близко» — not "less
     often", never. So repetition is now a hard floor the cohesion knob can't
     trade away; `div` only controls WHICH of the non-repeating survivors wins
     on score vs. novelty, exactly what "как крутилка выглядит" already
@@ -819,10 +819,10 @@ def _ensure_forced(shortlist, forced, forced_candidates, rhyme, precision, hidde
     Returns {word: "ok"|"missing"|"unrhymed"} for `run()` to turn into an
     honest notice:
       "shown"    — кандидаты есть, но ВСЕ уже в истории. Железное правило
-                   владельца: показанное не возвращается ни при каких
+                   пользователя: показанное не возвращается ни при каких
                    обстоятельствах, значит честный отказ — единственный ответ.
       "missing"  — no STRICT-tier-quality fragment anywhere in the active
-                   pool contains the word literally (владелец: "если в базе
+                   pool contains the word literally (пользователь: "если в базе
                    есть это слово" — не в базе, или только в строках, не
                    прошедших банальность/клише/тавтологию; один честный ответ
                    для обоих случаев, а не два разных сообщения ради
@@ -857,11 +857,11 @@ def _ensure_forced(shortlist, forced, forced_candidates, rhyme, precision, hidde
         # банальности, forced). История в ключ не входит и входить не может:
         # она меняется после каждого показа, кэш бы не жил ни одного вызова.
         # Из-за этого гарантия `!слово` подставляла ОДНУ И ТУ ЖЕ строку в
-        # каждую строфу подряд — владелец: «буквально идентичная строка
+        # каждую строфу подряд — пользователь: «буквально идентичная строка
         # достаётся; а если она есть в истории уже, как она в генерацию
         # попадает?».
         #
-        # ЖЕЛЕЗНОЕ ПРАВИЛО (Раунд 57, владелец дословно): «что в истории — оно не
+        # ЖЕЛЕЗНОЕ ПРАВИЛО (Раунд 57, пользователь дословно): «что в истории — оно не
         # повторяется вообще и не генерится, пока я историю не почищу. Это важно.
         # В любых обстоятельствах так. Если материала для генерации на тему не
         # будет — честно отказывай: значит надо залить новые источники или
@@ -871,13 +871,13 @@ def _ensure_forced(shortlist, forced, forced_candidates, rhyme, precision, hidde
         # если у обязательного слова не осталось непоказанных кандидатов — это
         # честный «missing», а не тихий повтор. Первая версия этой правки
         # оставляла показанных «на крайний случай», рассуждая, что обещание
-        # `!слово` сильнее свежести. Владелец решил иначе, и он прав: повтор,
+        # `!слово` сильнее свежести. Пользователь решил иначе, и он прав: повтор,
         # который он не заказывал, хуже честного отказа.
         было_до_истории = bool(candidates)
         if hidden:
             candidates = [c for c in candidates if c["text"] not in hidden]
         if not candidates:
-            # ДВА РАЗНЫХ ОТКАЗА (Раунд 57). Для владельца это разные ситуации:
+            # ДВА РАЗНЫХ ОТКАЗА (Раунд 57). Для пользователя это разные ситуации:
             # «нет в базе» — заливать источники, «всё показано» — чистить
             # историю. Раньше оба назывались «missing», и подсказка врала в
             # половине случаев.
@@ -980,7 +980,7 @@ def _run_classic(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, claus
                  mat_share, forced, cap) -> dict:
     """«Классика» — ОТДЕЛЬНЫЙ путь, а не квота внутри общего (Раунд 50).
 
-    Владелец 2026-08-03: «я бы сделал переключатель, бинарный: алгоритм —
+    Пользователь 2026-08-03: «я бы сделал переключатель, бинарный: алгоритм —
     классика. Если выбрана классика, то всех вот этих алгоритмических оценок
     их не существует, классический нейкедланч, классический метод нарезок
     просто вообще без ничего».
@@ -1049,7 +1049,7 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
         tags: list[str] | None = None, forced: set[str] | None = None,
         stanza: list[dict] | None = None, стоп=None) -> dict:
     """The cascade. Returns {shortlist, funnel, forced_notice} — funnel is the
-    per-stage survivor count so the owner can SEE the filter working (and
+    per-stage survivor count so the user can SEE the filter working (and
     where yield is lost); forced_notice reports on `!слово` guarantees (see
     _ensure_forced). `rhyme` enforces a rhyme scheme (абаб, абав, etc.) in
     selection — see _select_with_rhyme. `tags` is the current theme's
@@ -1070,7 +1070,7 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
     `syllable_spec` docstring for exactly how soft it is."""
     n0 = len(lines)
     meter_gate = 0.2 + 0.6 * knobs["meter"]         # slider 0..1 → threshold 0.2..0.8
-    # РУЧКА «БАНАЛЬНОСТЬ» — ДВУСТОРОННЯЯ (Раунд 58, владелец: «на минимуме всё
+    # РУЧКА «БАНАЛЬНОСТЬ» — ДВУСТОРОННЯЯ (Раунд 58, пользователь: «на минимуме всё
     # максимально стремится к банальности, на максимуме максимально
     # неклишированно и не банально, посередине как будто не работает»).
     # Перевод положения в пороги живёт ОДНИМ куском в nlindex — им пользуются и
@@ -1084,7 +1084,7 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
     # Антифильтр — второе ворото той же ручки (см. clean.knobs: only_mat)
     only_mat = bool(knobs.get("only_mat", False))
     # Клаузула и связность соседних строк — Раунд 44, откалибровано по
-    # референсным текстам владельца (см. scan.clausula и _FLOW_MAX).
+    # референсным текстам пользователя (см. scan.clausula и _FLOW_MAX).
     clausula = int(knobs.get("clausula", 0) or 0)
     flow = float(knobs.get("flow", -1.0))
     # «Повтор» (Раунд 52, хук): снимает барьер на повтор леммы внутри строфы.
@@ -1128,7 +1128,7 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
     # `knobs["cohesion"]` идёт в _nl_scored НАПРЯМУЮ, без знакового
     # преобразования — сам перцентиль-таргет и есть искомое поведение.
     cohesion = knobs["cohesion"]
-    # Якорная строка (2026-07-18, владелец: «даже при диссонансе должна быть
+    # Якорная строка (2026-07-18, пользователь: «даже при диссонансе должна быть
     # строка которая точно в тему... а консонирующие... не должны быть
     # идентичными основной но быть рядом» — см. _select_with_rhyme). Только
     # когда есть и тема, и nl-контент, из которого можно выбрать якорь —
@@ -1279,7 +1279,7 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
     # -- stage 3c: «Классика» здесь БОЛЬШЕ НЕ СТРОИТСЯ (Раунд 50) ------------
     # До этого раунда рядом со строгим ярусом собирался второй, светлый пул, и
     # дальше две ветки сборки делили выдачу квотами classic_quota/algo_quota,
-    # смешивая ярусы в ОДНОЙ строфе. Переключатель стал бинарным (владелец:
+    # смешивая ярусы в ОДНОЙ строфе. Переключатель стал бинарным (пользователь:
     # «либо одно, либо другое»), и весь этот слой оказался недостижим: до сюда
     # доходит только алгоритм, классика ушла в _run_classic развилкой выше.
     # Вместе со слоем ушли и его подпорки в _select_with_rhyme — раскладка
@@ -1302,7 +1302,7 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
         # padded with generated ones. Supply-limited themes shrink the
         # shortlist instead of being diluted (found 2026-07-14: the old
         # min(len(nl_survivors), ...) quota silently backfilled the shortfall
-        # with grammar lines — the owner's "5 nakedlunch lines scattered among
+        # with grammar lines — the user's "5 nakedlunch lines scattered among
         # generated ones at max real_text" report).
         size = min(knobs["shortlist"], len(nl_survivors))
         if rhyme != "none":
@@ -1434,7 +1434,7 @@ def _rhymes(r1: dict, r2: dict, precision: float = 0.0) -> bool:
     final WORD ("пепел"/"пепел") always matches its own rhyme key — that's
     not a rhyme, it's a repeat, so it's excluded explicitly.
 
-    `precision` (owner's "Точность рифм" knob, 0=точные..1=мягкие) trades
+    `precision` (user's "Точность рифм" knob, 0=точные..1=мягкие) trades
     strictness for supply: at 0 the keys must match EXACTLY (the only
     behavior before 2026-07-14 — kept as the default so existing tuning
     doesn't shift under anyone). Above 0, only a shared LEADING run of the
@@ -1442,7 +1442,7 @@ def _rhymes(r1: dict, r2: dict, precision: float = 0.0) -> bool:
     shorter required run keeps the vowel (still recognizably "the same
     sound") but tolerates the tail after it differing (asonance/consonance
     territory: 'сУде'/'красотЕ' share only the stressed 'е' — see the
-    owner's own screenshot 2026-07-14). At precision=1, a 1-character match
+    user's own screenshot 2026-07-14). At precision=1, a 1-character match
     (the stressed vowel alone) is enough."""
     k1, k2 = r1.get("rhyme"), r2.get("rhyme")
     if not k1 or not k2:
@@ -1476,7 +1476,7 @@ def _nl_slot_plan(size: int, nl_quota: int) -> set:
     POSITIONS up front so rhyme-aware selection can target them directly.
     Splicing nl picks in AFTER stanza selection (the pre-2026-07-14 approach)
     shifts every later position and silently breaks the visible rhyme
-    pattern — found via the owner's own screenshots, not self-testing."""
+    pattern — found via the user's own screenshots, not self-testing."""
     if nl_quota <= 0 or size <= 0:
         return set()
     nl_quota = min(nl_quota, size)
@@ -1493,7 +1493,7 @@ def _nl_slot_plan(size: int, nl_quota: int) -> set:
 def _mat_slot_plan(share: float, L: int, groups=None) -> dict:
     """Какие позиции строфы обязаны быть с матом, какие — без.
 
-    Владелец 2026-08-03: «максимальная крутилка берёт только мат и работает как
+    Пользователь 2026-08-03: «максимальная крутилка берёт только мат и работает как
     антифильтр… если она на середине — половина того, половина того. Если на
     нуле — полная цензура».
 
@@ -1538,7 +1538,7 @@ def _mat_slot_plan(share: float, L: int, groups=None) -> dict:
 
 
 class _Остановлено(Exception):
-    """Прерывание набора по просьбе владельца. Своё, а не из pipeline: домен
+    """Прерывание набора по просьбе пользователя. Своё, а не из pipeline: домен
     фильтров ничего не знает о прогоне серии, и импорт ради одного класса
     сделал бы зависимость наоборот. pipeline ловит его и превращает в свой."""
 
@@ -1581,7 +1581,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     `nl_positions` reserves specific slots for a nakedlunch pick (the same
     share the "real_text" knob promises elsewhere), tried first but relaxed
     before the rhyme constraint itself is relaxed — an unfilled quota slot is
-    a smaller defect than a broken rhyme. `precision` is the owner's "Точность
+    a smaller defect than a broken rhyme. `precision` is the user's "Точность
     рифм" knob — see _rhymes for what it does to matching.
 
     «КЛАССИКИ» ЗДЕСЬ БОЛЬШЕ НЕТ (Раунд 50). Пока «Отбор» был долей 0..1, сюда
@@ -1597,7 +1597,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     стоит дёшево и переживает будущие правки состава кандидатов.
 
     Also refuses to repeat a LEMMA across the same stanza (2026-07-18 —
-    owner's screenshot: "чек" landed in 2 of 4 lines of one абаб stanza; a
+    user's screenshot: "чек" landed in 2 of 4 lines of one абаб stanza; a
     live check right after found at least one lemma clash in every one of 10
     consecutive stanzas, because this function's selection loop only ever
     knew about rhyme and score, never content overlap — unlike _diversify,
@@ -1613,7 +1613,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     optional list of (min_syl, max_syl) tuples, one per position in
     `scheme` (same length, `syllable_spec[local_pos]`). When given, each
     position PREFERS a candidate whose `syllables` falls in range, but this
-    is the softest constraint in the whole cascade — owner's explicit call
+    is the softest constraint in the whole cascade — user's explicit call
     when asked "if no candidate of the right LENGTH exists for a position,
     what gives first": "рифма важнее" (rhyme matters more). A length
     mismatch never breaks rhyme, slot kind, or the no-repeat rule; it only
@@ -1622,7 +1622,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     no length opinion at all — behavior is byte-for-byte what it was before
     this parameter existed.
 
-    `theme_anchor` (2026-07-18 — owner: «даже при диссонансе должна быть
+    `theme_anchor` (2026-07-18 — user: «даже при диссонансе должна быть
     строка которая точно в тему по запросу... а консонирующие ни в коем
     случае не должны быть идентичными основной но быть рядом... ни одна
     строка не должна быть похожа на константную запрашиваемую»). Two
@@ -1643,7 +1643,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
          ADDITION to, the lemma-overlap no-repeat rule above (that rule
          catches exact word reuse; a near-paraphrase can share zero lemmas
          and still be "the same line again" in meaning, which is what the
-         owner's «не должны быть идентичными» is actually about). This
+         user's «не должны быть идентичными» is actually about). This
          applies to EVERY other position regardless of whether cohesion is
          pushing it toward or away from the theme — "near/far from the
          theme" and "a copy of THIS specific line" are orthogonal, and only
@@ -1701,7 +1701,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     # `bucket_members`/`bucket_lemma_index` (2026-07-18) — the anchor branch
     # below used to answer "does this bucket have an unused, lemma-distinct
     # partner for `cand`" with a scan over ALL candidates, run for every
-    # candidate scan_for considers at an anchor position. Owner reported the
+    # candidate scan_for considers at an anchor position. User reported the
     # editor's normal buffer fetch (100 lines / 25 "абаб" stanzas → ~800
     # candidates once NL_SELECT_CAP applies) taking 5-10s; profiling
     # (cProfile) pinned >80% of that on this exact scan — a 45-MILLION-call
@@ -1739,7 +1739,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     # ПОРЯДОК ПО РАНГУ — то, что превращает полный перебор в ранний выход
     # (Раунд 56).
     #
-    # ЗАЧЕМ. Замер на цепочке владельца: один текст — 777 секунд, и 688 из них
+    # ЗАЧЕМ. Замер на цепочке пользователя: один текст — 777 секунд, и 688 из них
     # уходит на ОДНО звено, Одическую строфу в десять строк. Разбор: пул после
     # слогового резерва — 41-74 тысячи кандидатов (по 4 строки на каждый из
     # 18 489 рифмо-ключей в вилке), а `scan_for` на якорной позиции честно
@@ -1748,7 +1748,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     # проходов по семидесяти тысячам за один пул.
     #
     # А максимум искать перебором незачем. Когда связность выключена
-    # (`flow_target is None` — у владельца она выключена, но условие проверяется
+    # (`flow_target is None` — у пользователя она выключена, но условие проверяется
     # честно, а не предполагается), ранг кандидата — это его собственный
     # `score` (или `_pctl` у тематического якоря), и от позиции он не зависит
     # вовсе. Значит достаточно идти по заранее отсортированному порядку и взять
@@ -1771,7 +1771,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     # стабилен, балл округлён до четырёх знаков и совпадает у сотен строк —
     # значит при одних и тех же настройках выдача шла по одному и тому же
     # списку сверху вниз. История вычитает только ТОЧНЫЕ повторы, поэтому
-    # следующий прогон брал соседей: та же книга, та же сцена. Владелец прислал
+    # следующий прогон брал соседей: та же книга, та же сцена. Пользователь прислал
     # снимок истории — двенадцать реплик одной пьесы подряд — и сказал: «это не
     # строгая выдача, он выдаёт примерно одно и то же». И добавил, что темы при
     # этом не было вовсе: дело не в привязке к теме, а в самом порядке.
@@ -1862,15 +1862,15 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
 
     for pos in range(size):
         # ОСТАНОВКА СЕРИИ СПРАШИВАЕТСЯ ЗДЕСЬ (Раунд 55). Замер: один текст на
-        # цепочке владельца — 777 секунд, и 776 из них уходило на набор пулов,
+        # цепочке пользователя — 777 секунд, и 776 из них уходило на набор пулов,
         # то есть на этот цикл. Проверки в pipeline (перед пулом и на уровне
-        # перебора) давали granularity в сотни секунд, и владелец справедливо
+        # перебора) давали granularity в сотни секунд, и пользователь справедливо
         # сказал: «если зависло, то остановится только после генерации
         # текущего, а значит не остановится». Здесь — доли секунды.
         #
         # Раунд 56 срезал текст до 28 секунд (см. `порядок_score` выше), но
         # проверка остаётся здесь, а не поднимается обратно: цена пула зависит
-        # от формы строфы и ширины пула, то есть от того, что владелец волен
+        # от формы строфы и ширины пула, то есть от того, что пользователь волен
         # выкрутить в любой момент, — а обещание «стоп работает» от его
         # настроек зависеть не должно.
         if стоп is not None and стоп():
@@ -1882,7 +1882,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
         is_theme_anchor = theme_anchor and local_pos == 0
         want_kind = "nl" if pos in nl_positions else "grammar"
         # Не повторять лемму с уже выбранными строками ЭТОЙ ЖЕ строфы — hard
-        # floor (2026-07-18, владелец, скриншот: «Два гонорара» / «получил
+        # floor (2026-07-18, пользователь, скриншот: «Два гонорара» / «получил
         # два чека» / «Вот два чека» — «чек» дважды в одной строфе абаб, и
         # это НЕ единичный случай: живая проверка после первой попытки фикса
         # показала пересечение лемм в КАЖДОЙ из 10 проверенных строф). Эта
@@ -1892,9 +1892,9 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
         # пользуется вообще, свой независимый цикл выбора. Строфа — не
         # «последние 3», а ВСЕ уже поставленные строки текущего блока
         # (block_start..pos): при показе «одна строфа = один взгляд»
-        # (PLAN.md 0.3) именно это и есть окно, которое видит владелец разом.
+        # (PLAN.md 0.3) именно это и есть окно, которое видит пользователь разом.
         # `repeat_ok` (Раунд 52, крутилка «Повтор») снимает барьер целиком:
-        # пустой `recent` означает «повторять нечего запрещать». Владелец:
+        # пустой `recent` означает «повторять нечего запрещать». Пользователь:
         # «он не должен повторять только при соответствующих настройках, но
         # если я хочу повторять, пусть повторяет» — хуковый припев строится
         # именно на возвращающемся слове. Снимаем ЗДЕСЬ, а не флагом внутри
@@ -2006,7 +2006,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
                     # repeat checks below, applies to grammar lines too.
                     valid = False
                 # "классика" positions are exempt from the rhyme scheme
-                # entirely (owner's explicit choice 2026-07-14) — never
+                # entirely (user's explicit choice 2026-07-14) — never
                 # checked as a group match or an anchor needing a partner.
                 if valid:
                     if target_group and not is_rhyme_anchor:
@@ -2049,7 +2049,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
                 # строки: чем реже, тем выше балл. Имя собственное — «СЕНТ-АНЖ»,
                 # «ДОЛЬМАНСЕ» — в языке почти не встречается, значит любая
                 # строка с ним получает лучший балл по редкости и забирает
-                # первый слот строфы. Владелец: «у меня везде почему-то Г-ЖА ДЕ
+                # первый слот строфы. Пользователь: «у меня везде почему-то Г-ЖА ДЕ
                 # СЕНТ-АНЖ, хотя у меня два миллиона фрагментов; причём это
                 # пустая строка, это имя персонажа, это бред».
                 #
@@ -2100,7 +2100,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
             length, no-repeat, and anchor-conflict apply. Reused for both nl
             and grammar rows — this is what lets the SAME splice repair also
             cover the generator's own too-short-target case, not just
-            nakedlunch's (2026-07-19, owner's own connection between the two)."""
+            nakedlunch's (2026-07-19, user's own connection between the two)."""
             # Тот же ранний выход, что в scan_for, и по той же причине: ранг
             # здесь — чистый `score`, связность в него не входит вовсе, значит
             # первый подходящий в порядке (-score, номер) и есть максимум.
@@ -2189,7 +2189,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
             """Try to make `tail_idx` — already the position's best
             rhyme/slot/repeat-VALID pick, chosen ignoring length — FIT
             `syl_range` instead of accepting it (or a worse fallback)
-            out-of-range as-is. The owner's own proposal, 2026-07-19, after
+            out-of-range as-is. The user's own proposal, 2026-07-19, after
             the Онегинская строфа bug report (859 correct-rhyme
             correct-length "ом" survivors existed, hidden by the score cap
             — see `_syllable_reserve` — but the SPECIFIC candidate
@@ -2245,7 +2245,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
                 synthetic, synthetic_sources = _repair_length(best_idx)
                 if synthetic is not None:
                     best_idx = -1   # the repaired row replaces it, not the raw pick
-        # Length is the SOFTEST constraint (owner: «рифма важнее» — see
+        # Length is the SOFTEST constraint (user: «рифма важнее» — see
         # syllable_spec's own docstring) — tried first, given up first. A
         # scheme with no syllable_spec at all (every pre-constructor caller)
         # makes `require_length=True` and `=False` behave IDENTICALLY (no
@@ -2274,7 +2274,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
         if best_idx < 0 and synthetic is None:
             best_idx = scan_for(False)   # slot quota is the softer constraint
         if best_idx < 0 and synthetic is None:
-            # Рифма важнее повтора (владелец 2026-07-14: сломанная рифма —
+            # Рифма важнее повтора (пользователь 2026-07-14: сломанная рифма —
             # больший дефект, чем незаполненная квота слота), НО повтор всё
             # ещё хуже, чем незаполненный слот kind — пробуем разрешить
             # повтор, ПРЕЖДЕ чем сдаваться и ломать саму рифмо-схему ниже.

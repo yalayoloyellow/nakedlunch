@@ -1,9 +1,9 @@
-# extendo — the owner's OWN saved stanza constructions (2026-07-18, PLAN.md
+# extendo — the user's OWN saved stanza constructions (2026-07-18, PLAN.md
 # 0.7 — the stanza constructor: "профили и уже есть предустановленные
 # профили ... надо всё сделать максимально удобно и сохраняемо"). Builtin
 # forms (классика/восток/модерн и постмодерн/фольклор — 24 verse-theoretic
 # forms) live in core/data/stanza_forms.json, shipped with the app and
-# read-only from here. Custom ones are the owner's own saved constructions,
+# read-only from here. Custom ones are the user's own saved constructions,
 # in data/stanza_profiles.json next to corpus.json/settings.json/stats.jsonl
 # — same "somewhere concrete" file convention as core/settings.py.
 #
@@ -41,7 +41,7 @@ def builtin() -> list[dict]:
 
 
 def custom() -> list[dict]:
-    """The owner's own saved profiles, or [] if none/unreadable — never
+    """The user's own saved profiles, or [] if none/unreadable — never
     raises (a corrupt file here just means an empty custom list, not a
     broken app; unlike corpus.json, losing this is annoying, not data loss
     of anything irreplaceable)."""
@@ -59,7 +59,7 @@ def save(name: str, lines: list[dict]) -> list[dict]:
 
     Раунд 50: аргумент `params` убран. Форма строфы — это только КАРКАС;
     положения крутилок уехали на свою полку (core/knob_profiles.py). Раньше
-    они лежали здесь, и выбор формы молча двигал ползунки — владелец разделил
+    они лежали здесь, и выбор формы молча двигал ползунки — пользователь разделил
     эти две вещи: «можно делать строфы, и можно сделать профиль настроек,
     и то, и то можно ставить отдельно»."""
     profiles = [p for p in custom() if p.get("name") != name]

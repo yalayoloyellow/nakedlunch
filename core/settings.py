@@ -1,10 +1,10 @@
-# extendo — the owner's own knob positions, persisted (2026-07-18, owner: "по
+# extendo — the user's own knob positions, persisted (2026-07-18, user: "по
 # настройкам которые выставлены на крутилках предлагаю запоминать значение на
 # котором стоит и даже после полного закрытия программы открывать с ними же —
 # чтоб всё хранилось где-то конкретно"). One concrete file, data/settings.json,
 # next to corpus.json/stats.jsonl — not browser localStorage: extendo runs in a
 # pywebview window whose storage is opaque and per-machine-profile, so "somewhere
-# concrete" means a file the owner can actually open, back up, and delete.
+# concrete" means a file the user can actually open, back up, and delete.
 #
 # NOT analytics: stats.py already records what the knobs WERE on every run, for
 # analysis. That log is append-only history; this is one live value per knob —
@@ -36,7 +36,7 @@ SETTINGS_PATH = DATA_DIR / "settings.json"
 #
 # `stanza`/`stanza_profile` replaced the plain `rhyme`/`custom_raw`/
 # `custom_mode` string-scheme keys (2026-07-18, PLAN.md 0.7 — the stanza
-# constructor). An old settings.json on the owner's own disk with the
+# constructor). An old settings.json on the user's own disk with the
 # retired keys just has them silently dropped by `read()`'s _ALLOWED
 # filter — a graceful no-op transition, not a migration that needs writing.
 # `nl_chain_profiles`/`nl_smart_folders` (2026-07-31, фаза 0 nakedlunch v2) —
@@ -79,7 +79,7 @@ def _nl_params(raw) -> dict:
     нет. Разница в том, ЧТО именно чинится: значения и так клампятся на входе
     в домен, а вот ИМЕНА на диске не чинил никто.
 
-    На машине владельца это видно: в `nl_params` лежит «Разнообразие» —
+    На машине пользователя это видно: в `nl_params` лежит «Разнообразие» —
     крутилка, вырезанная в Раунде 48, — и не лежат пять живых («Мат»,
     «Клаузула», «Диссонанс», «Связность», «Повтор»). Мёртвый ключ ездил в
     КАЖДОМ запросе генерации, где домен молча его выбрасывал.
@@ -112,7 +112,7 @@ def _сырой_файл() -> str | None:
 
 def read() -> dict:
     """Stored settings, or {} if never saved / unreadable. Never raises: a
-    corrupt settings file must not stop the app from opening — the owner
+    corrupt settings file must not stop the app from opening — the user
     loses his slider positions, which is annoying, not fatal (unlike
     corpus.py, which DOES hard-fail on a corrupt corpus.json: that's his
     actual data, and silently starting empty there could lose favorites)."""
@@ -150,7 +150,7 @@ def write(payload: dict) -> dict:
                          f"внеси их в _ALLOWED или храни в своём файле")
     # СЛИЯНИЕ С ПУСТОТОЙ — ЭТО НЕ СЛИЯНИЕ, А СТИРАНИЕ (Раунд 57).
     #
-    # 2026-08-05 владелец потерял ВСЕ профили сцены фристайла: в файле остался
+    # 2026-08-05 пользователь потерял ВСЕ профили сцены фристайла: в файле остался
     # один ключ `nl_view`, записанный последним. Механизм ровно здесь. `read()`
     # намеренно молчалив — на нечитаемом файле он возвращает `{}`, чтобы
     # программа всё-таки открылась. Но `write()` сливал payload именно в этот

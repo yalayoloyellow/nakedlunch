@@ -87,7 +87,7 @@ def _name_tag(word: str) -> str | None:
 
 def strip_full_names(text: str) -> str:
     """Remove 'Имя [Отчество] Фамилия' (and the reverse 'Фамилия Имя')
-    spans from raw book text — owner's own explicit ask (2026-07-19): a real
+    spans from raw book text — user's own explicit ask (2026-07-19): a real
     person's full name showing up whole in cut-up output isn't something he
     wants, however rarely a source text actually contains one. Deliberately
     narrow — a LONE first name or LONE surname is common (any character's
@@ -124,7 +124,7 @@ def strip_full_names(text: str) -> str:
     return re.sub(r"\s+", " ", " ".join(kept)).strip()
 
 
-# --- индексно-цифровой мусор (2026-08-01, owner's own ask) ------------------
+# --- индексно-цифровой мусор (2026-08-01, user's own ask) ------------------
 # Живой пример, утёкший в выдачу extendo, дословно из пула:
 #   «141, 573 Хазан В. II 468, 670 торн и контратака»
 # — скользящее окно по именному указателю книги (собрание Мандельштама,
@@ -298,7 +298,7 @@ def _subsplit(sent: str) -> List[str]:
     # «нибудь», «из-за» → «из» + «за», «по-русски» → «по» + «русски». Отсюда
     # в живой выдаче брались фрагменты вроде «нибудь гнусность скрывается» —
     # строка, безупречная по слогам и клаузуле и бессмысленная на слух.
-    # Найдено аудитом Раунда 51 по этой самой строке из документа владельца.
+    # Найдено аудитом Раунда 51 по этой самой строке из документа пользователя.
     subs = re.split(r"[,;]\s*|\s+[—–-]+\s*", sent)
     out = []
     for s in subs:
