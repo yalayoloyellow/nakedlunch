@@ -102,7 +102,9 @@ import scan  # noqa: E402  (VOWELS — та же таблица гласных, 
 # scan.rhyme_key»; см. его докстринг про то, почему без process_all().
 import build_nl_rhyme  # noqa: E402
 
-OUT = ROOT / "core" / "data" / "rhyme_index.json"
+import пути  # noqa: E402  (испечённое — к пользователю, см. core/пути.py)
+
+OUT = пути.артефакт("rhyme_index.json")
 # Глубина чтения списка частот: кириллических словоформ ≥2 букв в нём
 # 668 276, дальше wordfreq не отдаёт ничего.
 SCAN_DEPTH = 1_000_000

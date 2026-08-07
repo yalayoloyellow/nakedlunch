@@ -63,8 +63,12 @@ import filters  # noqa: E402  (_text_tautology — single source of truth for th
 from corpus import lemmatize, lemmatize_pairs  # noqa: E402
 from _accent import stress_index  # noqa: E402  (shared with build_forms.py)
 
-OUT = ROOT / "core" / "data" / "nl_rhyme.json"
-STATUS = ROOT / "core" / "data" / "nl_rhyme.status.json"
+import пути  # noqa: E402  (где что лежит, см. core/пути.py)
+
+# Испечённое — к пользователю: в собранном приложении папка рядом с кодом
+# доступна только на чтение (Раунд 60).
+OUT = пути.артефакт("nl_rhyme.json")
+STATUS = пути.артефакт("nl_rhyme.status.json")
 _PUNCT = ".,!?:;\"'()»«—-…"
 
 # Checkpoint cadence (2026-08-01, DECISIONS.md Раунд 29 — Раунд 28 finding
