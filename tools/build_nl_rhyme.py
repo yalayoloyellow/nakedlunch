@@ -476,6 +476,14 @@ def main() -> int:
             except Exception as e:
                 _write_status(0, "error", "reban", error=str(e))
                 raise
+            except BaseException:
+                # ПРЕРВАЛИ — ЭТО НЕ «ИДЁТ» (Раунд 58). Ctrl-C и любой сигнал
+                # проходят мимо `except Exception`, статус оставался «running»,
+                # и шапка навсегда показывала владельцу красное «встало» на
+                # работе, которой давно нет. Убрать это из интерфейса было
+                # нельзя ничем — только правкой файла руками.
+                _write_status(0, "error", "reban", error="пересчёт прерван")
+                raise
             return 0
         if not OUT.exists():
             sys.exit(f"нечего пересчитывать: {OUT} нет")
