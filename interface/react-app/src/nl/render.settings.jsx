@@ -22,7 +22,10 @@ import { СРОКИ_ИСТОРИИ, СРОКИ_ПУЛА, ПЕРИОДЫ_СБРО
 
 // Порядок по порядок (Раунд 40): настройки документа первыми, настройки вида вторыми.. История уехала в саму историю, данные
 // и статистика — в попап статистики: выгружают они статистику, там им и место.
-export const CFG_TABS = ['документ', 'вид', 'корпус'];
+// ВКЛАДКА «ЛОГ» (Раунд 59). Программу дают людям, которые пишут тексты, а не
+// читают стеки: они не пойдут в папку за файлом и не найдут консоль. Значит
+// журнал живёт там же, где всё остальное, и отдаётся одной кнопкой.
+export const CFG_TABS = ['документ', 'вид', 'корпус', 'лог'];
 
 // строка настройки: подпись слева, ползунок или переключалка справа
 export function cfgItemRow(it, key, labelStyle, showStyle) {
@@ -254,6 +257,50 @@ export function renderSettings(c, vals) {
         );
       })()}
 
+      {tab === 'лог' && renderЛог(c)}
+
+    </Fragment>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// ЖУРНАЛ СЕССИИ: ОДИН ТЕКСТ И ОДНА КНОПКА.
+//
+// Отчёт собирает сервер (core/журнал.py): среда, что лежит на диске, состояние
+// прогрева и сами записи. Здесь только показ и копирование — считать что-либо
+// на фронте значило бы завести второй источник правды о состоянии.
+//
+// Предупреждение о содержимом стоит НАД кнопкой намеренно: в журнале видны
+// строки текстов, и человек должен понимать, что отправляет, до того как
+// отправит, а не после.
+export function renderЛог(c) {
+  var st = c.state;
+  var текст = st.логТекст || '';
+  var кнопка = 'appearance: none; border: 1px solid var(--border-subtle); border-radius: 999px; '
+    + 'padding: 7px 14px; font-family: inherit; font-size: 10px; cursor: pointer; '
+    + 'background: none; color: var(--ink);';
+  return (
+    <Fragment>
+      <div style={s('display: flex; gap: 6px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;')}>
+        <button style={s(кнопка)} className={hov('background: var(--ink); color: var(--canvas)')}
+                onClick={function () { c.копироватьЛог(); }}>
+          {st.логСкопирован ? 'скопировано ✓' : 'скопировать отчёт'}</button>
+        <button style={s(кнопка)} className={hov('background: var(--ink); color: var(--canvas)')}
+                onClick={function () { c.обновитьЛог(); }}>обновить</button>
+        {st.логАвария ? (
+          <span style={s('font-size: 10px; color: #e66;')}>прошлый запуск завершился аварийно</span>
+        ) : null}
+      </div>
+      <div style={s('font-size: 9.5px; color: var(--muted-soft); line-height: 1.5; margin-bottom: 10px;')}>
+        В отчёте видно состояние программы, последние действия и ошибки — вместе
+        со строками текстов, которые в это время были на экране.
+      </div>
+      <pre style={s('white-space: pre-wrap; word-break: break-word; font-size: 9.5px; '
+        + 'line-height: 1.5; color: var(--muted); background: var(--panel); '
+        + 'border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px; '
+        + 'max-height: 46vh; overflow: auto; margin: 0;')}>
+        {текст || 'нажми «обновить», чтобы собрать отчёт'}</pre>
     </Fragment>
   );
 }

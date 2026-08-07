@@ -209,3 +209,8 @@ export const sheetsMove = (id, folder) => post('/api/sheets/move', { id, folder 
 export const sheetsFolderCreate = (name) => post('/api/sheets/folder/create', { name });
 export const sheetsFolderDelete = (id) => post('/api/sheets/folder/delete', { id });
 export const sheetsOpenDir = () => post('/api/sheets/open-dir', {});
+
+// ОТЧЁТ О СЕССИИ (Раунд 59) — один текст со средой, состоянием артефактов и
+// журналом. Собирается сервером: считать состояние на фронте значило бы завести
+// второй источник правды о том, что лежит на диске.
+export const журнал = () => get('/api/%D0%B6%D1%83%D1%80%D0%BD%D0%B0%D0%BB');

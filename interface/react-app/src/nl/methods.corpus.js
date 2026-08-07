@@ -459,6 +459,42 @@ export const corpusMethods = {
       .catch(function (e) { self.flash(e.message); });
   },
 
+  // ================= журнал =================
+  // ОДНА КНОПКА ВМЕСТО ПОХОДА В ПАПКУ (Раунд 59). Отчёт целиком собирает
+  // сервер; здесь только показать и положить в буфер. Копирование через
+  // navigator.clipboard с запасным путём: в WKWebView разрешение на буфер
+  // выдаётся не всегда, а «скопировать» обязано работать всегда.
+  async обновитьЛог() {
+    try {
+      var о = await api.журнал();
+      this.setState({ логТекст: о['текст'] || '', логАвария: !!о['аварийно'] });
+    } catch (e) {
+      this.setState({ логТекст: 'не удалось собрать отчёт: ' + e.message
+        + '\n\nЯдро не отвечает. Закрой и открой программу — при следующем '
+        + 'запуске журнал этой сессии сохранится и будет здесь.' });
+    }
+  },
+
+  async копироватьЛог() {
+    if (!this.state.логТекст) await this.обновитьЛог();
+    var т = this.state.логТекст || '';
+    var ок = false;
+    try { await navigator.clipboard.writeText(т); ок = true; } catch (e) { ок = false; }
+    if (!ок) {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = т; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        ок = document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch (e) { ок = false; }
+    }
+    this.setState({ логСкопирован: ок });
+    if (!ок) this.flash('не удалось скопировать — выдели текст и скопируй вручную');
+    var self = this;
+    setTimeout(function () { self.setState({ логСкопирован: false }); }, 2000);
+  },
+
   // ================= статистика =================
   // Панель статистики живёт своей кнопкой (требование: статистика живёт в своей кнопке и подводится там целиком.), а
   // цифры тянем при открытии — не на каждый рендер и не на старте.

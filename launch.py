@@ -76,16 +76,83 @@ SPLASH = ("<!doctype html><meta charset=utf-8><style>" + _SPLASH_CSS + "</style>
           "<div class=b><div class=n>nakedlunch</div>"
           "<div class=r><i></i></div>"
           "<div class=s>поднимаю корпус и индексы</div></div>")
+def журнал():
+    """core/журнал.py — один журнал на всё приложение. launch.py лежит уровнем
+    выше core, поэтому путь добавляется здесь же."""
+    core = str(Path(__file__).resolve().parent / "core")
+    if core not in sys.path:
+        sys.path.insert(0, core)
+    import журнал as ж
+    return ж
+
+
+def _экранировать(t: str) -> str:
+    return (t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def страница_отказа(причина: str, что_делать: str = "") -> str:
+    """ПРИЧИНА НА ЭКРАНЕ, А НЕ В ПАПКЕ (Раунд 59).
+
+    Программу дают людям, которые пишут тексты. Отказ «подробности в
+    ~/Library/Logs/nakedlunch.log» для них равен отказу без подробностей: туда
+    никто не пойдёт, а если и пойдёт — пришлёт скриншот куска.
+
+    Поэтому отказ показывает ВЕСЬ отчёт прямо в окне и даёт одну кнопку
+    «скопировать». Страница самодостаточна: ни сервера, ни сети она не требует
+    — именно потому, что показывается тогда, когда сервера как раз и нет."""
+    try:
+        отчёт = журнал().отчёт({"стадия": причина})
+    except Exception as e:                                       # noqa: BLE001
+        отчёт = f"журнал недоступен: {e}"
+    подсказка = что_делать or ("Отправь этот отчёт — в нём есть всё, "
+                               "что нужно, чтобы понять причину.")
+    return ("<!doctype html><meta charset=utf-8><style>" + _SPLASH_CSS + """
+      .wrap{max-width:820px;margin:0 auto;padding:28px 22px;text-align:left}
+      .err{font:600 15px/1.5 ui-monospace,monospace;color:#e66;margin-bottom:6px}
+      .hint{font:12px/1.6 ui-monospace,monospace;opacity:.7;margin-bottom:14px}
+      pre{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+          border-radius:8px;padding:12px;font:11px/1.5 ui-monospace,monospace;
+          white-space:pre-wrap;max-height:52vh;overflow:auto}
+      button{font:12px ui-monospace,monospace;padding:9px 16px;border-radius:999px;
+             border:1px solid rgba(255,255,255,.3);background:none;color:inherit;
+             cursor:pointer;margin-top:12px}
+      button:hover{background:rgba(255,255,255,.1)}
+    </style><div class=wrap>
+      <div class=n>nakedlunch</div>
+      <div class=err>""" + _экранировать(причина) + """</div>
+      <div class=hint>""" + _экранировать(подсказка) + """</div>
+      <pre id=o>""" + _экранировать(отчёт) + """</pre>
+      <button onclick="(async()=>{try{await navigator.clipboard.writeText(
+        document.getElementById('o').innerText);this.textContent='скопировано ✓'}
+        catch(e){const r=document.createRange();r.selectNode(document.getElementById('o'));
+        getSelection().removeAllRanges();getSelection().addRange(r);
+        document.execCommand('copy');this.textContent='скопировано ✓'}})()">
+        скопировать отчёт</button>
+    </div>""")
+
+
 SPLASH_FAIL = ("<!doctype html><meta charset=utf-8><style>" + _SPLASH_CSS + "</style>"
                "<div class=b><div class=n>nakedlunch</div>"
-               "<div class=s>сервер не поднялся за отведённое время</div>"
-               "<div class=s>подробности: ~/Library/Logs/nakedlunch.log</div></div>")
+               "<div class=s>сервер не поднялся за отведённое время</div></div>")
 
 
 def _gui_error(msg: str, title: str = "nakedlunch не запустился") -> None:
-    """Окно с ошибкой, когда терминала нет. Из .app stderr уходит в лог, и без
-    этого двойной клик по сломанной установке выглядел бы как «ничего не
-    произошло» — худший вид отказа."""
+    """Отказ БЕЗ окна приложения: пишем страницу отчёта на диск и открываем её
+    браузером. Так причина видна на любой системе — osascript есть только на
+    macOS, а тестеры будут на трёх."""
+    try:
+        журнал().запись("запуск", f"{title}: {msg}", "ошибка")
+    except Exception:
+        pass
+    try:
+        путь = Path(__file__).resolve().parent / "data" / "отчёт.html"
+        путь.parent.mkdir(parents=True, exist_ok=True)
+        путь.write_text(страница_отказа(msg), "utf-8")
+        import webbrowser
+        webbrowser.open(путь.as_uri())
+        return
+    except Exception:
+        pass
     if sys.stderr.isatty():
         return
     try:
@@ -524,10 +591,20 @@ def enable_media_capture() -> None:
 
 
 def main() -> int:
+    # СЕССИЯ НАЧИНАЕТСЯ ЗДЕСЬ (Раунд 59). Журнал прошлого запуска сохраняется
+    # целиком, отметка чистого выхода снимается — по её отсутствию в следующий
+    # раз видно, что программа не закрылась, а упала.
+    try:
+        ж = журнал()
+        ж.начать_сессию()
+        import atexit
+        atexit.register(ж.закрыть_сессию)
+    except Exception:
+        pass
     if not ensure_build():
-        _gui_error("Не удалось собрать интерфейс.\n\nПохоже, нет npm — поставь Node.js "
-                   "или собери фронт руками:\n  cd interface/react-app && npm install && npm run build"
-                   f"\n\nПодробности: ~/Library/Logs/nakedlunch.log")
+        _gui_error("Не удалось собрать интерфейс.\n\nПохоже, не установлен Node.js. "
+                   "Поставь его и запусти снова — или собери интерфейс руками:\n"
+                   "  cd interface/react-app && npm install && npm run build")
         return 1
 
     # Сборка уже прошла, значит отпечаток считаем ПОСЛЕ неё: иначе свежий фронт
@@ -594,8 +671,7 @@ def main() -> int:
     if webview is None:                       # без родного окна — старый путь
         if not wait_health(port, proc):
             print("nakedlunch: server did not come up in time", file=sys.stderr)
-            _gui_error("Сервер не поднялся за отведённое время.\n\n"
-                       "Подробности: ~/Library/Logs/nakedlunch.log")
+            _gui_error("Ядро не ответило за отведённое время.")
             cleanup(); return 1
         register()
         print("nakedlunch: pywebview not installed; opening browser", file=sys.stderr)
@@ -635,10 +711,12 @@ def main() -> int:
             if not wait_health(port, proc):
                 print("nakedlunch: server did not come up in time", file=sys.stderr)
                 try:
-                    window.load_html(SPLASH_FAIL)
+                    window.load_html(страница_отказа(
+                        "Ядро не ответило за отведённое время.",
+                        "Причина ниже. Скопируй отчёт и отправь — этого хватит, "
+                        "чтобы понять, что произошло."))
                 except Exception:
-                    _gui_error("Сервер не поднялся за отведённое время.\n\n"
-                               "Подробности: ~/Library/Logs/nakedlunch.log")
+                    _gui_error("Ядро не ответило за отведённое время.")
                 return
             register()
             window.load_url(url)
@@ -648,8 +726,7 @@ def main() -> int:
         print(f"nakedlunch: native window unavailable ({e}); opening browser", file=sys.stderr)
         import webbrowser
         if not wait_health(port, proc):
-            _gui_error("Сервер не поднялся за отведённое время.\n\n"
-                       "Подробности: ~/Library/Logs/nakedlunch.log")
+            _gui_error("Ядро не ответило за отведённое время.")
             return 1
         register()
         webbrowser.open(url)
