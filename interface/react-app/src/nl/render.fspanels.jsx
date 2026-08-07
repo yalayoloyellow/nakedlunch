@@ -818,8 +818,7 @@ export function renderFsBar(c) {
           className={hov(HOVINK)} style={s(fsBtn(!!st.synthOn))}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12h3l2-5 3 10 3-13 3 16 2-8h4"></path></svg>
         </button>
-        {/* ПЕРЕЗАПУСК ДВИЖКА (Раунд 56). Пользователь: «когда он сбивается, было
-            бы славно его перезапускать, не перезапуская само приложение».
+        {/* ПЕРЕЗАПУСК ДВИЖКА (Раунд 56). Требование: перезапускать визуализатор, не перезапуская приложение..
             Контекст WebGL2 браузер вправе отобрать в любой момент — сцена
             чернеет молча, и до этой кнопки лечилось только перезапуском окна. */}
         <button type="button" id="btnBcRestart" onClick={() => call(c, 'fsRestartEngine')}
@@ -828,8 +827,7 @@ export function renderFsBar(c) {
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"></path><path d="M21 3v6h-6"></path></svg>
         </button>
         {/* ПАПКА ЗАПИСЕЙ — ПОСТОЯННО (Раунд 56). Была только в итоге
-            законченной записи; пользователь: «а она может быть перманентна? это
-            было бы славно». Открывает корень, а не последнюю сессию. */}
+            законченной записи; запрос: сделать её постоянной. Открывает корень, а не последнюю сессию. */}
         <button type="button" id="btnRecDir"
           onClick={() => { fetch('/api/rec/open-dir', { method: 'POST' }).catch(() => {}); }}
           title="Открыть папку записей" className={hov(HOVINK)} style={s(fsBtn(false))}>

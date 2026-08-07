@@ -249,8 +249,7 @@ def test_rhymes_one_form_per_lemma(mini_index5):
 
 
 def test_rhyme_types_are_labeled_and_ordered(mini_index5):
-    """Раунд 32, просьба пользователя «категоризировать и помечать разные типы
-    рифм»: каждая строка несёт свой тип в `t`, а порядок групп — от сильной
+    """Раунд 32, просьба требование «категоризировать и помечать разные типы рифм»: каждая строка несёт свой тип в `t`, а порядок групп — от сильной
     рифмы к слабой. «богатая» = точная + совпала опорная согласная."""
     items = wordsuggest.suggest("минуя", "рифмы")
     assert items and all("t" in i for i in items)
@@ -355,8 +354,7 @@ def test_sound_bucket_equals_full_scan(real_index):
 
 @pytest.mark.skipif(not REAL_INDEX.exists(), reason="rhyme_index.json не собран")
 def test_sound_shows_one_form_per_word(real_index):
-    """Жалоба пользователя 2026-08-02: «на созвучия одно и то же слово с
-    разными окончаниями» — падежи занимали слоты вместо созвучий."""
+    """Жалоба отчёт (2026-08-02): на созвучиях повторялось одно слово в разных окончаниях — падежи занимали слоты вместо созвучий."""
     wordsuggest.warm_caches()
     got = [i["w"] for i in wordsuggest.suggest("мороз", "по звуку")]
     леммы = [wordsuggest._lemma(w) for w in got]

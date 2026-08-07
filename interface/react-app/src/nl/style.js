@@ -142,7 +142,7 @@ const BASE_CSS = `
   @keyframes streamIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   /* строка-заполнитель на месте будущей строфы: прогон идёт секунды, и он
      должен быть виден ТАМ, КУДА вставится текст, а не только строкой статуса
-     в углу (2026-08-02, пользователь: «хочу видеть прям в строке») */
+     в углу (2026-08-02, требование: видеть прямо в строке) */
   @keyframes nlGenPulse { 0%, 100% { opacity: 0.32; } 50% { opacity: 0.9; } }
   [data-genrow] { animation: nlGenPulse 1.15s var(--ease) infinite; }
   @media (prefers-reduced-motion: reduce) { [data-genrow] { animation: none; opacity: 0.7; } }
@@ -160,13 +160,11 @@ const BASE_CSS = `
   /* без @property смена --panel считается дискретной и transition её не анимирует */
   @property --panel { syntax: '<color>'; inherits: true; initial-value: transparent; }
   /* строки пресетов, свотчи палитры и класс .active рисует сам движок — дотянуться инлайном нельзя */
-  /* Общий список (Раунд 40). Пользователь про выпадашку строф: «отвратительно
-     показан… гораздо лаконичнее выглядел список пресетов во фристайле, вот он
-     там красиво реализован». Так что правила пресетов вынесены в класс и
+  /* Общий список (Раунд 40). Замечание про выпадашку строф: показана плохо, список пресетов во фристайле выглядит
+  лаконичнее.. Так что правила пресетов вынесены в класс и
      переиспользуются: формы строф, избранное, история. */
   .nl-list { display: flex; flex-direction: column; gap: 1px; max-height: 300px; overflow-y: auto; }
-  /* Время — СЛЕВА от текста (пользователь: «мы время показываем слева от
-     текста, какого хуя оно там»). Пустая ячейка схлопывается вместе с
+  /* Время — СЛЕВА от текста (замечание: время показывалось слева от текста без причины). Пустая ячейка схлопывается вместе с
      просветом, поэтому в избранном, где времени нет, ряд не съезжает. */
   .nl-list .nl-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 3px; }
   .nl-list .nl-when { font-size: 8.5px; color: var(--muted-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
