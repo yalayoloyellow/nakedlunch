@@ -1,0 +1,3294 @@
+<title>extendo — 099 mockup</title>
+<!--
+  Design plan (per artifact-design skill — this is a UI/tool mockup, scanned
+  and operated, not read top to bottom).
+
+  Palette: taken VERBATIM from the owner's own "099 Supply" reference — this
+  is a case where the user pinned the direction exactly, so it wins over any
+  independent color/type invention. Canvas #ffffff, ink #101010, three grays
+  (#555/#999/#c8c8c8), two border grays (#e0e0e0 default, #999 hover, #101010
+  strong). Zero chromatic color anywhere, by explicit owner decision after
+  grilling (not a default — confirmed literal, not "principles only").
+
+  Type: Soehne Mono is a paid face with no free source; the artifact CSP
+  blocks font CDNs, so per the reference's own documented substitute list
+  (JetBrains Mono / IBM Plex Mono / Space Mono) this uses the SYSTEM
+  monospace stack instead of embedding a multi-hundred-KB font as a data
+  URI — the identity here is the RULES around type (tracked-out uppercase
+  caps, one weight, one scale), not one specific typeface's metrics.
+
+  Single theme, deliberately: the owner chose the literal 099 palette after
+  being asked explicitly whether to keep it principles-only over extendo's
+  existing dark theme. "Buквально: белый холст, ноль цвета" is a considered
+  choice, not an unexamined default — so this mockup does NOT also ship a
+  dark variant; building one would contradict the decision just made.
+
+  Layout: a fixed top tab bar (4 modes) over a full-bleed white canvas. In
+  Settings-mode the stanza is one continuous, left-aligned text block (NOT
+  a grid of bordered tiles — 099's literal tile pattern lost that fight to
+  the owner's own "строфа = единый выровненный блок" framing) with quiet
+  per-line meta tags at the block's right edge, flanked by a left rail
+  (generation controls), a right rail (favorites + freestyle config), and a
+  collapsed-by-default bottom drawer for rarely-touched advanced knobs.
+-->
+<style>
+  :root {
+    --canvas: #ffffff;
+    --ink: #101010;
+    --charcoal: #000000;
+    --muted-hard: #222222;
+    --muted: #555555;
+    --muted-soft: #999999;
+    --border-soft: #c8c8c8;
+    --border-subtle: #e0e0e0;
+
+    --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+
+    /* 2026-07-18 — owner's own correction: rounded RECTANGLES, not 099's
+       literal 9999px stadium pills (pointing at claude.ai's own input box).
+       2026-07-18, later same day — owner's own further correction: one
+       single small radius, everywhere, not three different tokens per
+       element type ("закругления везде еще меньше сделай и одинаковые").
+       Kept as a variable (not inlined) so this stays a one-line change if
+       it needs to move again. */
+    --radius: 6px;
+
+    --gap-element: 12px;
+
+    /* the stanza/title/input column no longer just stops growing past a
+       fixed cap — owner's own correction, 2026-07-18: "вот таких
+       отвратительных отступов и отсутствия оптимизации под такой размер
+       окна избегаем и исправляем", pointing at a wide window where the
+       centering math was correct but the content still read as a small
+       island stranded in unused margin. clamp() lets it grow toward the
+       window instead of standing still. One token so the stanza
+       (.stanza-frame), the Редактор title above it (.stub-main-head), AND
+       the Генератор input row (.theme-bar-inner) all agree on width — see
+       the .stub-main comment for why the first two can't just be centered
+       as one flexed block. */
+    /* now driven by the INPUT row's own scale, not a separate ch-based one
+       — owner's own correction, 2026-07-18: "общее правило что ширина
+       текста должна упираться в ширину строки ввода... даже без строки
+       ввода тот же скейл ширины и в редакторе", reversing an earlier round
+       that deliberately kept these as two unrelated tokens (900px "was
+       never meant to relate to 62ch"). Found live, from the owner's own
+       screenshot: with two independent widths, the stanza and the input
+       row/toolbar below it landed on visibly different left/right edges —
+       drawing a vertical line down from one didn't line up with the other.
+       One shared token fixes that by construction, for every consumer,
+       every mode, not just Генератор's own input row. */
+    /* wrapped in min(..., 100% - 120px) — owner's own correction,
+       2026-07-18: "на узком экране... правая часть программы не влезает а
+       должна полноценно со всеми отступами". The clamp's floor is a
+       readability minimum, not a hard layout guarantee — once the app
+       shell's own min-width floor was removed (see .app) so narrow windows
+       could shrink at all, a bare clamp floor becomes the new thing
+       forcing an overflow instead, since it never yields to a truly
+       narrow container. The min() term is a per-side safety margin that
+       only ever wins once the floor genuinely doesn't fit — at any normal
+       width the clamp() is already narrower than the container, so this
+       is a no-op there.
+       48px (24px/side) → 120px (60px/side) — owner's own correction,
+       2026-07-19: found live at 900×1300 (a real width, not an edge case —
+       anything under ~988px hits this), not from a description but from
+       sweeping viewport sizes directly: Настройки's always-visible
+       collapsed избранное/история rail (44px, see .workspace) physically
+       overlapped the leftmost 20px of the stanza — 24px of margin doesn't
+       clear a 44px rail. 60px/side clears it with 16px of breathing room.
+       Symmetric on purpose, even though only the LEFT side has a rail to
+       clear — an asymmetric fix (pad left only) would shift Настройки's
+       own center off Редактор's, reopening the 110px mismatch fixed
+       earlier today (see .body-row's own comment) for a narrower margin
+       than that was, but the same class of bug. */
+    --content-max-width: min(clamp(900px, 45vw, 1100px), calc(100% - 120px));
+
+    /* motion — Apple-like restraint (owner's own reference, 2026-07-18:
+       "анимации систем эппл по плавности и простоте идеальны как
+       референс"). --ease is the workhorse micro-interaction curve;
+       --ease-spring is the deep-decel curve (fast out, long gentle
+       settle — no overshoot/bounce) used for mode transitions and the
+       sliding tab indicator; --ease-soft is a symmetric in-out for
+       reversible states. Durations kept short: nothing lingers. */
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+    --ease-soft: cubic-bezier(0.65, 0, 0.35, 1);
+    --dur-micro: 0.12s;
+    --dur-panel: 0.34s;
+    --dur-mode: 0.52s;
+  }
+
+  /* one global kill-switch for everyone who asks for calm (accessibility
+     baseline the whole motion system checks against — the JS also reads
+     this media query and takes instant paths). */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  /* dark theme — owner's own spec, 2026-07-18: "цвет просто инверсируется
+     весь в обратный, белое становится черным черное белым" — every token
+     is its literal RGB inverse (255-R/255-G/255-B), not a separately
+     designed dark palette. Toggled by the small icon next to the topbar
+     clock (see .theme-toggle) via data-theme on <html>. */
+  :root[data-theme="dark"] {
+    --canvas: #000000;
+    --ink: #efefef;
+    --charcoal: #ffffff;
+    --muted-hard: #dddddd;
+    --muted: #aaaaaa;
+    --muted-soft: #666666;
+    --border-soft: #373737;
+    --border-subtle: #1f1f1f;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  ::selection { background: var(--ink); color: var(--canvas); }
+
+  button, input {
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+  }
+
+  input:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+    outline: 1.5px solid var(--ink);
+    outline-offset: 2px;
+  }
+
+  .caps {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .muted { color: var(--muted); }
+  .muted-soft { color: var(--muted-soft); }
+
+  /* ---------------------------------------------------------- app shell */
+
+  /* height:100vh (not min-height) — the app shell is meant to fill
+     exactly one viewport with internal panels scrolling (overflow-y:auto
+     on .fav-list/.stub-sidebar/.stub-main/etc.), not the page itself.
+     min-height let the whole shell grow past the viewport when content
+     was tall enough (found live: a 630px-tall reproduced stanza pushed
+     .stub-main's box to 906px in a 720px-tall viewport, so the fixed
+     .editor-stats-dock — pinned to real viewport coordinates — overlapped
+     content that was still "in view" by the browser's reckoning). Генератор
+     never exposed this because its own content is short enough to fit
+     under the old min-height:100vh by coincidence, not because it was
+     actually constrained. */
+  /* no hard min-width floor — owner's own correction, 2026-07-18: "на
+     узком экране... правая часть программы не влезает а должна
+     полноценно со всеми отступами - строка просто может ужиматься в
+     зависимости от ширины окна а остальное подтягиваться". Found live:
+     this used to hold a flat 1080px floor, so any window narrower than
+     that pushed the whole shell wider than the viewport — the dock's
+     .body-spacer (rightmost, fixed 220px) is what actually ran off the
+     right edge, since it's the last thing in the row. main already
+     carries its own min-width:0 for exactly this reason (so it can
+     shrink toward zero rather than force an overflow); this floor
+     upstream was overriding that. Nothing downstream needs a wider
+     floor to stay legible — the stanza's own font-size and column-width
+     clamps (see --content-max-width, .line-row) are the "line can just
+     shrink" mechanism, and .settings-toolbar already wraps. */
+  .app {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* symmetric vertical padding (was 20/16 — a measured 4px lean; the rest
+     of this bar, wordmark + clock both at top:18px, is built to be exactly
+     symmetric, so the padding matches now). */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+    padding: 18px 32px;
+    position: relative;
+  }
+
+  /* wordmark + clock vertically centered on the tab row via translateY,
+     not a hardcoded top — so they stay aligned with the (flex-centered)
+     tabs no matter the topbar padding. */
+  .wordmark {
+    position: absolute;
+    left: 32px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.14em;
+  }
+
+  .topbar-right {
+    position: absolute;
+    right: 32px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .topbar-clock {
+    font-size: 10px;
+    color: var(--muted-soft);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* dark-mode toggle — owner's own spec, 2026-07-18: "значок очень
+     маленький в правый верхний угол который хорошо рядом стоит слева от
+     даты и времени" — deliberately tiny, sits directly left of the
+     clock via .topbar-right's own flex row rather than separate
+     hardcoded offsets. */
+  .theme-toggle {
+    appearance: none;
+    background: none;
+    border: none;
+    padding: 0;
+    display: flex;
+    cursor: pointer;
+    color: var(--muted-soft);
+    transition: color 0.12s var(--ease);
+  }
+  .theme-toggle:hover { color: var(--ink); }
+
+  /* Избранное/История — action buttons, kept as plain text (owner's own
+     correction, 2026-07-18: "оставь их текстом"). Moved out of the topbar
+     and into the settings-toolbar, just left of the stats orb — see
+     .toolbar-trailing below (owner's own correction, same day: "перенеси
+     и поставь чуть левее кружочка со статистикой"). */
+  .corner-link {
+    appearance: none;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    font-size: 10px;
+    color: var(--muted-soft);
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.12s var(--ease);
+  }
+  .corner-link .corner-count { color: inherit; }
+  .corner-link:hover { color: var(--ink); }
+
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: 3px;
+    position: relative;
+  }
+
+  /* iOS-segmented-control-style sliding highlight — one black pill that
+     GLIDES between tabs instead of the fill snapping on/off per button
+     (owner's own reference, 2026-07-18: Apple smoothness). JS sizes and
+     positions it over the active tab; the spring curve carries it. */
+  .tab-indicator {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 0;
+    background: var(--ink);
+    border-radius: var(--radius);
+    z-index: 0;
+    transition: transform var(--dur-panel) var(--ease-spring),
+                width var(--dur-panel) var(--ease-spring);
+    will-change: transform, width;
+  }
+
+  .tab-btn {
+    appearance: none;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius);
+    padding: 7px 16px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.18s var(--ease);
+    white-space: nowrap;
+    position: relative;
+    z-index: 1;
+  }
+
+  .tab-btn:hover { color: var(--ink); }
+
+  /* the black fill is the sliding indicator now, not per-button bg — the
+     active button just flips its text to canvas-white to read on it. */
+  .tab-btn.active {
+    color: var(--canvas);
+  }
+
+  .tab-stub-flag {
+    font-size: 8px;
+    vertical-align: super;
+    margin-left: 3px;
+    opacity: 0.6;
+  }
+
+  /* .body-row used to hold .workspace as a flex SIBLING of <main> — opening
+     the dock shrank main's available width, a real split. Reversed —
+     owner's own correction, 2026-07-19: "текст основной в редакторе и в
+     генераторе я должен видеть всегда на одном месте в центре независимо
+     от размера экрана". Measured live: with the split, Генератор's stanza
+     centered at x=750 (main's own box, dock-to-edge) while Редактор's
+     centered at x=640 (true viewport center, symmetric 220px rails) — a
+     110px mismatch on a 1280px viewport, and the hero-FLIP between them
+     was silently carrying that 110px as a translateX every single switch
+     (see MODE MOTION below). .workspace is now position:absolute instead
+     of a flex sibling, so <main> is always the sole occupant of body-row's
+     width and always centers on the same point Редактор already used.
+     Doesn't reopen the 2026-07-18 "no fake counterweight spacer" case
+     (below) — that correction was about main PRETENDING the dock wasn't
+     there via a mirrored spacer while the dock still pushed it; here the
+     dock genuinely isn't part of main's layout anymore, nothing is faked. */
+  .body-row { flex: 1; min-height: 0; display: flex; width: 100%; position: relative; }
+  main { flex: 1; min-height: 0; min-width: 0; display: flex; position: relative; }
+
+  /* no right-side counterweight for the dock — owner's own correction,
+     2026-07-18: "центрирование считается отдельно на каждом экране каждом
+     сегменте каждом окошке а не то что боковой основной экран пытаются
+     подогнать будто слева нет менюшек". This used to hold a spacer that
+     mirrored the dock's width so main's content faked being centered in
+     the true viewport, as if the dock weren't there. Still true today —
+     .workspace becoming an overlay (see above) didn't bring this spacer
+     back, it just made it unnecessary a different way. */
+
+  /* panel cross-fade is CSS-driven (opacity + transition), not WAAPI —
+     the browser reverts opacity to its base deterministically when the
+     transition classes come off, so rapid re-entrant switches can never
+     strand a panel at opacity 0 (which WAAPI's implicit revert did, found
+     live). Only the hero-text morph stays on WAAPI (a transform on a
+     child, which is well-behaved). */
+  .tab-panel {
+    display: none;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    opacity: 1;
+    transition: opacity var(--dur-panel) ease;
+  }
+  .tab-panel.active { display: flex; }
+  /* during a mode transition the OUTGOING panel is lifted out of flow and
+     laid over the incoming one (which is already taking the normal slot),
+     so the two cross-fade in place instead of the old one collapsing and
+     shoving layout. Its opacity animates to 0 via the base transition. */
+  .tab-panel.leaving {
+    display: flex;
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  /* the "nakedlunch freestyle" entrance splash that used to live here is
+     gone — owner's own correction, 2026-07-18: "убери вообще
+     проявляющуюся надпись нейкедланч фристайл". enterFreestyle() now goes
+     straight from the outgoing panel's slide to Freestyle's own fade-in;
+     see its comment in the MODE MOTION script. */
+
+  /* ------------------------------------------------------- shared bits */
+
+  .hairline { border: 1px solid var(--border-subtle); }
+
+  .panel-heading {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted-soft);
+    margin: 0 0 14px;
+  }
+
+  .pill-btn {
+    appearance: none;
+    border-radius: var(--radius);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 9px 20px;
+    cursor: pointer;
+    transition: background-color 0.12s var(--ease), border-color 0.12s var(--ease), opacity 0.12s var(--ease);
+  }
+
+  .pill-btn.primary {
+    background: var(--ink);
+    color: var(--canvas);
+    border: 1px solid var(--ink);
+  }
+  .pill-btn.primary:hover { background: var(--muted-hard); border-color: var(--muted-hard); }
+
+  /* generate button — an Enter-key glyph, not a filled pill (owner's own
+     correction, 2026-07-18, three times now: first swap the label for ⏎,
+     then drop the black fill entirely, then swap the text glyph for a real
+     stroke-drawn corner-arrow icon — "иконку enter как в этой строке",
+     referencing a screenshot of a claude.ai-style composer's own return
+     icon). Plain icon button, same treatment as the freestyle transport
+     controls (.fs-chrome button) rather than a .pill-btn variant. */
+  .icon-btn {
+    appearance: none;
+    background: none;
+    border: none;
+    padding: 6px 10px;
+    display: inline-flex;
+    align-items: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.12s var(--ease);
+  }
+  .icon-btn:hover { color: var(--ink); }
+  .icon-btn svg { width: 15px; height: 15px; stroke: currentColor; }
+
+  .pill-btn.ghost {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--muted-soft);
+  }
+  .pill-btn.ghost:hover { color: var(--ink); border-color: var(--ink); }
+
+  .pill-btn.disabled {
+    background: transparent;
+    color: var(--border-soft);
+    border: 1px solid var(--border-subtle);
+    cursor: default;
+  }
+
+  .field-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 11px;
+    margin-bottom: 6px;
+  }
+  .field-label .val { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .field-caption {
+    font-size: 10px;
+    color: var(--muted-soft);
+    line-height: 1.4;
+    margin: 4px 0 8px;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 1px;
+    background: var(--border-soft);
+    margin: 10px 0 4px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--ink);
+    cursor: pointer;
+    transition: transform 0.12s var(--ease);
+  }
+  input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+
+  .range-scale {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9px;
+    color: var(--muted-soft);
+    margin-bottom: var(--gap-element);
+  }
+
+  .field-group { margin-bottom: 22px; }
+  .field-group:last-child { margin-bottom: 0; }
+
+  /* claude.ai's own input box, at this UI's much smaller scale (owner's
+     own reference, 2026-07-18): a clearly visible border — 099's
+     --border-subtle alone (#e0e0e0) is too faint for something you have to
+     find and click — plus roomier padding, so it reads as a real surface
+     to type into, not a bare line. */
+  input[type="text"], textarea {
+    width: 100%;
+    background: var(--canvas);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 11px 14px;
+    font-size: 12px;
+    color: var(--ink);
+    transition: border-color 0.12s var(--ease);
+  }
+  input[type="text"]:hover, textarea:hover { border-color: var(--muted-soft); }
+  input[type="text"]:focus, textarea:focus { border-color: var(--ink); outline: none; }
+  input[type="text"]::placeholder, textarea::placeholder { color: var(--muted-soft); }
+
+  /* ================================================== SETTINGS MODE */
+  /* Controls now live UNDER the theme input, inside the same bordered card
+     (owner's own correction, 2026-07-18, pointing at claude.ai's own input:
+     the toolbar row belongs directly beneath the input, in ONE shared
+     card — not off to the side, not a separate floating cluster). Hover
+     still governs which single control opens (unchanged from the prior
+     round) — just repositioned to a popover that opens UPWARD, since this
+     card sits at the very bottom of the page and an inline reveal would
+     run off-screen down there. */
+
+  .settings-inner { flex: 1; display: flex; flex-direction: column; width: 100%; min-height: 0; }
+
+  .stanza-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .stanza-frame {
+    width: 100%;
+    max-width: var(--content-max-width);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 20px 0;
+  }
+
+  .stanza-block { display: flex; flex-direction: column; }
+
+  /* this .stanza-col is the ONLY copy in the document — Редактор doesn't
+     get a second, separately-authored one anymore. It's physically moved
+     into #tab-editor's slot at runtime (parkStanza() in the MODE MOTION
+     script) — owner's own correction, 2026-07-18, superseding an earlier
+     same-day instruction to duplicate-and-strip the markup: "может надо
+     делать это иначе тогда текст а не прописывать отдельные текста для
+     каждого режима". No padding here (spacing comes purely from
+     line-height) so the rendered rhythm reads the same everywhere this
+     class appears, in either slot. */
+  /* click a line to favorite it (owner's own spec, 2026-07-18: "при
+     нажатии на строку в основном тексте генератора строка переносится в
+     избранное") — .favorited is a stronger, persistent tint so a saved
+     line stays visually marked once the mouse moves away, distinct from
+     the lighter transient :hover tint. */
+  .line-row {
+    border-radius: var(--radius);
+    transition: background-color 0.12s var(--ease);
+    /* grows a little past its 13.5px floor as the window widens (same
+       "optimize for this window size" fix as --content-max-width above) —
+       capped at 16px, the gear-icon size already used as the page's own
+       de facto ceiling elsewhere, so the stanza never reads as bigger
+       than anything else on the page. line-height stays unitless so it
+       scales with it for free. */
+    font-size: clamp(13.5px, 0.6vw + 4px, 16px);
+    line-height: 1.85;
+    cursor: pointer;
+  }
+  .line-row:hover { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+  .line-row.favorited { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+
+  /* fixed 7ch box (the format is always "NN X nl") rather than intrinsic
+     width, so it can transition to 0 cleanly on a monospace face — owner's
+     own correction, 2026-07-18: "специальные символы... вьезжают в этот
+     текст вправо и скрываются, а текст подъезжает влево" for the Редактор
+     handoff (see #tab-editor .line-prefix below and parkStanza() in the
+     MODE MOTION script). */
+  .line-prefix {
+    display: inline-block;
+    width: 7ch;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: 9.5px;
+    font-weight: 400;
+    opacity: 0.45;
+    margin-right: 8px;
+    font-variant-numeric: tabular-nums;
+    vertical-align: middle;
+    transition: width var(--dur-panel) var(--ease-soft), opacity var(--dur-panel) var(--ease-soft),
+                margin-right var(--dur-panel) var(--ease-soft), transform var(--dur-panel) var(--ease-soft);
+  }
+  /* the one leading line (the stanza's theme-anchor) stays bold and fully
+     opaque — everything else recedes; owner's own correction, 2026-07-18,
+     replacing the ◆ glyph with a purely typographic distinction. */
+  .line-prefix.lead { font-weight: 700; opacity: 1; }
+
+  .line-text .rhyme-tail {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    text-decoration-color: currentColor;
+    transition: text-decoration-color var(--dur-panel) var(--ease-soft);
+  }
+
+  /* no horizontal padding here anymore — owner's own correction,
+     2026-07-18: the 40px gutter this used to carry was a standalone
+     workaround from when .theme-bar-inner had its own separate max-width
+     with no narrow-screen safety margin of its own. Now that it shares
+     --content-max-width with .stanza-frame (same token, same built-in
+     min(...,100%-48px) margin), adding padding here on TOP of that would
+     just re-introduce the edge mismatch between the stanza and the input
+     row that the shared token exists to prevent — .stanza-col has no
+     padding of its own either, so this has to match it exactly to land on
+     the same left/right edges. */
+  .theme-bar { padding: 0 0 28px; display: flex; justify-content: center; }
+
+  /* owner's own correction, 2026-07-18: "ты рамку расширил на настройки а
+     так не надо, надо как в клодкоде" — the input's own border now hugs
+     ONLY the input row, like Claude Code's own tight prompt box. The
+     toolbar is a separate, unbordered row directly below it, not enclosed
+     in the same card. */
+  .theme-bar-inner {
+    width: 100%;
+    /* shared with .stanza-frame/.stub-main-head — see --content-max-width
+       above for why these three now agree on one width instead of two
+       unrelated ones. */
+    max-width: var(--content-max-width);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .input-card {
+    width: 100%;
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+    padding: 6px 10px;
+  }
+
+  .input-row { display: flex; align-items: center; gap: var(--gap-element); }
+  .input-row input[type="text"] {
+    flex: 1;
+    border-color: transparent;
+    padding: 10px 4px;
+  }
+  .input-row input[type="text"]:hover, .input-row input[type="text"]:focus { border-color: transparent; }
+
+  .settings-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tool-pill-wrap { position: relative; }
+  .tool-pill {
+    appearance: none;
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: 6px 12px;
+    font-size: 10px;
+    font-family: inherit;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.12s var(--ease);
+  }
+  .tool-pill .val { color: var(--ink); font-variant-numeric: tabular-nums; margin-left: 3px; }
+
+  /* click to open, not hover (owner's own correction, 2026-07-18: "все
+     топ бары вообще открываются не наведением а нажатием") — every
+     trigger toggles a JS-added .open class on its .tool-pill-wrap (see
+     the script at the bottom). Hover is now ONLY a quiet visual hint, not
+     an open/close trigger: "при наведении просто видна серая заливка в
+     форме рамки полупрозрачная" — a semi-transparent gray fill, nothing
+     else (no border or text-color change), applied uniformly across the
+     bordered pill, the borderless icon pills, the freestyle-speed label,
+     and the stats orb. */
+  .tool-pill:hover, .tool-pill--icon:hover, .stats-orb:hover, .fs-speed:hover {
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+  }
+
+  /* Параметры — a gear glyph, not a text label (owner's own correction,
+     2026-07-18: "параметры замени значком шестеренки"). Still a .tool-pill
+     underneath (same click-to-open popover mechanism as Строфа), just a
+     tighter square shape sized for one icon instead of a text run. */
+  /* owner's own correction, 2026-07-18: "без рамки и чуть побольше" — drop
+     the border entirely and size it like the other bare icon buttons. */
+  .tool-pill--icon {
+    border: none;
+    background: none;
+    padding: 6px 8px;
+    font-size: 16px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+  }
+  .tool-pill--icon svg { width: 15px; height: 15px; stroke: currentColor; }
+
+  .tool-popover {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 0;
+    z-index: 50;
+    background: var(--canvas);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: 13px 16px;
+    width: 190px;
+  }
+  .tool-pill-wrap.open .tool-popover { display: block; }
+  .tool-popover .field-label { font-size: 10px; margin-bottom: 6px; }
+  .tool-popover .range-scale { font-size: 8px; margin-bottom: 0; }
+  .tool-popover input[type="range"] { margin: 6px 0 4px; }
+  .tool-popover.info-only { font-size: 10.5px; line-height: 1.6; color: var(--muted); }
+
+  /* one button, all params (owner's own correction, 2026-07-18: "крутилки
+     можно поместить в одну кнопку-топ-бар и там все крутилки") — the 8
+     sliders that used to be individual pills now live in a single wider
+     popover, laid out two-up so the panel stays short rather than a long
+     scroll. Строфа keeps its own separate button/popover, unchanged. */
+  /* NB: do NOT set display here — .tool-popover's own `display:none` must
+     stay in force until opened, or (same specificity, this rule later in
+     the file) `display:grid` wins and the panel is stuck permanently open.
+     The grid layout is applied only in the .open rule below. */
+  .tool-popover--grid {
+    width: 460px;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 28px;
+    padding: 13px 16px;
+  }
+  .tool-pill-wrap.open .tool-popover--grid { display: grid; }
+  .tool-popover--grid .field-group { margin-bottom: 0; }
+
+  /* Классика/Алгоритм — a sharp either/or, not a continuous slider (owner's
+     own correction, 2026-07-18: "сделай резкой - либо да на 100 процентов
+     либо нет (0)"). A dropdown-style pill (same bordered .tool-pill look
+     Строфа used to have) sitting left of Строфа, opening a two-item list
+     instead of a range input.
+     NB: no `display` here, same lesson as .tool-popover--grid above — it
+     would beat .tool-popover's own `display:none` and stay stuck open.
+     `display: flex` only applies in the .open rule below. */
+  .tool-popover--select {
+    width: auto;
+    min-width: 130px;
+    padding: 6px;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .tool-pill-wrap.open .tool-popover--select { display: flex; }
+  .select-option {
+    appearance: none;
+    background: none;
+    border: none;
+    border-radius: var(--radius);
+    padding: 7px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    text-align: left;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background-color 0.12s var(--ease), color 0.12s var(--ease);
+  }
+  .select-option:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); }
+  .select-option.selected { color: var(--ink); font-weight: 700; }
+
+  /* Избранное/История + статистика — a right-aligned trailing cluster,
+     margin-left:auto on the GROUP (not on the orb alone) so the two text
+     buttons sit tight against the orb rather than each getting pushed to
+     opposite ends of the row (owner's own correction, 2026-07-18:
+     "перенеси и поставь чуть левее кружочка со статистикой"). */
+  .toolbar-trailing {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-left: auto;
+  }
+
+  /* статистика — small orb, styled after claude.ai's own usage indicator
+     (owner's own reference, 2026-07-18: "окошко токенов справа внизу
+     желтый кружочек в клоде"), content is ours (выдача/история counts +
+     full nakedlunch source breakdown — the info that used to live in the
+     Nakedlunch toolbar pill). Lives INSIDE the settings-toolbar now, not
+     as an independent fixed element (owner's own correction, 2026-07-18:
+     "топбар статистики... должен быть меньше и в правой части под
+     поисковой строкой") — sits inside .toolbar-trailing now, which owns
+     the margin-left:auto for the whole trailing group. */
+  .stats-orb-wrap {
+    position: relative;
+  }
+  .stats-orb {
+    appearance: none;
+    background: var(--canvas);
+    border: 1px solid var(--border-subtle);
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.12s var(--ease);
+  }
+
+  .stats-popover {
+    display: none;
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 10px);
+    background: var(--canvas);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: 13px 16px;
+    width: 230px;
+  }
+  .stats-orb-wrap.open .stats-popover { display: block; }
+  .stats-popover-heading {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted-soft);
+    margin: 0 0 8px;
+  }
+  .stats-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 11px;
+    padding: 3px 0;
+  }
+  .stats-row .val { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .stats-divider { border-top: 1px solid var(--border-subtle); margin: 10px 0; }
+
+  /* избранное/история — was a DOCKED side panel, not a full-viewport
+     overlay, permanently open with no close ability (owner's own
+     correction, 2026-07-18: "важно, чтобы они показывались не с правой
+     стороны, а с левой" / "без возможности закрыть"). Both reversed —
+     owner's own correction, 2026-07-19, after weighing the alternative
+     cost (see .body-row above): stays on the LEFT, but is now
+     position:absolute (floats over <main> instead of pushing it) and
+     collapsible via the same .dock-collapse-btn/.dock-collapsed-label
+     pattern Редактор's own docks already use — default collapsed (a 44px
+     rail, clear of the centered text), expands to float over the text's
+     left edge on click. Genuinely non-closable AND an overlay together
+     would mean permanently covering part of the centered stanza with no
+     way to see under it — worse than either the old docked model or a
+     closable overlay — so this correction keeps a collapse toggle, not
+     just the position change. Both избранное/история are still always
+     visible together once expanded (horizontal divider, top/bottom,
+     height draggable) — that part didn't change; either pane can still be
+     dragged onto the other to swap their stack order (see
+     makeDraggablePane()). */
+  /* width matches .stub-sidebar's own fixed 220px (owner's own correction,
+     2026-07-18: "по размеру шрифта и ширине окна я бы избранное и историю
+     сделал такими же как заметки") — still draggable wider via the resize
+     handle (that was its own separate, still-standing request), just
+     starts at Заметки's width instead of a third of the viewport. */
+  .workspace {
+    display: none;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 15;
+    width: 220px;
+    min-width: 220px;
+    max-width: 70%;
+    padding: 20px 18px 0;
+    background: var(--canvas);
+    border-right: 1px solid var(--border-subtle);
+    transition: width var(--dur-panel) var(--ease-soft), padding var(--dur-panel) var(--ease-soft);
+  }
+  .workspace.open { display: flex; flex-direction: column; }
+
+  .dock-resize-handle {
+    position: absolute;
+    right: -3px;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: ew-resize;
+    z-index: 6;
+    transition: background-color 0.12s var(--ease);
+  }
+  .dock-resize-handle:hover, .dock-resize-handle.dragging { background: var(--border-soft); }
+
+  .workspace-panes { display: flex; flex-direction: column; width: 100%; flex: 1 1 auto; min-height: 0; }
+
+  .ws-pane {
+    display: none;
+    flex: 1 1 0%;
+    min-height: 0;
+    flex-direction: column;
+    position: relative;
+    order: 1;
+  }
+  .ws-pane.visible { display: flex; }
+  .ws-pane.dragging { opacity: 0.5; }
+  .ws-pane.drop-target { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+  /* default stack order — избранное on top, история on the bottom.
+     Swappable by dragging one pane onto the other (makeDraggablePane()
+     below), which is now the only way to change this order — the old
+     "last opened goes to the bottom" auto-rule no longer applies since
+     neither pane can be closed and reopened anymore. */
+  #pane-history { order: 3; }
+
+  /* top inset/proportions match .stub-sidebar's exactly (owner's own
+     correction, 2026-07-18: "чтоб избранное и история выглядели так же в
+     тч по верхнему краю и пропорциям как заметки") — избранное/история
+     and the editor's Заметки tree read as the same kind of panel now. */
+  .ws-pane-body { flex: 1; padding: 20px 18px; overflow-y: auto; position: relative; }
+
+  /* grab a pane and drag it onto the other pane, release to swap (owner's
+     own correction, 2026-07-18: "могу... взять окошко избранного потянуть
+     вниз и поменять спокойно местами с историей"). Was a separate .ws-drag-handle
+     div with heading text before; once the text was removed ("заглавия
+     убрать") that div became a bare empty block, adding dead space above
+     the search input for no visible reason (owner's own correction,
+     2026-07-18: "ты стер текст но не убрал элемент") — so the element
+     itself is gone now. The grab zone is just the pane's own top padding
+     (drag JS below hit-tests mousedown's Y position against it directly),
+     costing zero extra layout space. */
+  .ws-pane-body::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 20px;
+    cursor: grab;
+  }
+  .ws-pane.dragging .ws-pane-body::before { cursor: grabbing; }
+
+  .ws-divider {
+    display: none;
+    flex: 0 0 auto;
+    height: 1px;
+    background: var(--border-subtle);
+    position: relative;
+    cursor: ns-resize;
+    order: 2;
+  }
+  .ws-divider::after { content: ""; position: absolute; left: 0; right: 0; top: -4px; bottom: -4px; }
+  .ws-divider:hover, .ws-divider.dragging { background: var(--muted-soft); }
+  .workspace-panes.split .ws-divider { display: block; }
+
+  .hist-time { font-size: 9.5px; color: var(--muted-soft); white-space: nowrap; font-variant-numeric: tabular-nums; padding-top: 1px; }
+
+  .fav-list { display: flex; flex-direction: column; }
+  /* font-size now matches .tree-item's (11.5px, inheriting body's 1.5
+     line-height) — owner's own correction, 2026-07-18: "по размеру
+     шрифта и ширине окна я бы избранное и историю сделал такими же как
+     заметки". No dividers between rows still stands from the earlier
+     "нет в редакторе иначе" round — that was about structure, not size,
+     and still applies regardless of which element supplies the size. */
+  /* remove-button/timestamp on the LEFT, text filling the rest (owner's
+     own correction, 2026-07-18: "кнопки и время слева тут") — DOM order
+     is button/time then text, so justify-content: space-between is gone;
+     the text span gets flex:1 to still wrap within the narrow column. */
+  .fav-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 0;
+    font-size: 11.5px;
+    line-height: 1.5;
+    cursor: default;
+  }
+  .fav-row-text { flex: 1; min-width: 0; }
+
+  /* borderless — owner's own correction, 2026-07-18: "у минусов в
+     избранном убери рамку". */
+  .fav-remove {
+    appearance: none;
+    background: none;
+    border: none;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    color: var(--muted-soft);
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.12s var(--ease);
+  }
+  .fav-remove:hover { color: var(--ink); }
+
+  /* borderless — owner's own correction, 2026-07-18: "у поиска по
+     избранному и истории... убери рамку" — overrides the global
+     input[type="text"] border. */
+  /* input.fav-search, not .fav-search — needs to match input[type="text"]'s
+     own specificity (element+attribute) to actually win the border, since
+     a bare class selector loses that fight regardless of source order. */
+  input.fav-search { margin-bottom: 12px; border: none; padding-left: 0; padding-right: 0; }
+  input.fav-search:hover, input.fav-search:focus { border: none; }
+
+  /* ================================================== FREESTYLE MODE */
+
+  /* position/size in space — owner's own spec, 2026-07-18: "размер шрифта
+     его положение в пространстве (выравнивание по центру по левому краю,
+     размер блока текста... привязано к размеру приложения в процентном
+     соотношении - в любом размере экрана работает)". --fs-align/--fs-width
+     drive the block's horizontal placement/size in %, --fs-scale drives
+     font size as a ratio off the 22px base — all set on .freestyle-panel
+     by the "Текст" popover in .fs-chrome (see JS), inherited down to
+     .fs-stanza/.fs-line since custom properties cascade normally. */
+  /* bottom padding matches Генератор/Редактор's own reserved-chrome height
+     (116px) so the centering zone's bounds — and therefore the text's
+     landing point — are identical across all three modes (owner's own
+     correction, 2026-07-18, extended here beyond the two tabs named: this
+     panel's .fs-chrome is a floating overlay just like Редактор's dock,
+     so without a matching reserve it centered in the FULL panel height
+     and landed 58px lower than the other two, found live the same way). */
+  .freestyle-panel {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: var(--fs-align, center);
+    position: relative;
+    padding: 0 6% 116px;
+    background: var(--canvas);
+  }
+
+  /* shrink-to-fit, not a flat percentage box — owner's own spec, 2026-07-18
+     ("variation B"): lines stay left-flush to EACH OTHER (ragged right,
+     the normal verse-block look), but the block itself is only as wide as
+     its longest line, so centering it lands the actual visual mass of the
+     text at true center — not an oversized box with the text stranded at
+     its left edge. Found live: the old flat `width:var(--fs-width)` box
+     centered fine as a BOX, but every .fs-line inside still packed left
+     (flex default justify-content:flex-start, and text-align doesn't
+     reach into flex children) — measured against the .fs-chrome toolbar
+     below it (genuinely centered via left:50%), the stanza sat visibly
+     left of it. --fs-width now caps the block as a wrap ceiling instead
+     of setting it outright — same slider, same 30–100% range, still
+     meaningful once real freeform lines are long enough to wrap. */
+  .fs-stanza {
+    width: fit-content;
+    max-width: var(--fs-width, 60%);
+    text-align: left;
+    padding: 0 40px;
+  }
+  .fs-line {
+    font-size: calc(22px * var(--fs-scale, 1));
+    line-height: 1.85;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+  /* количество строк — owner's own spec, 2026-07-18: "даже если строфа
+     большая, можем все равно фиксированное количество строк настраивать"
+     — hides lines past N rather than removing them, driven by the
+     "Строк" slider in .fs-chrome (see JS). Capped at the 4 demo lines
+     actually in the markup here; a live generator would size the slider
+     to its own real stanza length instead. */
+  .fs-line.fs-line-hidden { display: none; }
+  .fs-line .fs-letter {
+    font-size: 0.45em;
+    color: var(--border-soft);
+    min-width: 14px;
+  }
+  .fs-line .rhyme-tail { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+
+  .fs-chrome {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 8px 18px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--canvas);
+    opacity: 0.25;
+    transition: opacity 0.18s var(--ease);
+  }
+  .freestyle-panel:hover .fs-chrome { opacity: 1; }
+  .fs-chrome button {
+    appearance: none; background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 12px; transition: color 0.12s var(--ease);
+  }
+  .fs-chrome button:hover { color: var(--ink); }
+  /* скорость фристайла — lives ONLY here now, not duplicated in Параметры
+     (owner's own correction, 2026-07-18: "настройка скорости фристайла
+     пусть будет только в фристайле все же"). Reuses the same hover-popover
+     mechanism as the settings-toolbar (.tool-pill-wrap/.tool-popover). */
+  .fs-chrome .fs-speed {
+    font-size: 10px;
+    color: var(--muted-soft);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: var(--radius);
+    transition: background-color 0.12s var(--ease);
+  }
+  .fs-exit-hint { position: absolute; top: 24px; right: 28px; font-size: 9px; color: var(--border-soft); opacity: 0.5; }
+
+  /* playback (Пауза/Следующая) vs settings (speed/строки/текст/визуал) —
+     split apart specifically so recording can hide the fussy config
+     controls while leaving the controls you actually drive a live
+     recording WITH still on screen (owner's own correction, 2026-07-18:
+     "ты когда запись жмешь кнопка запуска и прочие ведь пропадают это не
+     ок" — the old single .fs-chrome-controls wrapper hid Пауза/Следующая
+     too, which made it impossible to run the freestyle you're supposedly
+     recording). */
+  .fs-playback, .fs-settings { display: flex; align-items: center; gap: 18px; }
+
+  .fs-record-btn {
+    appearance: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    transition: color 0.12s var(--ease);
+  }
+  .fs-record-btn:hover { color: var(--ink); }
+  .fs-record-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    transition: background-color 0.12s var(--ease);
+  }
+  /* recording — only .fs-settings hides (owner's own spec: "настройки не
+     видно"); .fs-playback stays up since you still need to run the show
+     while it's being recorded. The dot fills solid and blinks (reuses
+     .fake-cursor's own @keyframes blink) as the only sign it's live. */
+  .freestyle-panel.recording .fs-settings { display: none; }
+  .freestyle-panel.recording .fs-record-btn { color: var(--ink); }
+  .freestyle-panel.recording .fs-record-dot { background: var(--ink); animation: blink 1s step-end infinite; }
+
+  /* ================================================== EDITOR / PIPELINE (stub shell shared) */
+
+  .stub-layout { flex: 1; display: flex; min-width: 0; min-height: 0; }
+
+  .stub-sidebar {
+    position: relative;
+    width: 220px;
+    min-width: 220px;
+    max-width: 45%;
+    min-height: 0;
+    border-right: 1px solid var(--border-subtle);
+    padding: 20px 18px;
+    overflow-y: auto;
+    /* the structural half of the collapse/expand motion — the content
+       fade is driven by JS (setDockCollapsed), this transition is what
+       actually moves the rail's own width/padding smoothly instead of
+       snapping between 220px and 44px. */
+    transition: width var(--dur-panel) var(--ease-soft), padding var(--dur-panel) var(--ease-soft);
+  }
+
+  /* both side docks collapse to a slim rail — owner's own spec, 2026-07-18:
+     "боковые окна в редакторах сворачиваемые полностью в топ бары но
+     могут и в таком постоянном режиме находиться как щас". Two triggers
+     share this one state: a manual toggle (always available, either
+     direction) and an automatic one keyed off viewport width (see
+     autoCollapseEditorDocks() in the MODE MOTION script) — once the owner
+     manually picks a state, JS stops overriding it on resize, matching
+     "могут... находиться как щас" (the open, current-default form stays a
+     real standing choice, not just a transient state auto-collapse can
+     stomp on). Collapsed width is fixed regardless of the panel's own
+     resizable width — there's nothing to preserve once its content is
+     hidden. min-width/max-width pinned alongside width because
+     .stub-sidebar's own min-width:220px would otherwise win the cascade.
+     .workspace joined this same shared rule 2026-07-19 when Генератор's
+     избранное/история dock became collapsible too (see .workspace's own
+     comment above) — same rail width, same override machinery, just
+     starting collapsed by default instead of expanded (set in the HTML). */
+  .stub-sidebar.collapsed,
+  .stub-pipeline-dock.collapsed,
+  .workspace.collapsed {
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    padding: 16px 10px 0;
+    overflow: hidden;
+    cursor: pointer;
+  }
+  /* !important earns its keep here — found live: .sidebar-tab-panel.active
+     carries its own `display:block` at the same two-class specificity as
+     this rule, defined later in the sheet, so it silently won the cascade
+     tie and kept rendering (clipped, not hidden) inside the 44px rail.
+     This rule has to unconditionally beat ANY other display value a child
+     might carry, from any state combination, not just the one active
+     panel found live — that's what the override is for. */
+  .stub-sidebar.collapsed > *,
+  .stub-pipeline-dock.collapsed > *,
+  .workspace.collapsed > * {
+    display: none !important;
+  }
+  .stub-sidebar.collapsed .dock-collapse-btn,
+  .stub-pipeline-dock.collapsed .dock-collapse-btn,
+  .workspace.collapsed .dock-collapse-btn,
+  .stub-sidebar.collapsed .dock-collapsed-label,
+  .stub-pipeline-dock.collapsed .dock-collapsed-label,
+  .workspace.collapsed .dock-collapsed-label {
+    display: flex !important;
+  }
+
+  /* the toggle itself — same bordered-square treatment as .tool-pill--icon
+     elsewhere, so it reads as "a button" rather than a bespoke control.
+     Expanded state: sits inline at the top of the panel, pointing the
+     direction that closes it (left dock closes left, right dock closes
+     right — points toward the edge it's collapsing INTO). Collapsed
+     state: the whole rail is clickable (see JS) so the button's own arrow
+     just needs to point the reopening direction; :not(.collapsed) keeps
+     the expanded arrow from also matching inside the collapsed rule
+     above's `display:flex` override. */
+  .dock-collapse-btn {
+    appearance: none;
+    background: none;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    width: 22px;
+    height: 22px;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: background-color 0.12s var(--ease);
+  }
+  .dock-collapse-btn:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .stub-sidebar > .dock-collapse-btn { display: flex; margin-bottom: 14px; }
+  .stub-pipeline-dock > .dock-collapse-btn { display: flex; margin-left: auto; margin-bottom: 14px; }
+  .workspace > .dock-collapse-btn { display: flex; margin-bottom: 14px; }
+
+  /* only visible once collapsed — see the .collapsed > * override above,
+     which makes both this and .dock-collapse-btn the sole survivors. */
+  .dock-collapsed-label {
+    display: none;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted-soft);
+    white-space: nowrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  /* Заметки/Избранное/История tab-switcher in the editor's sidebar (owner's
+     own spec, 2026-07-18: "всегда слева в одном столбце — можно как
+     вкладки переключать"). Same typographic treatment as .panel-heading
+     (which it replaces here) so it doesn't read as a new, different kind
+     of label — just a clickable, stateful version of it. */
+  /* wraps to a second row rather than clipping — 4 labels (once
+     "Библиотека" replaced the shorter "Заметки") no longer fit this
+     220px sidebar on one line; found live when "Пайплайны" was entirely
+     invisible and "История" was cut mid-word. */
+  .sidebar-tabs { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 14px; }
+  .sidebar-tab {
+    appearance: none;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted-soft);
+    cursor: pointer;
+    transition: color 0.12s var(--ease);
+  }
+  .sidebar-tab:hover { color: var(--muted); }
+  .sidebar-tab.active { color: var(--ink); }
+
+  .sidebar-tab-panel { display: none; }
+  .sidebar-tab-panel.active { display: block; }
+  .sidebar-tab-panel .fav-search { margin-bottom: 12px; }
+
+  /* generation controls, unified with the stats icon into ONE bordered
+     block at the bottom of the main content area (owner's own
+     correction, 2026-07-18: "в библиотеке внизу настройки алгоритм
+     классика строфа и прочие настройки - их перемести в то же место
+     вниз где и статистика в единый блок собери") — this used to be a
+     separate duplicate row inside the Библиотека sidebar; now it's
+     merged into .editor-stats-dock below instead. No popover-direction
+     override needed here (unlike the old sidebar version) — this dock
+     sits near the BOTTOM of the viewport, same as Генератор's own
+     toolbar, so the default upward-opening .tool-popover is already
+     correct. */
+  /* breathing room matched to the Генератор toolbar this is functionally
+     identical to (audit fix — it kept a cramped 2px gap / 4px padding
+     from when it lived inside the 220px Библиотека sidebar; out here in
+     the open bottom-center it just read as pinched). */
+  .editor-dock-frame {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: 5px 10px;
+  }
+
+  .tree { display: flex; flex-direction: column; gap: 2px; }
+  .tree-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 6px;
+    border-radius: var(--radius);
+    font-size: 11.5px;
+    cursor: default;
+    transition: background-color 0.12s var(--ease);
+  }
+  .tree-item:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+  .tree-item.selected { background: var(--ink); color: var(--canvas); }
+  .tree-item .tree-caret { width: 9px; font-size: 9px; color: var(--muted-soft); }
+  .tree-item.selected .tree-caret { color: var(--canvas); }
+  .tree-item .tree-count { margin-left: auto; font-size: 9px; color: var(--muted-soft); font-variant-numeric: tabular-nums; }
+  .tree-item.selected .tree-count { color: var(--canvas); opacity: 0.7; }
+  .tree-children { margin-left: 17px; display: flex; flex-direction: column; gap: 2px; }
+  .tree-locked { margin-left: 5px; font-size: 9px; color: var(--muted-soft); }
+
+  /* CSS Grid with .stub-main-head and .stanza-col sharing ONE cell (grid-
+     area:1/1), not stacked flex siblings — owner's own correction,
+     2026-07-18: "отцентрируй нормально тексты на генераторе и на
+     редакторе чтоб они в одной точке своего экрана находились". Found
+     live: with the old flex-column stack, the title (76.5px, in normal
+     flow above the stanza) pushed .stanza-col's centering zone down —
+     Генератор has NOTHING above its own stanza-col (topbar is a page-level
+     sibling, not inside <main>), so the two tabs' "centered" text landed
+     60px apart vertically (measured: 428px vs 488px in a 900px-tall
+     viewport) despite both using the literal same centering technique.
+     Overlapping grid items solve this at the root: the title floats over
+     the top of the cell (align-self:start) without consuming space the
+     stanza-col centers within, so .stanza-col's centering zone becomes
+     the FULL cell — bounded top/bottom by the exact same landmarks
+     Генератор's own zone uses (top: flush with <main>, no padding here —
+     .stub-main-head carries its own inset instead; bottom: 116px, matching
+     Генератор's own measured chrome-reserved space, not the old arbitrary
+     100px), so the two verified back to an EXACT pixel match afterward. */
+  .stub-main {
+    flex: 1; min-width: 0; min-height: 0;
+    display: grid;
+    padding: 0 40px 116px;
+    overflow-y: auto;
+  }
+  .stub-main-head {
+    grid-area: 1 / 1;
+    align-self: start;
+    justify-self: center;
+    width: 100%; max-width: var(--content-max-width);
+    margin-top: 28px;
+  }
+
+  /* the note title is the one genuinely working control on an otherwise
+     inert stub tab — owner's own correction, 2026-07-18: "название...
+     чтобы он тоже был редактируемый". A first pass sized this up at 22px
+     to read as a clear heading — owner's own correction, same day: "ты
+     неправильно сделал заголовок... он рядом с основным текстом строфы и
+     прошлый шрифт и размер были лучше" — back to the original 15px/no
+     extra height, the hierarchy comes from the hover/focus underline and
+     editability instead of sheer size. display:inline-block keeps that
+     underline hugging the text itself rather than stretching the full
+     62ch column width the way a block-level h1's border would. */
+  .note-title {
+    display: inline-block;
+    max-width: 100%;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.3;
+    margin: 0 0 20px;
+    padding: 1px 0;
+    border-bottom: 1px solid transparent;
+    cursor: text;
+    outline: none;
+    transition: border-color 0.12s var(--ease);
+  }
+  .note-title:hover { border-bottom-color: var(--border-soft); }
+  .note-title:focus { border-bottom-color: var(--ink); }
+
+  /* the shared .stanza-col (see the HTML comment where it's authored, in
+     #tab-settings) lands here via parkStanza() and shares .stub-main-head's
+     grid cell (grid-area:1/1), centering itself vertically WITHIN that
+     cell via align-self — the cell is the full available height, unreduced
+     by the title, which is what makes this land at the same point as
+     Генератор's own stanza (see the .stub-main comment above). width:100%
+     keeps it stretched to the cell's full width (default grid justify-self)
+     so .stanza-frame's own width:100%/max-width:62ch centers correctly
+     within it, same as before. .line-row keeps its Генератор styling
+     (font-size/line-height) since it's the literal same element, but
+     there's nothing to click here — the favoriting handler is scoped to
+     #tab-settings .line-row only, and this same node passes through both
+     — so pointer-events is turned off entirely (not just the cursor/hover
+     cosmetics) to make sure a click landing here while parked can't reach
+     that handler and silently favorite a line from the read-only stub. */
+  #tab-editor .stanza-col { grid-area: 1 / 1; align-self: center; width: 100%; }
+  #tab-editor .line-row { cursor: default; pointer-events: none; }
+  #tab-editor .line-row:hover { background: none; }
+  /* the "special symbols" retract here — owner's own spec, 2026-07-18:
+     "специальные символы... вьезжают в этот текст вправо и скрываются, а
+     текст подъезжает влево". Keyed off a JS-toggled .is-editor class on
+     .stanza-col, NOT the #tab-editor ancestor — found live: an ancestor
+     selector changes value in the SAME synchronous tick as parkStanza()'s
+     reparent, with no committed frame in between, so the browser had
+     nothing to transition FROM and just snapped straight to the end state
+     (measured: width/opacity already at their final 0 one tick after the
+     click, no interpolation at all). The class toggle happens as its own
+     later step in switchTo, after a forced-reflow read splits it from the
+     reparent — same offsetWidth idiom seatIndicator() already uses below —
+     so there's an actual committed "still expanded" frame for this to
+     animate away from. */
+  .stanza-col.is-editor .line-prefix { width: 0; opacity: 0; margin-right: 0; transform: translateX(6px); }
+  .stanza-col.is-editor .line-text .rhyme-tail { text-decoration-color: transparent; }
+  .fake-cursor { display: inline-block; width: 1px; height: 1em; background: var(--ink); vertical-align: text-bottom; animation: blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* right dock (Пайплайн, 220px, see .stub-pipeline-dock below) now sits
+     at the viewport's right edge in the Editor tab, so anything else
+     pinned to "right" there has to clear it — owner's own correction,
+     2026-07-18: "сделай его постоянной вкладкой справа в редакторе". */
+  .autosave-tag {
+    position: fixed;
+    bottom: 22px;
+    right: 250px;
+    font-size: 9.5px;
+    color: var(--muted-soft);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    /* tracks the pipeline dock's own width (see syncEditorDockOffsets in
+       the script) — this has to move in step with it, same duration/curve
+       as the dock's own width transition, or it snaps to its new spot
+       while the dock is still visibly sliding to its final width. */
+    transition: right var(--dur-panel) var(--ease-soft);
+  }
+
+  /* generation settings + stats, main content area, centered within the
+     space between the two 220px side panels. bottom:52px — corrected
+     2026-07-19 (owner: "панель внизу в редакторе и те же настройки в
+     генераторе находятся на разной высоте это глаза режет"): the old 30px
+     matched Настройки's toolbar-row height, not its actual CENTER —
+     measured live at 1280×720, Настройки's .theme-bar-inner (88px tall,
+     input row + pill row stacked) centers at y=648, this 40px single-row
+     frame at the old 30px centered at y=670, a 22px mismatch. 52px lands
+     this frame's center on the same y=648 at that same test size; the two
+     rows are still genuinely different heights (one stacks an input row,
+     one doesn't) so they were never going to match exactly, but the
+     shared center is what the eye actually tracks jumping between tabs.
+     pointer-events: none on the wide wrapper so it doesn't block clicks on
+     the note body underneath it; the frame itself re-enables
+     pointer-events. */
+  .editor-stats-dock {
+    position: fixed;
+    bottom: 52px;
+    left: 220px;
+    right: 220px;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+    /* same reasoning as .autosave-tag's own copy of this — stays in step
+       with both docks' width transition instead of snapping ahead of it. */
+    transition: left var(--dur-panel) var(--ease-soft), right var(--dur-panel) var(--ease-soft);
+  }
+  .editor-stats-dock .editor-dock-frame { pointer-events: auto; }
+  .autosave-tag .dot { width: 4px; height: 4px; border-radius: 50%; background: var(--muted-soft); }
+
+  /* Пайплайн — permanent, non-closable right-hand dock in the Editor tab
+     (owner's own correction, 2026-07-18: "пайплайн не делай отдельной
+     вкладкой сверху - сделай его постоянной вкладкой справа в редакторе
+     которая незакрываема"). Same width/border/padding treatment as
+     .stub-sidebar on the left, mirrored, for symmetry. */
+  .stub-pipeline-dock {
+    width: 220px;
+    min-width: 220px;
+    min-height: 0;
+    border-left: 1px solid var(--border-subtle);
+    padding: 20px 18px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    /* see .stub-sidebar's own copy of this rule for why it's here. */
+    transition: width var(--dur-panel) var(--ease-soft), padding var(--dur-panel) var(--ease-soft);
+  }
+  /* styled like .sidebar-tab.active (same 10px/uppercase/0.16em treatment)
+     but not a button — there's nothing to switch to, it's always on. The
+     lock glyph reuses .tree-locked's own "can't remove this" language. */
+  .pipeline-dock-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink);
+    margin-bottom: 18px;
+  }
+
+  /* pipeline pass cards */
+  .pipeline-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; gap: 20px; }
+  .stub-pipeline-dock .pipeline-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .profile-toggle { display: flex; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 3px; font-size: 10px; }
+  .profile-toggle span { padding: 5px 12px; border-radius: var(--radius); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-soft); }
+  .profile-toggle span.on { background: var(--ink); color: var(--canvas); }
+
+  .pass-seq { display: flex; flex-direction: column; }
+  .pass-card {
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    transition: border-color 0.12s var(--ease);
+  }
+  .pass-card:hover { border-color: var(--border-soft); }
+  .pass-card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .pass-card-head .pass-name { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .pass-card-head .pass-idx { font-size: 10px; color: var(--muted-soft); font-variant-numeric: tabular-nums; }
+  .pass-card-specs { display: flex; gap: 16px; font-size: 10.5px; color: var(--muted); flex-wrap: wrap; }
+  .pass-card-specs span b { color: var(--ink); font-weight: 400; }
+
+  .pass-joiner { display: flex; flex-direction: column; align-items: center; padding: 6px 0; gap: 3px; }
+  .pass-joiner .joiner-line { width: 1px; height: 14px; background: var(--border-soft); }
+  .pass-joiner .joiner-label {
+    font-size: 9px; color: var(--muted-soft); text-transform: uppercase; letter-spacing: 0.1em;
+    border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 3px 10px;
+  }
+
+  .pass-add {
+    margin-top: 16px;
+    align-self: flex-start;
+  }
+
+  .pipeline-run-bar {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .stub-pipeline-dock .pipeline-run-bar { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .stub-pipeline-dock .pipeline-run-bar .pill-btn { align-self: stretch; text-align: center; }
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <div class="wordmark">nakedlunch</div>
+    <nav class="tabs" role="tablist" aria-label="Режим">
+      <div class="tab-indicator" id="tab-indicator" aria-hidden="true"></div>
+      <button class="tab-btn" data-target="freestyle" role="tab">Фристайл</button>
+      <button class="tab-btn active" data-target="settings" role="tab" aria-selected="true">Генератор</button>
+      <button class="tab-btn" data-target="editor" role="tab">Редактор<span class="tab-stub-flag">макет</span></button>
+    </nav>
+    <!-- date/time (owner's own correction, 2026-07-18: same font as the
+         Избранное/История corner-links under the keyword input —
+         .corner-link: 10px, muted-soft, tabular numerals) plus the dark
+         theme toggle, directly to its left. -->
+    <div class="topbar-right">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Тёмная тема">
+        <svg viewBox="0 0 16 16" width="12" height="12">
+          <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.3" />
+          <path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor" />
+        </svg>
+      </button>
+      <div class="topbar-clock">18 июн 05:07</div>
+    </div>
+  </header>
+
+  <div class="body-row" id="body-row">
+  <main>
+
+    <!-- ============================================= FREESTYLE ============================================= -->
+    <section class="tab-panel" id="tab-freestyle">
+      <div class="freestyle-panel">
+        <div class="fs-exit-hint">ESC — выход</div>
+        <div class="fs-stanza">
+          <div class="fs-line"><span class="fs-letter">а</span><span>Анжеро-Судженска в Кемер<span class="rhyme-tail">овской</span></span></div>
+          <div class="fs-line"><span class="fs-letter">б</span><span>там северный Кувейт и Клонд<span class="rhyme-tail">айк</span></span></div>
+          <div class="fs-line"><span class="fs-letter">а</span><span>бить и щекотать все т<span class="rhyme-tail">еми</span></span></div>
+          <div class="fs-line"><span class="fs-letter">б</span><span>парике из Л<span class="rhyme-tail">ондона</span> и с</span></div>
+        </div>
+        <div class="fs-chrome">
+          <!-- record a screencast of freestyle — owner's own spec,
+               2026-07-18: "записывает скринкаст фристайла (настройки не
+               видно и пока запись не закончится сколько бы я не
+               останавливал и не настраивал - оно пишет)". Visual stub
+               only for now, per the owner's own instruction ("пока
+               реализуем эту логику визуально а так запомним просто") —
+               clicking toggles normally here. A real build should make
+               stopping mid-recording actually impossible (disable the
+               button, ignore other input) rather than a plain toggle. -->
+          <button class="fs-record-btn" id="fs-record-btn" aria-label="Записать скринкаст фристайла">
+            <span class="fs-record-dot"></span>
+            <span class="fs-record-label">запись</span>
+          </button>
+
+          <!-- playback stays visible even while recording (owner's own
+               correction, 2026-07-18 — see .fs-playback/.fs-settings
+               comment in the CSS above for why this is split off from
+               settings now). -->
+          <div class="fs-playback">
+            <button aria-label="Пауза">◼</button>
+            <button aria-label="Следующая строфа">▶</button>
+          </div>
+
+          <div class="fs-settings" id="fs-settings">
+            <div class="tool-pill-wrap">
+              <span class="fs-speed">3.8 с / строфа</span>
+              <div class="tool-popover">
+                <div class="field-label"><span>Скорость фристайла</span><span class="val">3.8с</span></div>
+                <input type="range" min="1" max="15" step="0.7" value="3.8" />
+                <div class="range-scale"><span>быстро</span><span>медленно</span></div>
+              </div>
+            </div>
+
+            <!-- количество строк — owner's own spec, 2026-07-18: "даже
+                 если строфа большая, можем все равно фиксированное
+                 количество строк настраивать". Capped at 4 — see the
+                 .fs-line-hidden CSS comment above. -->
+            <div class="tool-pill-wrap">
+              <span class="fs-speed" id="fs-linecount-pill">Строк: 4</span>
+              <div class="tool-popover">
+                <div class="field-label"><span>Количество строк</span><span class="val">4</span></div>
+                <input type="range" min="1" max="4" step="1" value="4" id="fs-linecount-input" />
+                <div class="range-scale"><span>меньше</span><span>больше</span></div>
+              </div>
+            </div>
+
+            <!-- размер шрифта / положение в пространстве — owner's own
+                 spec, 2026-07-18: "размер шрифта его положение в
+                 пространстве (выравнивание по центру по левому краю,
+                 размер блока текста и тп - ползунками, привязано к
+                 размеру приложения в процентном соотношении - в любом
+                 размере экрана работает)". Both sliders drive % / ratio
+                 custom properties on .freestyle-panel, not fixed px —
+                 see the CSS comment above .freestyle-panel. -->
+            <div class="tool-pill-wrap">
+              <span class="fs-speed">Текст</span>
+              <div class="tool-popover">
+                <div class="field-group">
+                  <div class="field-label"><span>Размер шрифта</span><span class="val">100%</span></div>
+                  <input type="range" min="50" max="200" step="5" value="100" id="fs-fontsize-input" />
+                  <div class="range-scale"><span>меньше</span><span>больше</span></div>
+                </div>
+                <div class="field-group">
+                  <div class="field-label"><span>Ширина блока</span><span class="val">60%</span></div>
+                  <input type="range" min="30" max="100" step="5" value="60" id="fs-width-input" />
+                  <div class="range-scale"><span>уже</span><span>шире</span></div>
+                </div>
+                <div class="field-group">
+                  <div class="field-label"><span>Выравнивание</span></div>
+                  <div class="profile-toggle" id="fs-align-toggle">
+                    <span class="on" data-align="center">По центру</span>
+                    <span data-align="left">По левому краю</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Visual Lab — owner's own spec, 2026-07-18: "заложить в
+                 дизайне интеграцию с той визуальной штукой... визуал лаб
+                 кажется, концепция в том чтоб эти все эффекты прямо
+                 транслировать на этот экран фристайла вместо текста либо
+                 иметь прям в приложении возможность редачить визуал
+                 текста". Design groundwork only, same "макет" spirit as
+                 Редактор/Пайплайн — no actual integration exists yet. -->
+            <div class="tool-pill-wrap">
+              <span class="fs-speed">Визуал<span class="tab-stub-flag">макет</span></span>
+              <div class="tool-popover info-only">Интеграция с Visual Lab — задел на будущее. Позже: транслировать визуальные эффекты сюда вместо текста, либо редактировать визуал текста прямо в приложении.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================= SETTINGS (default) ============================================= -->
+    <section class="tab-panel active" id="tab-settings">
+      <div class="settings-inner">
+
+        <div class="stanza-col">
+          <div class="stanza-frame">
+            <div class="stanza-block">
+              <div class="line-row"><span class="line-prefix lead">01 а nl</span><span class="line-text">Анжеро-Судженска в Кемер<span class="rhyme-tail">овской</span></span></div>
+              <div class="line-row"><span class="line-prefix">02 б nl</span><span class="line-text">там северный Кувейт и Клонд<span class="rhyme-tail">айк</span></span></div>
+              <div class="line-row"><span class="line-prefix">03 а nl</span><span class="line-text">бить и щекотать все т<span class="rhyme-tail">еми</span></span></div>
+              <div class="line-row"><span class="line-prefix">04 б nl</span><span class="line-text">парике из Л<span class="rhyme-tail">ондона</span> и с</span></div>
+              <div class="line-row"><span class="line-prefix">05 в nl</span><span class="line-text">дерьмо же ты! — бросил Оск<span class="rhyme-tail">ар</span></span></div>
+              <div class="line-row"><span class="line-prefix">06 в nl</span><span class="line-text">отсидел в тюрьме ЮАР. Очень и</span></div>
+              <div class="line-row"><span class="line-prefix">07 г nl</span><span class="line-text">в скалах Коктебеля в 1970-ом, там на</span></div>
+              <div class="line-row"><span class="line-prefix">08 г nl</span><span class="line-text">я вообще написал в 1982-<span class="rhyme-tail">ом</span></span></div>
+              <div class="line-row"><span class="line-prefix">09 д nl</span><span class="line-text">Я всегда умел раб<span class="rhyme-tail">отать</span> и</span></div>
+              <div class="line-row"><span class="line-prefix">10 е nl</span><span class="line-text">Стоило все это коп<span class="rhyme-tail">ейки</span></span></div>
+              <div class="line-row"><span class="line-prefix">11 е nl</span><span class="line-text">Моя мама евр<span class="rhyme-tail">ейка</span>. Я</span></div>
+              <div class="line-row"><span class="line-prefix">12 д nl</span><span class="line-text">кончится раб<span class="rhyme-tail">ота</span> для меня</span></div>
+              <div class="line-row"><span class="line-prefix">13 ж nl</span><span class="line-text">снизу, подушки он сбр<span class="rhyme-tail">осил</span> на</span></div>
+              <div class="line-row"><span class="line-prefix">14 ж nl</span><span class="line-text">но таких вопр<span class="rhyme-tail">осиков</span> он не</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="theme-bar">
+          <div class="theme-bar-inner">
+            <div class="input-card">
+              <div class="input-row">
+                <input type="text" placeholder="слово или !слово" />
+                <button class="icon-btn" aria-label="Сгенерировать">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 10 4 15 9 20"></polyline>
+                    <path d="M20 4v7a4 4 0 0 1-4 4H4"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="settings-toolbar">
+              <div class="tool-pill-wrap">
+                <button class="tool-pill" id="classic-algo-btn">Алгоритм <span class="val">▾</span></button>
+                <div class="tool-popover tool-popover--select">
+                  <button class="select-option" data-label="Классика">Классика</button>
+                  <button class="select-option selected" data-label="Алгоритм">Алгоритм</button>
+                </div>
+              </div>
+
+              <div class="tool-pill-wrap">
+                <button class="tool-pill tool-pill--icon" aria-label="Строфа: Онегинская">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="4" y1="6" x2="20" y2="6"></line>
+                    <line x1="4" y1="12" x2="14" y2="12"></line>
+                    <line x1="4" y1="18" x2="17" y2="18"></line>
+                  </svg>
+                </button>
+                <div class="tool-popover info-only">Онегинская строфа · абабввггдееджж<br />14 строк(и) · слоги 8–9</div>
+              </div>
+
+              <div class="tool-pill-wrap">
+                <button class="tool-pill tool-pill--icon" aria-label="Параметры">⚙</button>
+                <div class="tool-popover tool-popover--grid">
+                  <div class="field-group">
+                    <div class="field-label"><span>Источники</span><span class="val">1.00</span></div>
+                    <input type="range" min="0" max="1" step="0.05" value="1" />
+                    <div class="range-scale"><span>generative</span><span>input</span></div>
+                  </div>
+                  <div class="field-group">
+                    <div class="field-label"><span>Точность рифм</span><span class="val">0.10</span></div>
+                    <input type="range" min="0" max="1" step="0.05" value="0.1" />
+                    <div class="range-scale"><span>точные</span><span>мягкие</span></div>
+                  </div>
+                  <div class="field-group">
+                    <div class="field-label"><span>Мелодичность</span><span class="val">0.35</span></div>
+                    <input type="range" min="0" max="1" step="0.05" value="0.35" />
+                    <div class="range-scale"><span>рваное</span><span>звучное</span></div>
+                  </div>
+                  <div class="field-group">
+                    <div class="field-label"><span>Метр</span><span class="val">0.50</span></div>
+                    <input type="range" min="0" max="1" step="0.05" value="0.5" />
+                    <div class="range-scale"><span>рваной</span><span>ровный</span></div>
+                  </div>
+                  <div class="field-group">
+                    <div class="field-label"><span>Банальность</span><span class="val">0.50</span></div>
+                    <input type="range" min="0" max="1" step="0.05" value="0.5" />
+                    <div class="range-scale"><span>строже</span><span>мягче</span></div>
+                  </div>
+                  <div class="field-group">
+                    <div class="field-label"><span>Разнообразие</span><span class="val">0.50</span></div>
+                    <input type="range" min="0" max="1" step="0.05" value="0.5" />
+                    <div class="range-scale"><span>меньше</span><span>больше</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="toolbar-trailing">
+                <!-- owner's own correction, 2026-07-18: "кнопки избранное
+                     и история под панелью поиска не закрывают/открывают а
+                     показывают статистику конкретно по этой теме" — these
+                     no longer toggle the (now permanently open) dock; they
+                     show theme-scoped stats instead, via the same generic
+                     .tool-pill-wrap popover system as everything else. -->
+                <div class="tool-pill-wrap">
+                  <button class="corner-link" id="fav-open-btn">Избранное <span class="corner-count">54</span></button>
+                  <div class="tool-popover info-only">По этой теме — 3 строки в избранном</div>
+                </div>
+                <div class="tool-pill-wrap">
+                  <button class="corner-link" id="history-btn">История <span class="corner-count">3741</span></button>
+                  <div class="tool-popover info-only">По этой теме — 12 генераций · последняя только что</div>
+                </div>
+
+                <div class="stats-orb-wrap">
+                  <button class="stats-orb" aria-label="Статистика">
+                    <svg viewBox="0 0 20 20" width="15" height="15">
+                      <circle cx="10" cy="10" r="8" fill="none" stroke="var(--border-soft)" stroke-width="2" />
+                      <circle cx="10" cy="10" r="8" fill="none" stroke="var(--ink)" stroke-width="2"
+                              stroke-dasharray="50.24" stroke-dashoffset="14" stroke-linecap="round"
+                              transform="rotate(-90 10 10)" />
+                    </svg>
+                  </button>
+                  <div class="stats-popover">
+                    <p class="stats-popover-heading">Статистика</p>
+                    <div class="stats-row"><span>выдача</span><span class="val">350</span></div>
+                    <div class="stats-row"><span>история</span><span class="val">3741</span></div>
+                    <div class="stats-divider"></div>
+                    <p class="stats-popover-heading">Nakedlunch · источники</p>
+                    <div class="stats-row"><span>Бёрроуз</span><span class="val">412 003</span></div>
+                    <div class="stats-row"><span>Буковски</span><span class="val">298 511</span></div>
+                  <div class="stats-row"><span>Смой</span><span class="val">306 314</span></div>
+                  <div class="stats-divider"></div>
+                  <div class="stats-row"><span>всего после фильтра</span><span class="val">1 016 828</span></div>
+                  <div class="stats-row"><span>активных корпусов</span><span class="val">3</span></div>
+                </div>
+              </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================= EDITOR (stub) ============================================= -->
+    <section class="tab-panel" id="tab-editor">
+      <div class="stub-layout">
+        <aside class="stub-sidebar">
+          <!-- draggable wider, same 220px floor as the Генератор dock's
+               own handle (owner's own correction, 2026-07-18: "в
+               редакторе левая панель аналогично"). -->
+          <div class="dock-resize-handle" id="editor-dock-resize-handle"></div>
+          <!-- collapse to a slim rail, manual or automatic — see the
+               .collapsed CSS rule and autoCollapseEditorDocks() in the
+               MODE MOTION script. -->
+          <button class="dock-collapse-btn" id="sidebar-collapse-btn" type="button" aria-label="Свернуть панель">‹</button>
+          <span class="dock-collapsed-label">Библиотека</span>
+          <!-- Заметки/Избранное/История live in ONE column, tab-switched
+               (owner's own spec, 2026-07-18: "в редакторе заметки
+               избранное и история всегда слева в одном столбце — можно
+               как вкладки переключать"). This is a self-contained copy —
+               it doesn't sync with the Генератор tab's own избранное/
+               история dock (that stays exactly as built); the same styles
+               are reused for visual consistency, not the same live data. -->
+
+          <nav class="sidebar-tabs" role="tablist" aria-label="Боковая панель">
+            <button class="sidebar-tab active" data-sidebar-panel="notes" role="tab" aria-selected="true">Библиотека</button>
+            <button class="sidebar-tab" data-sidebar-panel="favorites" role="tab" aria-selected="false">Избранное</button>
+            <button class="sidebar-tab" data-sidebar-panel="history" role="tab" aria-selected="false">История</button>
+          </nav>
+
+          <div class="sidebar-tab-panel active" data-sidebar-panel-content="notes">
+            <div class="tree">
+              <div class="tree-item"><span class="tree-caret">▾</span><span>Все заметки</span><span class="tree-count">28</span></div>
+              <div class="tree-item"><span class="tree-caret">▾</span><span>Тексты</span><span class="tree-count">14</span></div>
+              <div class="tree-children">
+                <div class="tree-item selected"><span class="tree-caret"></span><span>Панк</span><span class="tree-count">6</span></div>
+                <div class="tree-item"><span class="tree-caret"></span><span>Баллады</span><span class="tree-count">5</span></div>
+                <div class="tree-item"><span class="tree-caret">▸</span><span>Черновики</span><span class="tree-count">3</span></div>
+              </div>
+              <div class="tree-item"><span class="tree-caret"></span><span>Разное</span><span class="tree-count">6</span></div>
+              <!-- Пайплайны folder — owner's own correction, 2026-07-18:
+                   "пайплайны не отдельной вкладкой наравне с другими надо
+                   а в файловую систему библиотеки как папку засунуть".
+                   Fixed/undeletable (🔒, same as before), just relocated
+                   into the tree instead of living as a 4th sidebar-tab. -->
+              <div class="tree-item"><span class="tree-caret"></span><span>Пайплайны</span><span class="tree-count">4</span><span class="tree-locked">🔒</span></div>
+            </div>
+          </div>
+
+          <div class="sidebar-tab-panel" data-sidebar-panel-content="favorites">
+            <input class="fav-search" type="text" placeholder="поиск по избранному…" />
+            <div class="fav-list" data-local-fav-list>
+              <div class="fav-row"><button class="fav-remove" aria-label="Убрать из избранного">−</button><span class="fav-row-text">свою кличку… замечал когда-нибудь, сколько выражений мошенники</span></div>
+              <div class="fav-row"><button class="fav-remove" aria-label="Убрать из избранного">−</button><span class="fav-row-text">назад. но я понял, что не хочу</span></div>
+              <div class="fav-row"><button class="fav-remove" aria-label="Убрать из избранного">−</button><span class="fav-row-text">что я жеста геройского ищу</span></div>
+              <div class="fav-row"><button class="fav-remove" aria-label="Убрать из избранного">−</button><span class="fav-row-text">ментовская утка</span></div>
+              <div class="fav-row"><button class="fav-remove" aria-label="Убрать из избранного">−</button><span class="fav-row-text">химкинский коран</span></div>
+            </div>
+          </div>
+
+          <div class="sidebar-tab-panel" data-sidebar-panel-content="history">
+            <input class="fav-search" type="text" placeholder="поиск по истории…" />
+            <div class="fav-list" data-local-fav-list>
+              <div class="fav-row"><span class="hist-time">18:42</span><span class="fav-row-text">дерьмо же ты! — бросил Оскар, отсидел в тюрьме ЮАР</span></div>
+              <div class="fav-row"><span class="hist-time">18:41</span><span class="fav-row-text">Стоило все это копейки, моя мама еврейка</span></div>
+              <div class="fav-row"><span class="hist-time">18:39</span><span class="fav-row-text">там северный Кувейт и Клондайк, бить и щекотать все теми</span></div>
+              <div class="fav-row"><span class="hist-time">18:35</span><span class="fav-row-text">в скалах Коктебеля в 1970-ом, там на</span></div>
+              <div class="fav-row"><span class="hist-time">18:31</span><span class="fav-row-text">я вообще написал в 1982-ом</span></div>
+            </div>
+          </div>
+        </aside>
+        <div class="stub-main">
+          <div class="stub-main-head">
+            <h1 class="note-title" contenteditable="true" spellcheck="false" data-editable-title>Анжеро-Судженск</h1>
+          </div>
+          <!-- the stanza is NOT authored here — owner's own correction,
+               2026-07-18, superseding the same-day "duplicate the markup,
+               strip the symbols" instruction above: "может надо делать это
+               иначе тогда текст а не прописывать отдельные текста для
+               каждого режима". It's the literal same DOM node as
+               Генератор's, physically moved into this slot at runtime by
+               parkStanza() (see the MODE MOTION script) — one object that
+               transforms, not two authored copies cross-dissolving. The
+               "special symbols" (.line-prefix badges, .rhyme-tail
+               underline) retract via a plain CSS transition keyed off the
+               #tab-editor ancestor selector the instant it lands here. -->
+        </div>
+
+        <!-- Пайплайн — owner's own correction, 2026-07-18: "пайплайн не
+             делай отдельной вкладкой сверху - сделай его постоянной
+             вкладкой справа в редакторе которая незакрываема". Not part
+             of the sidebar-tabs switcher (that group stays
+             Библиотека/Избранное/История) — this is a second, fixed
+             column that's always present and can't be toggled off, tab
+             styling reused from .sidebar-tab.active but non-interactive
+             since there's nothing to switch to. Content is the same
+             pass-seq pipeline builder the old standalone Пайплайн tab
+             held. -->
+        <aside class="stub-pipeline-dock">
+          <button class="dock-collapse-btn" id="pipeline-collapse-btn" type="button" aria-label="Свернуть панель">›</button>
+          <span class="dock-collapsed-label">Пайплайн 🔒</span>
+          <div class="pipeline-dock-tab">Пайплайн <span class="tree-locked">🔒</span></div>
+          <div class="pipeline-header">
+            <div>
+              <p class="panel-heading" style="margin-bottom:4px;">Профиль</p>
+              <p class="field-caption" style="margin:0;">«Ночной панк» · по статистике последних 40 сессий</p>
+            </div>
+            <div class="profile-toggle"><span class="on">Авто</span><span>Свой</span></div>
+          </div>
+
+          <div class="pass-seq">
+            <div class="pass-card">
+              <div class="pass-card-head"><span class="pass-name">Куплет</span><span class="pass-idx">проход 01</span></div>
+              <div class="pass-card-specs">
+                <span>диссонанс <b>0.70</b></span>
+                <span>абаб</span>
+                <span>8–9 слогов</span>
+                <span>2 строфы</span>
+              </div>
+            </div>
+            <div class="pass-joiner"><div class="joiner-line"></div><span class="joiner-label">— припев —</span><div class="joiner-line"></div></div>
+            <div class="pass-card">
+              <div class="pass-card-head"><span class="pass-name">Хук</span><span class="pass-idx">проход 02</span></div>
+              <div class="pass-card-specs">
+                <span>консонанс <b>0.25</b></span>
+                <span>аабб</span>
+                <span>6–7 слогов</span>
+                <span>1 строфа</span>
+              </div>
+            </div>
+            <div class="pass-joiner"><div class="joiner-line"></div><span class="joiner-label">— куплет —</span><div class="joiner-line"></div></div>
+            <div class="pass-card">
+              <div class="pass-card-head"><span class="pass-name">Куплет</span><span class="pass-idx">проход 03</span></div>
+              <div class="pass-card-specs">
+                <span>диссонанс <b>0.70</b></span>
+                <span>абаб</span>
+                <span>8–9 слогов</span>
+                <span>2 строфы</span>
+              </div>
+            </div>
+            <button class="pill-btn ghost pass-add">+ добавить проход</button>
+          </div>
+
+          <div class="pipeline-run-bar">
+            <p class="field-caption" style="margin:0;">повторная фильтрация проходит по всей склейке целиком, не по строфам отдельно</p>
+            <button class="pill-btn disabled">Прогнать пайплайн</button>
+          </div>
+        </aside>
+      </div>
+      <div class="autosave-tag"><span class="dot"></span>сохранено · только что</div>
+
+      <!-- generation settings (Алгоритм/Строфа/Параметры) + stats, unified
+           into ONE block in the MAIN content area (owner's own
+           correction, 2026-07-18: "в библиотеке внизу настройки алгоритм
+           классика строфа и прочие настройки - их перемести в то же
+           место вниз где и статистика в единый блок собери") — fixed at
+           the same 30px-from-bottom height measured live from the
+           Генератор tab's own toolbar, centered within the space between
+           the two 220px side panels. -->
+      <div class="editor-stats-dock">
+        <div class="editor-dock-frame">
+          <div class="tool-pill-wrap">
+            <button class="tool-pill">Алгоритм <span class="val">▾</span></button>
+            <div class="tool-popover tool-popover--select">
+              <button class="select-option" data-label="Классика">Классика</button>
+              <button class="select-option selected" data-label="Алгоритм">Алгоритм</button>
+            </div>
+          </div>
+
+          <div class="tool-pill-wrap">
+            <button class="tool-pill tool-pill--icon" aria-label="Строфа: Онегинская">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="6" x2="20" y2="6"></line>
+                <line x1="4" y1="12" x2="14" y2="12"></line>
+                <line x1="4" y1="18" x2="17" y2="18"></line>
+              </svg>
+            </button>
+            <div class="tool-popover info-only">Онегинская строфа · абабввггдееджж<br />14 строк(и) · слоги 8–9</div>
+          </div>
+
+          <div class="tool-pill-wrap">
+            <button class="tool-pill tool-pill--icon" aria-label="Параметры">⚙</button>
+            <div class="tool-popover tool-popover--grid">
+              <div class="field-group">
+                <div class="field-label"><span>Источники</span><span class="val">1.00</span></div>
+                <input type="range" min="0" max="1" step="0.05" value="1" />
+                <div class="range-scale"><span>generative</span><span>input</span></div>
+              </div>
+              <div class="field-group">
+                <div class="field-label"><span>Точность рифм</span><span class="val">0.10</span></div>
+                <input type="range" min="0" max="1" step="0.05" value="0.1" />
+                <div class="range-scale"><span>точные</span><span>мягкие</span></div>
+              </div>
+              <div class="field-group">
+                <div class="field-label"><span>Мелодичность</span><span class="val">0.35</span></div>
+                <input type="range" min="0" max="1" step="0.05" value="0.35" />
+                <div class="range-scale"><span>рваное</span><span>звучное</span></div>
+              </div>
+              <div class="field-group">
+                <div class="field-label"><span>Метр</span><span class="val">0.50</span></div>
+                <input type="range" min="0" max="1" step="0.05" value="0.5" />
+                <div class="range-scale"><span>рваной</span><span>ровный</span></div>
+              </div>
+              <div class="field-group">
+                <div class="field-label"><span>Банальность</span><span class="val">0.50</span></div>
+                <input type="range" min="0" max="1" step="0.05" value="0.5" />
+                <div class="range-scale"><span>строже</span><span>мягче</span></div>
+              </div>
+              <div class="field-group">
+                <div class="field-label"><span>Разнообразие</span><span class="val">0.50</span></div>
+                <input type="range" min="0" max="1" step="0.05" value="0.5" />
+                <div class="range-scale"><span>меньше</span><span>больше</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="stats-orb-wrap">
+            <button class="stats-orb" aria-label="Статистика">
+              <svg viewBox="0 0 20 20" width="15" height="15">
+                <circle cx="10" cy="10" r="8" fill="none" stroke="var(--border-soft)" stroke-width="2" />
+                <circle cx="10" cy="10" r="8" fill="none" stroke="var(--ink)" stroke-width="2"
+                        stroke-dasharray="50.24" stroke-dashoffset="14" stroke-linecap="round"
+                        transform="rotate(-90 10 10)" />
+              </svg>
+            </button>
+            <div class="stats-popover">
+              <p class="stats-popover-heading">Статистика</p>
+              <div class="stats-row"><span>выдача</span><span class="val">350</span></div>
+              <div class="stats-row"><span>история</span><span class="val">3741</span></div>
+              <div class="stats-divider"></div>
+              <p class="stats-popover-heading">Nakedlunch · источники</p>
+              <div class="stats-row"><span>Бёрроуз</span><span class="val">412 003</span></div>
+              <div class="stats-row"><span>Буковски</span><span class="val">298 511</span></div>
+              <div class="stats-row"><span>Смой</span><span class="val">306 314</span></div>
+              <div class="stats-divider"></div>
+              <div class="stats-row"><span>всего после фильтра</span><span class="val">1 016 828</span></div>
+              <div class="stats-row"><span>активных корпусов</span><span class="val">3</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- owner's own correction, 2026-07-18: "история и избранное показываются
+       всегда в окне генератора без возможности закрыть, заглавия убрать" —
+       always open (.open/.visible/.split baked into the markup, not
+       toggled), no close button, and the heading text is gone. The
+       drag-to-swap grab zone is the pane's own top padding now, not a
+       separate div (owner's own follow-up correction, same day: "ты стер
+       текст но не убрал элемент" — the empty leftover block is gone; see
+       .ws-pane-body::before and the coordinate-gated mousedown handler in
+       makeDraggablePane() below). -->
+  <div class="workspace open collapsed" id="workspace">
+    <div class="dock-resize-handle" id="dock-resize-handle"></div>
+    <!-- collapsed by default now — see .workspace's own CSS comment for
+         why (owner's own correction, 2026-07-19). Same collapse machinery
+         Редактор's docks use: manual toggle, whole rail clickable when
+         collapsed. -->
+    <button class="dock-collapse-btn" id="workspace-collapse-btn" type="button" aria-label="Свернуть панель">‹</button>
+    <span class="dock-collapsed-label">Избранное · История</span>
+    <div class="workspace-panes split" id="workspace-panes">
+      <section class="ws-pane visible" id="pane-fav">
+        <div class="ws-pane-body">
+          <input class="fav-search" type="text" placeholder="поиск по избранному…" />
+          <div class="fav-list">
+            <div class="fav-row"><button class="fav-remove" aria-label="Убрать из избранного">−</button><span class="fav-row-text">свою кличку… замечал когда-нибудь, сколько выражений мошенники</span></div>
+            <div class="fav-row"><button class="fav-remove" aria-label="Убрать из избранного">−</button><span class="fav-row-text">назад. но я понял, что не хочу</span></div>
+            <div class="fav-row"><button class="fav-remove" aria-label="Убрать из избранного">−</button><span class="fav-row-text">что я жеста геройского ищу</span></div>
+            <div class="fav-row"><button class="fav-remove" aria-label="Убрать из избранного">−</button><span class="fav-row-text">ментовская утка</span></div>
+            <div class="fav-row"><button class="fav-remove" aria-label="Убрать из избранного">−</button><span class="fav-row-text">химкинский коран</span></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="ws-divider" id="ws-divider"></div>
+
+      <section class="ws-pane visible" id="pane-history">
+        <div class="ws-pane-body">
+          <input class="fav-search" type="text" placeholder="поиск по истории…" />
+          <div class="fav-list">
+            <div class="fav-row"><span class="hist-time">18:42</span><span class="fav-row-text">дерьмо же ты! — бросил Оскар, отсидел в тюрьме ЮАР</span></div>
+            <div class="fav-row"><span class="hist-time">18:41</span><span class="fav-row-text">Стоило все это копейки, моя мама еврейка</span></div>
+            <div class="fav-row"><span class="hist-time">18:39</span><span class="fav-row-text">там северный Кувейт и Клондайк, бить и щекотать все теми</span></div>
+            <div class="fav-row"><span class="hist-time">18:35</span><span class="fav-row-text">в скалах Коктебеля в 1970-ом, там на</span></div>
+            <div class="fav-row"><span class="hist-time">18:31</span><span class="fav-row-text">я вообще написал в 1982-ом</span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+  </div>
+</div>
+
+<script>
+  // ============================================================ MODE MOTION
+  // Apple-style magic-move between modes (owner's own reference, 2026-07-18:
+  // "анимации систем эппл по плавности и простоте идеальны"). The insight
+  // the owner pointed at — "ряд вещей находится в одинаковых местах но чуть
+  // отличается" — is exactly right: the central stanza lives dead-center in
+  // ALL three modes, only its size/decoration/vertical-position differ. So
+  // the transition treats that stanza as ONE hero element that FLIPs (scales
+  // + slides) from its old geometry to its new, while the surrounding chrome
+  // of each mode cross-dissolves and the Генератор dock forms/dissolves on
+  // the side. Everything is gated on prefers-reduced-motion.
+  //
+  // Генератор/Редактор no longer even HAVE two separate stanzas to FLIP
+  // between — owner's own correction, 2026-07-18: "думаю анимации переходов
+  // должны быть как в дорогом ui слоеные а не с легкими эффектами из
+  // капката... возможно надо делать это иначе тогда текст а не прописывать
+  // отдельные текста для каждого режима". parkStanza() below physically
+  // moves the ONE .stanza-col node into whichever of those two slots is the
+  // target, before the FLIP "after" measurement — so the "special symbols"
+  // (.line-prefix/.rhyme-tail, see their #tab-editor overrides in the CSS)
+  // retract via a plain CSS transition on the same live element the instant
+  // it lands, layered underneath the hero's own translate/scale. Фристайл's
+  // text is structurally a different thing (one running paragraph, not
+  // discrete lines) and keeps the old scale/translate-between-two-elements
+  // illusion — there's nothing to share it with.
+  (function () {
+    var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var tabBtns = Array.prototype.slice.call(document.querySelectorAll('.tab-btn'));
+    var indicator = document.getElementById('tab-indicator');
+    var wsEl = document.getElementById('workspace');
+    // read off the CSS custom properties instead of hardcoding copies —
+    // owner's own correction, 2026-07-18: "продумать единую логику
+    // анимаций". Found live: the exact same spring curve was hardcoded in
+    // three places (--ease-spring here, and again as a raw string in the
+    // popover code), plus a whole second, unnamed duration scale
+    // (FS_SLIDE/FS_REVEAL) that never related to --dur-mode/--dur-panel at
+    // all. One canonical value in CSS, everything else reads it, so there's
+    // nothing left to drift out of sync.
+    var rootStyle = getComputedStyle(document.documentElement);
+    var EASE_SPRING = rootStyle.getPropertyValue('--ease-spring').trim();
+    var DUR_MODE = parseFloat(rootStyle.getPropertyValue('--dur-mode')) * 1000;
+    var DUR_PANEL = parseFloat(rootStyle.getPropertyValue('--dur-panel')) * 1000;
+    var animating = false, pending = null, transitionId = 0;
+
+    // slide the segmented-control highlight onto a button
+    function moveIndicator(btn) {
+      if (!indicator || !btn) return;
+      indicator.style.width = btn.offsetWidth + 'px';
+      indicator.style.transform = 'translateX(' + btn.offsetLeft + 'px)';
+    }
+
+    // the one stanza node, authored once in #tab-settings. parkStanza()
+    // relocates it; it is never cloned, never a second copy.
+    var stanza = document.querySelector('#tab-settings .stanza-col');
+    var stanzaHomeParent = stanza.parentNode;
+    var stanzaHomeAnchor = stanza.nextSibling;
+    var editorTitleHead = document.querySelector('#tab-editor .stub-main-head');
+
+    // anchor the title to the first LINE's own top edge, not the stanza
+    // container's — owner's own spec, 2026-07-18: "привязать заголовок...
+    // чуть выше текста будто это на строку выше а не совсем наверху", then
+    // corrected same day: "заголовок... еще ниже". The first pass measured
+    // against .stanza-col's own box top, but that box has ~20px of internal
+    // space before the first .line-row actually starts (stanza-frame/-block
+    // spacing) — so the real on-screen gap read as one line-height PLUS that
+    // 20px, sitting further from the text than intended. Measuring the
+    // first .line-row's own rendered top instead removes that stray offset,
+    // so the gap really is exactly one line-height, no more. .stanza-col
+    // still has to stay align-self:center and centered against the FULL
+    // cell, untouched by the title's height (that's the whole point of the
+    // overlapping-grid fix a few rounds back — it's what keeps this stanza
+    // pixel-matched to Генератор's), so the title can't just sit in normal
+    // flow above it without reopening that bug; instead it's measured
+    // against the line's actual rendered position and nudged there with a
+    // transform, recomputed wherever that position could have changed (on
+    // parking into the tab, and on resize while the tab is showing).
+    function positionEditorTitle() {
+      if (stanza.parentNode !== stanzaEditorParent) return;
+      var line = stanza.querySelector('.line-row');
+      if (!line) return;
+      var gap = parseFloat(getComputedStyle(line).lineHeight);
+      editorTitleHead.style.transform = 'none';
+      var headBottom = editorTitleHead.getBoundingClientRect().bottom;
+      var lineTop = line.getBoundingClientRect().top;
+      editorTitleHead.style.transform = 'translateY(' + (lineTop - gap - headBottom) + 'px)';
+    }
+    var stanzaEditorParent = document.querySelector('#tab-editor .stub-main');
+
+    // move the shared stanza into "settings" or "editor". Idempotent (a
+    // no-op if it's already there) so it's safe to call on every switchTo
+    // regardless of where the transition actually started. Фристайл isn't
+    // a valid target here on purpose — see the IIFE comment above; the node
+    // just stays wherever it last was parked while Фристайл is showing,
+    // since it's invisible either way (its old panel isn't .active).
+    function parkStanza(where) {
+      if (where === 'editor') {
+        if (stanza.parentNode !== stanzaEditorParent) stanzaEditorParent.appendChild(stanza);
+        var lines = stanza.querySelectorAll('.line-text');
+        var last = lines[lines.length - 1];
+        if (last && !last.querySelector('.fake-cursor')) {
+          var cursorEl = document.createElement('span');
+          cursorEl.className = 'fake-cursor';
+          last.appendChild(cursorEl);
+        }
+        positionEditorTitle();
+      } else if (where === 'settings') {
+        if (stanza.parentNode !== stanzaHomeParent) stanzaHomeParent.insertBefore(stanza, stanzaHomeAnchor);
+        var oldCursor = stanza.querySelector('.fake-cursor');
+        if (oldCursor) oldCursor.remove();
+      }
+    }
+
+    // the shared hero: Генератор/Редактор resolve to the one shared stanza
+    // node (wherever it's currently parked); Фристайл has its own element.
+    function centralText(mode) {
+      if (mode === 'freestyle') return document.querySelector('#tab-freestyle .fs-stanza');
+      return stanza.querySelector('.stanza-block');
+    }
+    function lineFontPx(el) {
+      var line = el.querySelector('.line-row, .fs-line');
+      return line ? parseFloat(getComputedStyle(line).fontSize) : 16;
+    }
+
+    function syncDock(toSettings) {
+      wsEl.classList.toggle('open', toSettings);
+    }
+
+    function switchTo(target, btn) {
+      // mid-transition clicks are QUEUED (last one wins), not applied on top
+      // of a running animation — applying immediately desynced the button
+      // highlight from the actual panel (found live: fast Редактор→Генератор
+      // left the pill on Генератор while the panel stayed on Редактор).
+      if (animating) { pending = { target: target, btn: btn }; return; }
+
+      tabBtns.forEach(function (b) {
+        b.classList.toggle('active', b === btn);
+        b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+      });
+      moveIndicator(btn);
+
+      var next = document.getElementById('tab-' + target);
+      var current = document.querySelector('.tab-panel.active');
+      var toSettings = (target === 'settings');
+      var fromMode = current.id.slice(4);
+
+      if (next === current) { syncDock(toSettings); return; }
+
+      if (prefersReduced) {
+        current.classList.remove('active');
+        next.classList.add('active');
+        if (target === 'settings' || target === 'editor') {
+          parkStanza(target);
+          stanza.classList.toggle('is-editor', target === 'editor');
+        }
+        syncDock(toSettings);
+        return;
+      }
+
+      animating = true;
+      transitionId++;
+      var myTransitionId = transitionId;
+
+      // Freestyle gets its own push transition instead of the shared-hero
+      // morph below — no hero FLIP here, this isn't meant to read as the
+      // same object continuing, it's a mode switch. The original spec here
+      // was a theatrical loading-screen splash (blur, a "nakedlunch
+      // freestyle" label, a hold); that's gone through several rounds of
+      // owner corrections (2026-07-18) down to a plain push, and now shares
+      // its exact model — duration, curve, simultaneity — with the exit
+      // below. See enterFreestyle()'s own comment for the current shape.
+      if (target === 'freestyle') { enterFreestyle(current, next, myTransitionId); return; }
+
+      // leaving Freestyle uses the identical push, mirrored — see
+      // exitFreestyle()'s own comment for the current shape.
+      if (current.id === 'tab-freestyle') { exitFreestyle(current, next, target, myTransitionId); return; }
+
+      var fromSettings = current.id === 'tab-settings';
+
+      // --- BEFORE: capture the hero's screen geometry + size, in its
+      //     CURRENT parent, before anything moves ---
+      var fromText = centralText(fromMode);
+      var fromRect = fromText ? fromText.getBoundingClientRect() : null;
+      var fromFont = fromText ? lineFontPx(fromText) : null;
+
+      // --- show/hide the dock. It's position:absolute now (owner's own
+      //     correction, 2026-07-19 — see .workspace's own CSS comment), so
+      //     unlike the old flex-split version there's no layout to commit
+      //     ahead of the FLIP measurement below — main's width never
+      //     depended on it. Just the fade. ---
+      if (toSettings) {
+        syncDock(true);
+      } else if (fromSettings) {
+        // exact mirror of the entrance below (same duration, same curve,
+        // same 18px travel, run backward) — owner's own correction,
+        // 2026-07-18: this used to fade out alone at a one-off 260ms/plain-
+        // ease that matched neither the entrance nor any named token.
+        wsEl.animate(
+          [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(-18px)' }],
+          { duration: DUR_MODE, easing: EASE_SPRING }
+        ).onfinish = function () {
+            wsEl.classList.remove('open');
+          };
+      }
+
+      // clear any straggler overlay from a prior interrupted transition
+      // before starting this one (belt-and-suspenders with the finalize
+      // timeout below — no panel can ever stay stuck as an overlay).
+      document.querySelectorAll('.tab-panel.leaving').forEach(function (p) {
+        if (p !== current) p.classList.remove('leaving');
+      });
+
+      // incoming takes the normal slot at full opacity immediately; the
+      // outgoing is lifted into an overlay ON TOP (z-index) and fades to 0
+      // via its CSS transition, revealing the incoming beneath. A reveal-
+      // dissolve — no start-at-0 fade-in, so nothing depends on a rAF frame
+      // firing (which the browser throttles when the tab isn't painting, and
+      // which stranded the incoming panel at opacity 0 — found live).
+      next.classList.add('active');
+      current.classList.remove('active');
+      current.classList.add('leaving');
+
+      // relocate the shared stanza into its new home BEFORE the "after"
+      // measurement below — next is already .active (rendered) and current
+      // is still .leaving (rendered, mid-fade), so the node stays live and
+      // visible on both sides of the move.
+      if (target === 'settings' || target === 'editor') parkStanza(target);
+
+      // --- AFTER: FLIP the hero from old geometry → new (translate + scale).
+      //     Center-to-center so it reads as the same block resizing in place.
+      //     This is the LONGEST animation, so the transition guard releases
+      //     when it finishes (or its fallback timeout), never before. ---
+      var toText = centralText(target);
+      var heroAnim = null;
+      if (fromRect && toText) {
+        var toRect = toText.getBoundingClientRect();
+        var dx = (fromRect.left + fromRect.right) / 2 - (toRect.left + toRect.right) / 2;
+        var dy = (fromRect.top + fromRect.bottom) / 2 - (toRect.top + toRect.bottom) / 2;
+        var scale = fromFont / lineFontPx(toText);
+        heroAnim = toText.animate([
+          { transform: 'translate(' + dx + 'px,' + dy + 'px) scale(' + scale + ')' },
+          { transform: 'none' }
+        ], { duration: DUR_MODE, easing: EASE_SPRING });
+      }
+
+      // retract/restore the "special symbols" (.line-prefix, .rhyme-tail)
+      // as their OWN transition, layered under the hero move rather than
+      // baked into the reparent — found live: toggling a class in the same
+      // synchronous tick as parkStanza()'s appendChild gave the browser no
+      // committed "before" frame to transition FROM (measured: width/opacity
+      // were already at their end value one tick after the click, zero
+      // interpolation). Forcing a reflow first (same offsetWidth idiom
+      // seatIndicator() uses below) splits the two into separate frames, so
+      // THIS class change is what actually animates — starting alongside
+      // the hero FLIP but finishing sooner (--dur-panel < --dur-mode), which
+      // is the "layered" feel that was asked for over a flat crossfade.
+      if (target === 'settings' || target === 'editor') {
+        void stanza.offsetWidth;
+        stanza.classList.toggle('is-editor', target === 'editor');
+      }
+
+      // dock forms in from the left when entering Генератор
+      if (toSettings) {
+        wsEl.animate(
+          [{ opacity: 0, transform: 'translateX(-18px)' }, { opacity: 1, transform: 'none' }],
+          { duration: DUR_MODE, easing: EASE_SPRING });
+      }
+
+      // title fades in with the rest of Редактор's chrome instead of
+      // snapping — owner's own correction, 2026-07-19: "заголовок в
+      // редакторе не имеет анимации и ебано появляется совершенно". Only
+      // opacity here, not transform — positionEditorTitle() (called from
+      // parkStanza() above) already owns the title's transform for static
+      // positioning, so this layers a fade under that instead of fighting
+      // it. animateEditorChromeIn() (defined outside this IIFE, near the
+      // dock-resize code) handles the side docks/frame/autosave-tag.
+      if (target === 'editor') {
+        editorTitleHead.animate([{ opacity: 0 }, { opacity: 1 }], { duration: DUR_MODE, easing: EASE_SPRING });
+        animateEditorChromeIn();
+      }
+
+      // finalize exactly once — from whichever fires first, the hero
+      // animation's onfinish (nice path) or a timeout fallback (covers a
+      // missed/interrupted onfinish on the queued path). Resets the guard,
+      // guarantees the overlay is gone, and drains any queued click.
+      var settled = false;
+      function finalize() {
+        if (settled) return;
+        settled = true;
+        // re-anchor the title once the hero FLIP has actually settled —
+        // found live: positionEditorTitle() (called earlier, from inside
+        // parkStanza() above) measures the stanza WHILE heroAnim's transform
+        // is still mid-flight, since WAAPI applies its first keyframe the
+        // instant .animate() is called. At most viewport widths that start
+        // keyframe happens to be close enough to the resting layout that the
+        // gap looked right by coincidence; at others (measured live: a 900px
+        // window) the FLIP's translate/scale is large enough that the title
+        // lands 12px+ off. Re-running it here, against the settled DOM, is
+        // the real fix.
+        if (target === 'editor') positionEditorTitle();
+        current.classList.remove('leaving');
+        animating = false;
+        if (pending) { var p = pending; pending = null; switchTo(p.target, p.btn); }
+      }
+      if (heroAnim) heroAnim.onfinish = finalize;
+      setTimeout(finalize, DUR_MODE + 80);
+    }
+
+    // entering and leaving Freestyle now share the literal same model —
+    // owner's own correction, 2026-07-18: "продумать единую логику
+    // анимаций... как текст при переходе на генератор в редактор и
+    // наоборот меняется это охуенно тоже кстати идея это оставляем" (the
+    // hero-FLIP morph stays exactly as it was — untouched here). Found
+    // live: the two used to be structurally different — entering was a
+    // slow two-act sequence (current fully exits, THEN Freestyle slides
+    // in, ~1.8s total on an orphaned FS_REVEAL duration left over from a
+    // deleted blur effect), leaving was a fast simultaneous push (~420ms).
+    // The code even claimed they were "the same motion in opposite
+    // directions," which wasn't true. Now both are: current and next slide
+    // together, one DUR_MODE-length push, current is lifted onto .leaving
+    // (position:absolute, overlaid, CSS opacity transition killed and
+    // pinned to 1) exactly like the plain crossfade path above uses. Only
+    // the direction differs: entering Freestyle pushes current out to the
+    // right while Freestyle enters from the left; leaving pushes the
+    // opposite way. Same shape, mirrored — the way every other enter/exit
+    // pair in this file works now too (see the dock fade above).
+    function enterFreestyle(current, next, myId) {
+      if (current.id === 'tab-settings') {
+        wsEl.classList.remove('open');
+      }
+
+      var settled = false;
+      function finalize() {
+        if (settled) return;
+        settled = true;
+        if (myId !== transitionId) return;
+        current.classList.remove('leaving');
+        current.style.opacity = '';
+        current.style.transition = '';
+        animating = false;
+        if (pending) { var p = pending; pending = null; switchTo(p.target, p.btn); }
+      }
+      setTimeout(finalize, DUR_MODE + 80);
+
+      document.querySelectorAll('.tab-panel.active').forEach(function (p) { if (p !== next) p.classList.remove('active'); });
+      next.classList.add('active');
+
+      current.classList.remove('active');
+      current.classList.add('leaving');
+      current.style.transition = 'none';
+      current.style.opacity = '1';
+      next.style.transition = 'none';
+
+      current.animate(
+        [{ transform: 'none' }, { transform: 'translateX(100%)' }],
+        { duration: DUR_MODE, easing: EASE_SPRING }
+      );
+      next.animate(
+        [{ transform: 'translateX(-100%)' }, { transform: 'none' }],
+        { duration: DUR_MODE, easing: EASE_SPRING }
+      ).onfinish = function () {
+        next.style.transition = '';
+        finalize();
+      };
+    }
+
+    // the exact reverse push — see enterFreestyle's comment above for why
+    // these two now share one model instead of two.
+    function exitFreestyle(current, next, target, myId) {
+      var settled = false;
+      function finalize() {
+        if (settled) return;
+        settled = true;
+        if (myId !== transitionId) return;
+        current.classList.remove('leaving');
+        current.style.opacity = '';
+        current.style.transition = '';
+        animating = false;
+        if (pending) { var p = pending; pending = null; switchTo(p.target, p.btn); }
+      }
+      setTimeout(finalize, DUR_MODE + 80);
+
+      // next goes .active BEFORE parkStanza/positionEditorTitle run — found
+      // live: parkStanza('editor') calls positionEditorTitle(), which
+      // measures #tab-editor's own rendered geometry; with next still
+      // display:none (pre-.active) every rect it read back was 0, so the
+      // title landed nowhere near the stanza (measured 86px of gap instead
+      // of the intended one-line-height 25px). Same order the plain
+      // (non-Freestyle) crossfade path in switchTo already uses, for the
+      // same reason.
+      document.querySelectorAll('.tab-panel.active').forEach(function (p) { if (p !== next) p.classList.remove('active'); });
+      next.classList.add('active');
+
+      syncDock(target === 'settings');
+      if (target === 'settings' || target === 'editor') {
+        parkStanza(target);
+        stanza.classList.toggle('is-editor', target === 'editor');
+      }
+      // same chrome fade-in as the plain crossfade path — Фристайл→Редактор
+      // used to skip it entirely (this whole function predates that fix).
+      if (target === 'editor') {
+        editorTitleHead.animate([{ opacity: 0 }, { opacity: 1 }], { duration: DUR_MODE, easing: EASE_SPRING });
+        animateEditorChromeIn();
+      }
+
+      current.classList.remove('active');
+      current.classList.add('leaving');
+      current.style.transition = 'none';
+      current.style.opacity = '1';
+      next.style.transition = 'none';
+
+      current.animate(
+        [{ transform: 'none' }, { transform: 'translateX(-100%)' }],
+        { duration: DUR_MODE, easing: EASE_SPRING }
+      );
+      next.animate(
+        [{ transform: 'translateX(100%)' }, { transform: 'none' }],
+        { duration: DUR_MODE, easing: EASE_SPRING }
+      ).onfinish = function () {
+        next.style.transition = '';
+        finalize();
+      };
+    }
+
+    tabBtns.forEach(function (btn) {
+      btn.addEventListener('click', function () { switchTo(btn.getAttribute('data-target'), btn); });
+    });
+
+    // seat the indicator on the active tab WITHOUT animating — used for the
+    // initial placement and on resize, so it snaps into place rather than
+    // sliding in from translateX(0) (the glide is only for actual tab picks).
+    function seatIndicator() {
+      var active = document.querySelector('.tab-btn.active');
+      if (!indicator || !active) return;
+      var prev = indicator.style.transition;
+      indicator.style.transition = 'none';
+      moveIndicator(active);
+      void indicator.offsetWidth;
+      indicator.style.transition = prev;
+    }
+    if (document.readyState === 'complete') seatIndicator();
+    else window.addEventListener('load', seatIndicator);
+    window.addEventListener('resize', seatIndicator);
+    // re-anchor the editor title if the viewport resizes while it's
+    // showing — positionEditorTitle() itself no-ops when the stanza isn't
+    // currently parked there, so this is a harmless no-op the rest of the
+    // time.
+    window.addEventListener('resize', positionEditorTitle);
+  })();
+
+  // note title is contenteditable — owner's own spec, 2026-07-18: "он тоже
+  // был редактируемый". Enter commits (blurs) instead of inserting a
+  // literal newline, since this is a one-line title, not a paragraph; an
+  // empty title on blur falls back to the placeholder text rather than
+  // leaving a blank heading.
+  (function () {
+    var title = document.querySelector('[data-editable-title]');
+    if (!title) return;
+    var fallback = title.textContent;
+    title.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); title.blur(); }
+    });
+    title.addEventListener('blur', function () {
+      if (!title.textContent.trim()) title.textContent = fallback;
+    });
+  })();
+
+  // editor sidebar tabs — Заметки/Избранное/История, one column, switched
+  // like the main mode tabs (owner's own spec, 2026-07-18). This is its
+  // own local copy — its remove buttons only affect this list, they don't
+  // reach into the Генератор tab's dock.
+  document.querySelectorAll('.sidebar-tab').forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      var target = tab.getAttribute('data-sidebar-panel');
+      document.querySelectorAll('.sidebar-tab').forEach(function (t) {
+        t.classList.toggle('active', t === tab);
+        t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
+      });
+      document.querySelectorAll('.sidebar-tab-panel').forEach(function (p) {
+        p.classList.toggle('active', p.getAttribute('data-sidebar-panel-content') === target);
+      });
+    });
+  });
+  document.querySelectorAll('[data-local-fav-list] .fav-remove').forEach(function (btn) {
+    btn.addEventListener('click', function () { btn.closest('.fav-row').remove(); });
+  });
+
+  // click a stanza line to favorite it (owner's own spec, 2026-07-18: "при
+  // нажатии на строку в основном тексте генератора строка переносится в
+  // избранное") — clicking again un-favorites it, whether triggered from
+  // the line itself or from the − button on the resulting fav-row; both
+  // directions stay in sync via a direct element reference, and both
+  // count displays (the corner button + the panel heading) update live.
+  (function () {
+    var favList = document.querySelector('#pane-fav .fav-list');
+    // .fav-count in the pane heading is gone now ("заглавия убрать") — the
+    // corner-link badge is the only counter left, and the sole source of
+    // truth for the starting value.
+    var favCountEls = document.querySelectorAll('#fav-open-btn .corner-count');
+    var favCount = parseInt(document.querySelector('#fav-open-btn .corner-count').textContent, 10);
+
+    function setFavCount(n) {
+      favCount = n;
+      favCountEls.forEach(function (el) { el.textContent = favCount; });
+    }
+
+    function unfavoriteRow(row) {
+      row.remove();
+      setFavCount(favCount - 1);
+      if (row._sourceLine) {
+        row._sourceLine.classList.remove('favorited');
+        row._sourceLine._favRow = null;
+      }
+    }
+
+    function makeFavRow(text, sourceLine) {
+      var row = document.createElement('div');
+      row.className = 'fav-row';
+      var btn = document.createElement('button');
+      btn.className = 'fav-remove';
+      btn.setAttribute('aria-label', 'Убрать из избранного');
+      btn.textContent = '−';
+      btn.addEventListener('click', function () { unfavoriteRow(row); });
+      var span = document.createElement('span');
+      span.className = 'fav-row-text';
+      span.textContent = text;
+      row.appendChild(btn);
+      row.appendChild(span);
+      row._sourceLine = sourceLine;
+      return row;
+    }
+
+    favList.querySelectorAll('.fav-remove').forEach(function (btn) {
+      btn.addEventListener('click', function () { unfavoriteRow(btn.closest('.fav-row')); });
+    });
+
+    document.querySelectorAll('#tab-settings .line-row').forEach(function (line) {
+      line.addEventListener('click', function () {
+        if (line.classList.contains('favorited')) {
+          if (line._favRow) unfavoriteRow(line._favRow);
+          return;
+        }
+        var text = line.querySelector('.line-text').textContent.trim();
+        var row = makeFavRow(text, line);
+        favList.insertBefore(row, favList.firstChild);
+        line._favRow = row;
+        line.classList.add('favorited');
+        setFavCount(favCount + 1);
+      });
+    });
+  })();
+
+  // Топ-бары открываются по клику, не по наведению (owner's own
+  // correction, 2026-07-18: "все топ бары вообще открываются не
+  // наведением а нажатием"). One open at a time; clicking the same
+  // trigger again, or anywhere outside, closes it. Clicks INSIDE an open
+  // popover (sliders, the select list) don't close it — only the select
+  // list explicitly closes itself after a pick, below.
+  // .stats-orb-wrap is a class now, not a singular id lookup — the editor
+  // sidebar has its own duplicate copy (owner's own spec, 2026-07-18:
+  // "значок статистики тоже перенеси"), so this needs to wire up every
+  // instance, not just one.
+  var allTriggerWraps = Array.from(document.querySelectorAll('.tool-pill-wrap, .stats-orb-wrap'));
+  var popReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // same shared tokens as the MODE MOTION script reads — owner's own
+  // correction, 2026-07-18: "продумать единую логику анимаций". This used
+  // to hardcode its own copy of the spring curve as a raw string, and its
+  // own one-off 200ms duration that matched neither --dur-micro nor
+  // --dur-panel. Popovers are panel-level UI (a floating settings surface,
+  // not a hover micro-interaction), so they now run on --dur-panel like
+  // everything else at that tier.
+  var popRootStyle = getComputedStyle(document.documentElement);
+  var POP_EASE = popRootStyle.getPropertyValue('--ease-spring').trim();
+  var POP_DUR = parseFloat(popRootStyle.getPropertyValue('--dur-panel')) * 1000;
+
+  // open animates in; close now plays the exact reverse instead of
+  // vanishing via instant display:none — owner's own correction,
+  // 2026-07-18: same pass that unified Freestyle's enter/exit, applied
+  // here too. closeAllPopovers used to just strip .open synchronously;
+  // now it hands each currently-open wrap to animatePopoverOut, which
+  // removes .open itself once the reverse animation actually finishes.
+  function animatePopoverIn(wrap) {
+    var pop = wrap.querySelector('.tool-popover, .stats-popover');
+    if (popReduced || !pop) return;
+    pop.style.transformOrigin = 'bottom center';
+    pop.animate([
+      { opacity: 0, transform: 'translateY(6px) scale(0.97)' },
+      { opacity: 1, transform: 'none' }
+    ], { duration: POP_DUR, easing: POP_EASE });
+  }
+  function animatePopoverOut(wrap) {
+    var pop = wrap.querySelector('.tool-popover, .stats-popover');
+    if (popReduced || !pop) { wrap.classList.remove('open'); return; }
+    // re-entrancy guard — found live: a rapid second click on the same
+    // trigger while its close animation was still running started a
+    // second, overlapping close on top of the first (classList.contains
+    // ('open') stays true until the FIRST one's onfinish, so a naive
+    // re-check let both through). getAnimations() reflects reality
+    // regardless of class state, so it can't be fooled the same way.
+    if (pop.getAnimations().length) return;
+    pop.style.transformOrigin = 'bottom center';
+    pop.animate([
+      { opacity: 1, transform: 'none' },
+      { opacity: 0, transform: 'translateY(6px) scale(0.97)' }
+    ], { duration: POP_DUR, easing: POP_EASE }).onfinish = function () {
+      wrap.classList.remove('open');
+    };
+  }
+  function closeAllPopovers(except) {
+    allTriggerWraps.forEach(function (w) {
+      if (w !== except && w.classList.contains('open')) animatePopoverOut(w);
+    });
+  }
+
+  document.querySelectorAll('.tool-pill-wrap').forEach(function (wrap) {
+    // .corner-link added here for Избранное/История (owner's own
+    // correction, 2026-07-18: "кнопки избранное и история... не
+    // закрывают/открывают а показывают статистику конкретно по этой
+    // теме") — they're wrapped in .tool-pill-wrap now like everything
+    // else, so this one generic handler covers them too.
+    var trigger = wrap.querySelector('.tool-pill, .fs-speed, .corner-link');
+    if (!trigger) return;
+    trigger.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var willOpen = !wrap.classList.contains('open');
+      closeAllPopovers(wrap);
+      if (willOpen) {
+        wrap.classList.add('open');
+        animatePopoverIn(wrap);
+      } else {
+        animatePopoverOut(wrap);
+      }
+    });
+  });
+  document.querySelectorAll('.stats-orb-wrap').forEach(function (statsWrap) {
+    statsWrap.querySelector('.stats-orb').addEventListener('click', function (e) {
+      e.stopPropagation();
+      var willOpen = !statsWrap.classList.contains('open');
+      closeAllPopovers(statsWrap);
+      if (willOpen) {
+        statsWrap.classList.add('open');
+        animatePopoverIn(statsWrap);
+      } else {
+        animatePopoverOut(statsWrap);
+      }
+    });
+  });
+  document.querySelectorAll('.tool-popover, .stats-popover').forEach(function (pop) {
+    pop.addEventListener('click', function (e) { e.stopPropagation(); });
+  });
+  document.addEventListener('click', function () { closeAllPopovers(); });
+
+  // Классика/Алгоритм — pick one of two, updates the trigger's label and
+  // closes the list (a deliberate close-after-pick, unlike the sliders in
+  // Параметры which stay open for further adjustment).
+  document.querySelectorAll('.tool-popover--select').forEach(function (popover) {
+    var trigger = popover.previousElementSibling;
+    var wrap = popover.closest('.tool-pill-wrap');
+    popover.querySelectorAll('.select-option').forEach(function (opt) {
+      opt.addEventListener('click', function () {
+        popover.querySelectorAll('.select-option').forEach(function (o) { o.classList.remove('selected'); });
+        opt.classList.add('selected');
+        trigger.firstChild.nodeValue = opt.getAttribute('data-label') + ' ';
+        animatePopoverOut(wrap);
+      });
+    });
+  });
+
+  // owner's own correction, 2026-07-18: "история и избранное показываются
+  // всегда в окне генератора без возможности закрыть" — both panes are
+  // permanently .visible/.open/.split now (baked into the HTML), so the
+  // old open/close/toggle machinery (syncWorkspace/openPane/closePane/
+  // togglePane, the .split-close wiring, Escape-to-close) is gone —
+  // nothing in the UI can trigger those states anymore. Drag-swap still
+  // works below by directly swapping the two panes' `order` styles; #fav-
+  // open-btn/#history-btn are wired via the generic .tool-pill-wrap
+  // click-to-open system now (see the popovers added to their markup),
+  // not a bespoke handler.
+  var workspace = document.getElementById('workspace');
+  var panesWrap = document.getElementById('workspace-panes');
+  var panes = { fav: document.getElementById('pane-fav'), history: document.getElementById('pane-history') };
+
+  // grab a pane's top padding strip, drag it over the other pane, release
+  // to swap (owner's own spec, 2026-07-18: "могу... взять окошко
+  // избранного потянуть вниз и поменять спокойно местами с историей и
+  // наоборот"). No separate handle div anymore (owner's own follow-up,
+  // same day: "ты стер текст но не убрал элемент") — the grab zone is
+  // just the pane body's own top padding, hit-tested by Y position so a
+  // click on the search input or list below it behaves normally.
+  function makeDraggablePane(key) {
+    var pane = panes[key];
+    var otherKey = key === 'fav' ? 'history' : 'fav';
+    var body = pane.querySelector('.ws-pane-body');
+    if (!body) return;
+    var dragging = false;
+    body.addEventListener('mousedown', function (e) {
+      if (e.clientY - body.getBoundingClientRect().top > 20) return;
+      dragging = true;
+      pane.classList.add('dragging');
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!dragging) return;
+      var other = panes[otherKey];
+      var overOther = other.classList.contains('visible') &&
+        (function () { var r = other.getBoundingClientRect(); return e.clientY > r.top && e.clientY < r.bottom; })();
+      other.classList.toggle('drop-target', overOther);
+    });
+    window.addEventListener('mouseup', function (e) {
+      if (!dragging) return;
+      dragging = false;
+      pane.classList.remove('dragging');
+      var other = panes[otherKey];
+      other.classList.remove('drop-target');
+      if (other.classList.contains('visible')) {
+        var r = other.getBoundingClientRect();
+        if (e.clientY > r.top && e.clientY < r.bottom) {
+          // read the COMPUTED order, not inline style — the initial stack
+          // order comes from the stylesheet (#pane-history{order:3}), so
+          // .style.order is empty on both panes before the first-ever
+          // swap and swapping two empty strings did nothing (found live
+          // testing the drag after removing .ws-drag-handle).
+          var paneOrder = getComputedStyle(pane).order;
+          var otherOrder = getComputedStyle(other).order;
+          pane.style.order = otherOrder;
+          other.style.order = paneOrder;
+        }
+      }
+    });
+  }
+  makeDraggablePane('fav');
+  makeDraggablePane('history');
+
+  // divider WITHIN the dock — stacks избранное/история top/bottom when both
+  // are open, height draggable (owner's own spec: "открываются пополам с
+  // горизонтальным делением... тоже настраиваем размер").
+  var divider = document.getElementById('ws-divider');
+  if (divider) {
+    var draggingDivider = false;
+    var topPane = null;
+    divider.addEventListener('mousedown', function (e) {
+      draggingDivider = true;
+      divider.classList.add('dragging');
+      // which pane is visually on top can change now that panes are
+      // swappable — figure it out fresh at drag-start rather than
+      // assuming it's always избранное.
+      topPane = panes.fav.getBoundingClientRect().top < panes.history.getBoundingClientRect().top ? panes.fav : panes.history;
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!draggingDivider) return;
+      var rect = panesWrap.getBoundingClientRect();
+      var pct = ((e.clientY - rect.top) / rect.height) * 100;
+      pct = Math.min(80, Math.max(20, pct));
+      topPane.style.flex = '0 0 ' + pct + '%';
+    });
+    window.addEventListener('mouseup', function () {
+      draggingDivider = false;
+      divider.classList.remove('dragging');
+    });
+  }
+
+  // dock width — ~1/3 dock / ~2/3 main app by default, draggable (owner's
+  // own spec: "2/3 основная часть занимает и 1/3... но можно тягать
+  // пропорции"). Both panels start at x=0 (the dock/sidebar is always the
+  // leftmost flex child when visible), so clientX during the drag IS the
+  // desired width in px directly.
+  //
+  // Floor is a PIXEL constant (220, the CSS default), not a percentage of
+  // viewport width — owner's own correction, 2026-07-18: "можно вернуть
+  // на такую же ширину которая стоит по умолчанию... не должно быть
+  // такого бага что я раскрываю а потом до того же размера не могу
+  // свернуть". The old version floored at 20vw%, which is almost never
+  // exactly 220px, so once you'd dragged wider there was no way to drag
+  // back to precisely the default — this floors on the same 220 the CSS
+  // itself defaults to, so the bottom of the drag range always matches.
+  // onDragStart/onDragEnd are optional — only the Editor sidebar call
+  // below uses them, to suppress the width transition added for the
+  // collapse/expand motion (owner's own correction, 2026-07-18: "продумать
+  // единую логику анимаций"). Without that suppression, every mousemove
+  // during a live drag would set a new inline width for the CSS
+  // transition to chase, one --dur-panel behind the cursor the whole time
+  // instead of tracking it 1:1 — found live once the transition was added.
+  function makeDockResizable(handle, panel, minPx, maxRatio, onResize, onDragStart, onDragEnd) {
+    if (!handle || !panel) return;
+    var dragging = false;
+    handle.addEventListener('mousedown', function (e) {
+      dragging = true;
+      handle.classList.add('dragging');
+      if (onDragStart) onDragStart();
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!dragging) return;
+      var px = Math.max(minPx, Math.min(window.innerWidth * maxRatio, e.clientX));
+      panel.style.width = px + 'px';
+      if (onResize) onResize(px);
+    });
+    window.addEventListener('mouseup', function () {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('dragging');
+      if (onDragEnd) onDragEnd();
+    });
+  }
+
+  // dock width only — no counterweight to keep in sync anymore (main
+  // always centers on the true viewport now regardless of this dock; see
+  // the .body-row comment in the CSS, 2026-07-19). onDragStart/onDragEnd
+  // suppress .workspace's own width transition (added 2026-07-19 for the
+  // collapse/expand motion) during a live drag — same "chasing" bug as
+  // Editor's sidebar drag (see suppressEditorDockTransitions below):
+  // without this, every mousemove sets a new inline width for the CSS
+  // transition to chase, one --dur-panel behind the cursor.
+  makeDockResizable(
+    document.getElementById('dock-resize-handle'), workspace, 220, 0.6,
+    null,
+    function () { workspace.style.transition = 'none'; },
+    function () { workspace.style.transition = ''; }
+  );
+
+  // Editor's own left panel — "в редакторе левая панель аналогично"
+  // (owner's own correction, 2026-07-18): same drag-to-resize, same
+  // 220px floor.
+  var editorStatsDock = document.querySelector('#tab-editor .editor-stats-dock');
+  var editorAutosaveTag = document.querySelector('#tab-editor .autosave-tag');
+  var editorSidebar = document.querySelector('#tab-editor .stub-sidebar');
+  var editorPipelineDock = document.querySelector('#tab-editor .stub-pipeline-dock');
+
+  // Редактор's chrome (side docks, bottom frame, autosave tag) used to pop
+  // to full opacity the instant #tab-editor became .active, while the hero
+  // text and the outgoing panel both cross-fade smoothly — that mismatch
+  // in "softness" is what read as flicker (owner's own correction,
+  // 2026-07-19: "боковые панели при переходах то появляются то пропадают
+  // моргают"). Layered ON TOP of the existing reveal-dissolve, not
+  // replacing it (see the .tab-panel comment in the CSS) — called from
+  // switchTo()/exitFreestyle() only when target === 'editor'; leaving
+  // Редактор already fades correctly for free, since the whole outgoing
+  // panel (chrome included) is one <section> that dissolves as a unit via
+  // .tab-panel.leaving. Re-derives --ease-spring/--dur-mode locally rather
+  // than reaching into the MODE MOTION IIFE's copies (out of scope here —
+  // same reasoning as DOCK_EASE_SOFT's own local copy further below).
+  var chromeRootStyle = getComputedStyle(document.documentElement);
+  var CHROME_EASE_SPRING = chromeRootStyle.getPropertyValue('--ease-spring').trim();
+  var CHROME_DUR_MODE = parseFloat(chromeRootStyle.getPropertyValue('--dur-mode')) * 1000;
+  var CHROME_BORDER_SUBTLE = chromeRootStyle.getPropertyValue('--border-subtle').trim();
+
+  function animateEditorChromeIn() {
+    if (editorSidebar) editorSidebar.animate(
+      [{ opacity: 0, transform: 'translateX(-10px)' }, { opacity: 1, transform: 'none' }],
+      { duration: CHROME_DUR_MODE, easing: CHROME_EASE_SPRING }
+    );
+    if (editorPipelineDock) editorPipelineDock.animate(
+      [{ opacity: 0, transform: 'translateX(10px)' }, { opacity: 1, transform: 'none' }],
+      { duration: CHROME_DUR_MODE, easing: CHROME_EASE_SPRING }
+    );
+    if (editorAutosaveTag) editorAutosaveTag.animate(
+      [{ opacity: 0 }, { opacity: 1 }],
+      { duration: CHROME_DUR_MODE, easing: CHROME_EASE_SPRING }
+    );
+    animateEditorFrameIn();
+  }
+
+  // "иконки съезжаются, появляется рамка" — the original brief's idea,
+  // never actually built until now (owner's own correction, 2026-07-19).
+  // With the hero-FLIP a 0px no-op since the overlay fix above (text sits
+  // at the same point in both modes), this is what carries the sense of
+  // "something just happened" instead of a text slide. Each control in
+  // .editor-dock-frame starts pulled OUTWARD from its resting slot — as if
+  // gathered in from Настройки's wider toolbar above — and eases back into
+  // place with a slight per-icon stagger, a gather rather than a flat
+  // fade. The frame's own hairline border stays transparent while the
+  // icons are still arriving and only fades in over the tail of the same
+  // animation, so the box visibly FORMS around them right as they land,
+  // instead of just being there the whole time.
+  function animateEditorFrameIn() {
+    var frame = document.querySelector('#tab-editor .editor-dock-frame');
+    if (!frame) return;
+    var kids = Array.prototype.slice.call(frame.children);
+    var n = kids.length;
+    var stagger = 30;
+    kids.forEach(function (kid, i) {
+      var fromX = (i - (n - 1) / 2) * 16;
+      kid.animate(
+        [{ opacity: 0, transform: 'translateX(' + fromX + 'px)' }, { opacity: 1, transform: 'none' }],
+        { duration: CHROME_DUR_MODE, easing: CHROME_EASE_SPRING, delay: i * stagger }
+      );
+    });
+    frame.animate(
+      [{ borderColor: 'transparent', offset: 0 }, { borderColor: 'transparent', offset: 0.55 }, { borderColor: CHROME_BORDER_SUBTLE, offset: 1 }],
+      { duration: CHROME_DUR_MODE + (n - 1) * stagger, easing: 'ease-out' }
+    );
+  }
+
+  // .editor-stats-dock and .autosave-tag are both position:fixed and
+  // pinned relative to the two side docks' actual widths, so anything
+  // that changes either dock's width — dragging, or collapsing to a rail
+  // — has to re-measure and push the new offsets, not just the drag path
+  // that used to be the only thing touching them (found live: the old
+  // code only ever synced .editor-stats-dock's LEFT edge off the
+  // sidebar's drag, never the RIGHT edge off the pipeline dock, which
+  // happened to be harmless only because the pipeline dock never used to
+  // change width at all).
+  function syncEditorDockOffsets() {
+    if (!editorSidebar || !editorPipelineDock) return;
+    var leftW = Math.round(editorSidebar.getBoundingClientRect().width);
+    var rightW = Math.round(editorPipelineDock.getBoundingClientRect().width);
+    if (editorStatsDock) { editorStatsDock.style.left = leftW + 'px'; editorStatsDock.style.right = rightW + 'px'; }
+    if (editorAutosaveTag) { editorAutosaveTag.style.right = (rightW + 30) + 'px'; }
+  }
+
+  function suppressEditorDockTransitions() {
+    editorSidebar.style.transition = 'none';
+    if (editorStatsDock) editorStatsDock.style.transition = 'none';
+    if (editorAutosaveTag) editorAutosaveTag.style.transition = 'none';
+  }
+  function restoreEditorDockTransitions() {
+    editorSidebar.style.transition = '';
+    if (editorStatsDock) editorStatsDock.style.transition = '';
+    if (editorAutosaveTag) editorAutosaveTag.style.transition = '';
+  }
+  makeDockResizable(
+    document.getElementById('editor-dock-resize-handle'),
+    editorSidebar,
+    220, 0.45,
+    syncEditorDockOffsets,
+    suppressEditorDockTransitions,
+    restoreEditorDockTransitions
+  );
+
+  // collapse to a slim rail — owner's own spec, 2026-07-18: "боковые окна
+  // в редакторах сворачиваемые полностью в топ бары... автосворачивание в
+  // топ бар при маленьком экране имеет смысл". EDITOR_COLLAPSE_VW is
+  // calculated, not guessed: measured live, the longest demo line needs
+  // ~293px to avoid wrapping at the 13.5px font floor; with both docks at
+  // their default 220px, that stops fitting comfortably below roughly
+  // 970px of viewport width (968px is where it starts wrapping outright).
+  // 1200px leaves real breathing room above that edge rather than
+  // collapsing right at the wrap point. userSet tracks an explicit manual
+  // toggle so it sticks — "могут и в таком постоянном режиме находиться
+  // как щас" — auto-collapse never fights a choice the owner already
+  // made, in either direction.
+  var EDITOR_COLLAPSE_VW = 1200;
+  // same shared tokens as the popover code reads — one canonical source
+  // in CSS, no hardcoded copies.
+  var dockRootStyle = getComputedStyle(document.documentElement);
+  var DOCK_FADE_DUR = parseFloat(dockRootStyle.getPropertyValue('--dur-micro')) * 1000;
+  var DOCK_PANEL_DUR = parseFloat(dockRootStyle.getPropertyValue('--dur-panel')) * 1000;
+  var DOCK_EASE_SOFT = dockRootStyle.getPropertyValue('--ease-soft').trim();
+  var dockMotionReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function dockContentEls(dock) {
+    return Array.prototype.filter.call(dock.children, function (c) {
+      return !c.classList.contains('dock-collapse-btn') && !c.classList.contains('dock-collapsed-label');
+    });
+  }
+
+  // collapsing/expanding now actually moves — owner's own correction,
+  // 2026-07-18: "продумать единую логику анимаций... все гладко должно
+  // быть крайне". Found live: this was the one interaction in the whole
+  // file with zero motion, a flat instant snap, while everything else got
+  // careful treatment — it stood out precisely because of how tuned the
+  // rest is. Content fades out FIRST, THEN the rail shrinks (--dur-micro,
+  // then --dur-panel) — fading and shrinking at once would show the text
+  // visibly squeezed into a narrowing column for a beat, exactly the
+  // "cringe" this pass exists to remove. Expanding is the same two beats
+  // reversed — rail grows first, content fades in after — same total
+  // time either direction. fill:'forwards' on the fade-out only: WAAPI
+  // reverts a property to its underlying value once an animation ends
+  // without it (the .tab-panel crossfade comment elsewhere in this file
+  // documents the same gotcha), which would flash the content back to
+  // visible for a frame right before display:none lands.
+  function setDockCollapsed(dock, collapsed, manual) {
+    if (manual) dock.dataset.userSet = 'true';
+    var targetState = collapsed ? 'collapsed' : 'expanded';
+    // targetState, not the .collapsed CLASS, is the "already there or
+    // already heading there" check — found live: the class only gets
+    // added/removed at the END of a sequence (after the fade), so a
+    // conflicting call arriving WHILE a fade was still in flight saw
+    // classList.contains('collapsed') as still false either way and
+    // bailed out early, leaving content permanently faded to opacity 0
+    // with nothing left running to ever reverse it. Same
+    // increment-and-compare guard the MODE MOTION script already uses for
+    // exactly this class of race (see transitionId there) — a superseded
+    // sequence's own pending setTimeout checks this and quietly no-ops
+    // instead of finishing a stale transition on top of a newer one.
+    if (dock.dataset.targetState === targetState) { syncEditorDockOffsets(); return; }
+    dock.dataset.targetState = targetState;
+    var myId = (parseInt(dock.dataset.transitionId, 10) || 0) + 1;
+    dock.dataset.transitionId = myId;
+    var content = dockContentEls(dock);
+
+    if (dockMotionReduced) {
+      content.forEach(function (el) { el.style.display = collapsed ? 'none' : ''; });
+      dock.classList.toggle('collapsed', collapsed);
+      syncEditorDockOffsets();
+      return;
+    }
+
+    if (collapsed) {
+      content.forEach(function (el) {
+        el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: DOCK_FADE_DUR, easing: DOCK_EASE_SOFT, fill: 'forwards' });
+      });
+      setTimeout(function () {
+        if (String(myId) !== dock.dataset.transitionId) return;
+        content.forEach(function (el) { el.style.display = 'none'; });
+        dock.classList.add('collapsed');
+        syncEditorDockOffsets();
+      }, DOCK_FADE_DUR);
+    } else {
+      content.forEach(function (el) { el.style.display = ''; });
+      dock.classList.remove('collapsed');
+      syncEditorDockOffsets();
+      setTimeout(function () {
+        if (String(myId) !== dock.dataset.transitionId) return;
+        content.forEach(function (el) {
+          el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: DOCK_FADE_DUR, easing: DOCK_EASE_SOFT });
+        });
+      }, DOCK_PANEL_DUR);
+    }
+  }
+  function autoCollapseEditorDocks() {
+    if (!editorSidebar || !editorPipelineDock) return;
+    var shouldCollapse = window.innerWidth < EDITOR_COLLAPSE_VW;
+    if (editorSidebar.dataset.userSet !== 'true') setDockCollapsed(editorSidebar, shouldCollapse, false);
+    if (editorPipelineDock.dataset.userSet !== 'true') setDockCollapsed(editorPipelineDock, shouldCollapse, false);
+  }
+  if (editorSidebar && editorPipelineDock) {
+    autoCollapseEditorDocks();
+    window.addEventListener('resize', autoCollapseEditorDocks);
+
+    var sidebarCollapseBtn = document.getElementById('sidebar-collapse-btn');
+    var pipelineCollapseBtn = document.getElementById('pipeline-collapse-btn');
+    if (sidebarCollapseBtn) {
+      sidebarCollapseBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setDockCollapsed(editorSidebar, !editorSidebar.classList.contains('collapsed'), true);
+      });
+    }
+    if (pipelineCollapseBtn) {
+      pipelineCollapseBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setDockCollapsed(editorPipelineDock, !editorPipelineDock.classList.contains('collapsed'), true);
+      });
+    }
+    // clicking anywhere on an already-collapsed rail reopens it — the
+    // whole rail is the hit target, not just its own tiny toggle button.
+    editorSidebar.addEventListener('click', function () {
+      if (this.classList.contains('collapsed')) setDockCollapsed(this, false, true);
+    });
+    editorPipelineDock.addEventListener('click', function () {
+      if (this.classList.contains('collapsed')) setDockCollapsed(this, false, true);
+    });
+  }
+
+  // избранное/история in Генератор — joined the same collapse machinery
+  // 2026-07-19 (see .workspace's own CSS comment: was docked+non-closable,
+  // now an overlay that needs an explicit way to get out from under the
+  // text it floats over). No auto-collapse-by-width here — unlike
+  // Редактор's docks it no longer pushes <main>, so there's no cramping to
+  // rescue it from; it's a manual show/hide only, default collapsed (set
+  // in the HTML).
+  var workspaceCollapseBtn = document.getElementById('workspace-collapse-btn');
+  if (workspaceCollapseBtn) {
+    workspaceCollapseBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      setDockCollapsed(workspace, !workspace.classList.contains('collapsed'), true);
+    });
+  }
+  workspace.addEventListener('click', function () {
+    if (this.classList.contains('collapsed')) setDockCollapsed(this, false, true);
+  });
+
+  // freestyle screencast record button — visual toggle only for now (see
+  // the HTML comment above .fs-record-btn for the deferred real spec).
+  var fsRecordBtn = document.getElementById('fs-record-btn');
+  var freestylePanel = document.querySelector('.freestyle-panel');
+  if (fsRecordBtn) {
+    var fsRecordLabel = fsRecordBtn.querySelector('.fs-record-label');
+    fsRecordBtn.addEventListener('click', function () {
+      var recording = freestylePanel.classList.toggle('recording');
+      fsRecordLabel.textContent = recording ? 'идёт запись' : 'запись';
+    });
+  }
+
+  // количество строк — hide/show .fs-line elements past the chosen count
+  // (owner's own spec, 2026-07-18: "даже если строфа большая, можем все
+  // равно фиксированное количество строк настраивать").
+  var fsLinecountInput = document.getElementById('fs-linecount-input');
+  if (fsLinecountInput) {
+    var fsLines = document.querySelectorAll('.fs-stanza .fs-line');
+    var fsLinecountVal = fsLinecountInput.closest('.tool-popover').querySelector('.val');
+    var fsLinecountPill = document.getElementById('fs-linecount-pill');
+    fsLinecountInput.addEventListener('input', function () {
+      var n = parseInt(fsLinecountInput.value, 10);
+      fsLinecountVal.textContent = n;
+      fsLinecountPill.textContent = 'Строк: ' + n;
+      fsLines.forEach(function (line, i) { line.classList.toggle('fs-line-hidden', i >= n); });
+    });
+  }
+
+  // размер шрифта / ширина блока / выравнивание — % and ratio custom
+  // properties on .freestyle-panel, not fixed px, so this holds up at any
+  // screen size (owner's own spec, 2026-07-18: "привязано к размеру
+  // приложения в процентном соотношении - в любом размере экрана
+  // работает").
+  var fsFontsizeInput = document.getElementById('fs-fontsize-input');
+  if (fsFontsizeInput) {
+    var fsFontsizeVal = fsFontsizeInput.closest('.field-group').querySelector('.val');
+    fsFontsizeInput.addEventListener('input', function () {
+      var pct = parseInt(fsFontsizeInput.value, 10);
+      fsFontsizeVal.textContent = pct + '%';
+      freestylePanel.style.setProperty('--fs-scale', pct / 100);
+    });
+  }
+  var fsWidthInput = document.getElementById('fs-width-input');
+  if (fsWidthInput) {
+    var fsWidthVal = fsWidthInput.closest('.field-group').querySelector('.val');
+    fsWidthInput.addEventListener('input', function () {
+      var pct = parseInt(fsWidthInput.value, 10);
+      fsWidthVal.textContent = pct + '%';
+      freestylePanel.style.setProperty('--fs-width', pct + '%');
+    });
+  }
+  var fsAlignToggle = document.getElementById('fs-align-toggle');
+  if (fsAlignToggle) {
+    fsAlignToggle.querySelectorAll('span').forEach(function (opt) {
+      opt.addEventListener('click', function () {
+        fsAlignToggle.querySelectorAll('span').forEach(function (s) { s.classList.remove('on'); });
+        opt.classList.add('on');
+        freestylePanel.style.setProperty('--fs-align', opt.getAttribute('data-align') === 'left' ? 'flex-start' : 'center');
+      });
+    });
+  }
+
+  // dark theme — plain inversion via data-theme on <html> (see the
+  // :root[data-theme="dark"] token block up top).
+  var themeToggle = document.getElementById('theme-toggle');
+  if (themeToggle) {
+    themeToggle.addEventListener('click', function () {
+      var root = document.documentElement;
+      root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  }
+</script>

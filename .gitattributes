@@ -1,0 +1,9 @@
+# Переводы строк — везде LF, независимо от машины.
+* text=auto eol=lf
+
+# Что GitHub НЕ должен считать исходным кодом проекта. Без этого 5.5 МБ
+# дизайнерских макетов делают язык репозитория «HTML», а испечённые таблицы
+# считаются написанным кодом.
+project-notes/**       linguist-documentation
+core/data/*.json       linguist-generated
+core/nlsrc/**          linguist-vendored

@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  a { color: var(--ink); }
+  a:hover { color: var(--muted); }
+  ::selection { background: var(--ink); color: var(--canvas); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-soft, #c8c8c8); border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  input[type="range"] { -webkit-appearance: none; appearance: none; height: 2px; background: var(--border-soft); border-radius: 2px; outline: none; cursor: pointer; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--ink); cursor: pointer; }
+  input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; border: none; border-radius: 50%; background: var(--ink); cursor: pointer; }
+  @keyframes streamIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; } }
+</style>
+</helmet>
+
+<div style="height: 100vh; --canvas:#ffffff; --ink:#101010; --muted-hard:#222222; --muted:#555555; --muted-soft:#999999; --border-soft:#c8c8c8; --border-subtle:#e0e0e0; --font-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Monaco, Consolas, monospace; --radius:6px; --ease:cubic-bezier(0.4,0,0.2,1); --ease-spring:cubic-bezier(0.32,0.72,0,1); font-family: var(--font-mono); background: var(--canvas); color: var(--ink); font-size: 13px; line-height: 1.5;">
+<div ref="{{ themeRef }}" style="background: var(--canvas); color: var(--ink); height: 100%; display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased;">
+
+  <!-- ============================ TOPBAR ============================ -->
+  <header style="display: flex; align-items: center; padding: 18px 32px; gap: 20px; position: relative; z-index: 40; flex-shrink: 0;">
+    <div style="flex-shrink: 0; font-size: 12px; letter-spacing: 0.14em;">nakedlunch</div>
+    <div style="flex: 1; min-width: 0; display: flex; justify-content: center;">
+      <nav ref="{{ navRef }}" style="display: flex; gap: 4px; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 3px; position: relative;">
+        <div style="{{ indicatorStyle }}"></div>
+        <button style="appearance: none; background: transparent; border: none; border-radius: var(--radius); padding: 7px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); cursor: pointer; white-space: nowrap; position: relative; z-index: 1;" style-hover="color: var(--ink)">Фристайл</button>
+        <button style="appearance: none; background: transparent; border: none; border-radius: var(--radius); padding: 7px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); cursor: pointer; white-space: nowrap; position: relative; z-index: 1;" style-hover="color: var(--ink)">Генератор</button>
+        <button style="appearance: none; background: transparent; border: none; border-radius: var(--radius); padding: 7px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); cursor: pointer; white-space: nowrap; position: relative; z-index: 1;" style-hover="color: var(--ink)">Редактор</button>
+        <button ref="{{ pipeRef }}" style="appearance: none; background: transparent; border: none; border-radius: var(--radius); padding: 7px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--canvas); cursor: pointer; white-space: nowrap; position: relative; z-index: 1;">Пайплайн</button>
+      </nav>
+    </div>
+    <div style="flex-shrink: 0; display: flex; align-items: center; gap: 14px;">
+      <button onClick="{{ toggleTheme }}" style="appearance: none; background: none; border: none; padding: 0; display: flex; cursor: pointer; color: var(--muted-soft);" style-hover="color: var(--ink)" aria-label="Тема">
+        <svg viewBox="0 0 16 16" width="13" height="13"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg>
+      </button>
+      <span style="font-size: 10px; color: var(--muted-soft); font-variant-numeric: tabular-nums;">18 июл 05:07</span>
+    </div>
+  </header>
+
+  <!-- ============================ RUN STRIP ============================ -->
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 32px 16px; border-bottom: 1px solid var(--border-subtle); gap: 24px; flex-shrink: 0;">
+    <div>
+      <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted-soft);">Пайплайн · сессия</div>
+      <div style="font-size: 14px; margin-top: 3px;">{{ passTitle }} <span style="color: var(--muted-soft);">· 3 прохода в склейке</span></div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 22px;">
+      <div style="display: flex; align-items: center; gap: 20px;">
+        <div style="text-align: right;"><div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted-soft);">прогнано</div><div style="font-variant-numeric: tabular-nums; font-size: 15px; margin-top: 3px;">740</div></div>
+        <div style="width: 1px; height: 26px; background: var(--border-subtle);"></div>
+        <div style="text-align: right;"><div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted-soft);">склеек</div><div style="font-variant-numeric: tabular-nums; font-size: 15px; margin-top: 3px;">69</div></div>
+        <div style="width: 1px; height: 26px; background: var(--border-subtle);"></div>
+        <div style="text-align: right;"><div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted-soft);">выжило</div><div style="font-variant-numeric: tabular-nums; font-size: 15px; margin-top: 3px;">17</div></div>
+        <div style="width: 1px; height: 26px; background: var(--border-subtle);"></div>
+        <div style="text-align: right;"><div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted-soft);">время</div><div style="font-variant-numeric: tabular-nums; font-size: 15px; margin-top: 3px;">00:12</div></div>
+      </div>
+      <button onClick="{{ run }}" style="appearance: none; background: var(--ink); color: var(--canvas); border: 1px solid var(--ink); border-radius: var(--radius); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; padding: 11px 22px; cursor: pointer;" style-hover="background: var(--muted-hard); border-color: var(--muted-hard)">Прогнать пайплайн</button>
+    </div>
+  </div>
+
+  <!-- ============================ 3 ZONES ============================ -->
+  <div style="flex: 1; min-height: 0; display: flex;">
+
+    <!-- ZONE A — SPINE / STRUCTURE -->
+    <aside style="width: 274px; flex-shrink: 0; border-right: 1px solid var(--border-subtle); padding: 22px 22px 20px; overflow-y: auto; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 6px;">
+        <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted-soft);">Профиль</div>
+        <div style="display: flex; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 2px; font-size: 9px;">
+          <span style="padding: 4px 10px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; background: var(--ink); color: var(--canvas);">Авто</span>
+          <span style="padding: 4px 10px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-soft);">Свой</span>
+        </div>
+      </div>
+      <div style="font-size: 12px; margin-bottom: 4px;">«Ночной панк»</div>
+      <div style="font-size: 10px; color: var(--muted-soft); line-height: 1.4; margin-bottom: 22px;">по статистике последних 40 сессий · диссонанс ↑, короткий хук, плотная рифма</div>
+
+      <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted-soft); margin-bottom: 12px;">Партитура · проходы</div>
+
+      <sc-for list="{{ spineItems }}" as="it" hint-placeholder-count="5">
+        <sc-if value="{{ it.isNode }}" hint-placeholder-val="{{ true }}">
+          <div onClick="{{ it.onSel }}" style="{{ it.nodeStyle }}" style-hover="border-color: var(--border-soft)">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="{{ it.dotStyle }}"></span>
+              <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px;">
+                  <span style="font-size: 12.5px;">{{ it.name }}</span>
+                  <span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-soft);">{{ it.idx }}</span>
+                </div>
+                <div style="display: flex; align-items: flex-end; gap: 9px; margin-top: 8px;">
+                  <div style="display: flex; align-items: flex-end; gap: 2px; height: 11px;">
+                    <sc-for list="{{ it.glyphBars }}" as="b" hint-placeholder-count="4">
+                      <span style="{{ b.style }}"></span>
+                    </sc-for>
+                  </div>
+                  <span style="font-size: 10px; color: var(--muted-soft); font-variant-numeric: tabular-nums;">{{ it.inOut }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ it.isJoiner }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 4px 0 4px 5px;">
+            <div style="width: 1px; height: 16px; background: var(--border-subtle); margin-left: 3px;"></div>
+            <span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted-soft);">{{ it.label }}</span>
+          </div>
+        </sc-if>
+      </sc-for>
+
+      <button style="appearance: none; background: transparent; color: var(--muted); border: 1px dashed var(--border-soft); border-radius: var(--radius); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; padding: 9px 14px; cursor: pointer; margin-top: 14px; align-self: flex-start;" style-hover="color: var(--ink); border-color: var(--ink)">+ добавить проход</button>
+    </aside>
+
+    <!-- ZONE B — LIVING FUNNEL (HERO) -->
+    <section style="flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 22px 30px 8px; overflow: hidden;">
+      <!-- funnel ribbon -->
+      <div style="position: relative; height: 148px; flex-shrink: 0;">
+        <svg viewBox="0 0 1000 190" preserveAspectRatio="none" style="position: absolute; inset: 0; width: 100%; height: 100%;">
+          <polygon points="{{ funnelPoints }}" style="fill: var(--ink); opacity: 0.06;"></polygon>
+          <polygon points="{{ funnelPoints }}" style="fill: none; stroke: var(--border-soft); stroke-width: 1; opacity: 0.9;"></polygon>
+          <line x1="250" y1="12" x2="250" y2="178" style="stroke: var(--border-subtle); stroke-width: 1;"></line>
+          <line x1="500" y1="12" x2="500" y2="178" style="stroke: var(--border-subtle); stroke-width: 1;"></line>
+          <line x1="750" y1="12" x2="750" y2="178" style="stroke: var(--border-subtle); stroke-width: 1;"></line>
+        </svg>
+        <div style="position: absolute; inset: 0; display: flex;">
+          <sc-for list="{{ stagesView }}" as="s" hint-placeholder-count="4">
+            <div onClick="{{ s.onSel }}" style="{{ s.colStyle }}">
+              <div style="font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted-soft); text-align: center;">{{ s.name }}</div>
+              <div style="{{ s.countStyle }}">{{ s.countStr }}</div>
+              <div style="font-size: 9px; color: var(--muted-soft); text-align: center;">{{ s.sub }}</div>
+              <div style="font-size: 9px; color: var(--muted-soft); font-variant-numeric: tabular-nums; margin-top: 2px;">{{ s.deltaStr }}</div>
+              <div style="{{ s.markStyle }}"></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="font-size: 9.5px; color: var(--muted-soft); text-align: center; margin: 12px 0 2px; letter-spacing: 0.04em;">ширина = число кандидатов · сужение = отсев · клик по стадии открывает детали</div>
+
+      <!-- stage toolbar -->
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px 20px; flex-wrap: wrap; margin: 16px 0 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle);">
+        <div style="flex: 1 1 auto; min-width: 0;">
+          <div style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ activeStageTitle }}</div>
+          <div style="font-size: 10px; color: var(--muted-soft); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ activeStageMeta }}</div>
+        </div>
+        <sc-if value="{{ showThreshold }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; align-items: center; gap: 12px; flex: 0 1 auto; min-width: 0;">
+            <span style="font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted-soft); white-space: nowrap;">порог отсева</span>
+            <input type="range" min="0" max="1" step="0.01" value="{{ thresholdVal }}" oninput="{{ onThreshold }}" style="flex: 1 1 60px; min-width: 60px; max-width: 130px;">
+            <span style="font-size: 12px; font-variant-numeric: tabular-nums; width: 30px; text-align: right; flex-shrink: 0;">{{ thresholdStr }}</span>
+          </div>
+        </sc-if>
+      </div>
+
+      <!-- stage detail list -->
+      <div style="flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; padding-bottom: 14px;">
+        <div key="{{ listKey }}" style="animation: streamIn 0.4s var(--ease) both;">
+
+          <sc-if value="{{ showIntake }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <sc-for list="{{ intakeRows }}" as="r" hint-placeholder-count="12">
+                <div style="{{ r.style }}"><span style="width: 26px; flex-shrink: 0; font-size: 10px; color: var(--muted-soft); font-variant-numeric: tabular-nums;">{{ r.idx }}</span><span style="flex: 1; min-width: 0; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.text }}</span></div>
+              </sc-for>
+              <div style="text-align: center; font-size: 10px; color: var(--muted-soft); padding: 12px 0; letter-spacing: 0.1em;">… поток продолжается · ещё {{ intakeRestStr }} строк</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showFrag }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <sc-for list="{{ fragPass }}" as="f" hint-placeholder-count="6">
+                <div style="display: flex; align-items: flex-start; gap: 14px; padding: 9px 10px; border-radius: var(--radius);" style-hover="background: color-mix(in srgb, var(--ink) 3%, transparent)">
+                  <span style="width: 22px; flex-shrink: 0; font-size: 10px; color: var(--muted-soft); font-variant-numeric: tabular-nums; padding-top: 2px;">{{ f.idx }}</span>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="display: flex; align-items: baseline; gap: 12px;">
+                      <span style="flex: 1; min-width: 0; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ f.head }}<span style="text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px;">{{ f.tail }}</span></span>
+                      <span style="flex-shrink: 0; font-size: 12px; font-variant-numeric: tabular-nums;">{{ f.scoreStr }}</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-top: 6px;">
+                      <span style="width: 120px; flex-shrink: 0; height: 3px; background: var(--border-subtle); border-radius: 2px; position: relative; overflow: hidden;"><span style="{{ f.meterFillStyle }}"></span></span>
+                      <span style="font-size: 10px; color: var(--muted-soft); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ f.sub }}</span>
+                    </div>
+                  </div>
+                </div>
+              </sc-for>
+              <div style="display: flex; align-items: center; gap: 12px; margin: 12px 2px;">
+                <div style="flex: 1; height: 1px; background: var(--ink); opacity: 0.22;"></div>
+                <span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted-soft); white-space: nowrap;">порог {{ thresholdStr }} · ниже отсеивается {{ culledFragStr }}</span>
+                <div style="flex: 1; height: 1px; background: var(--ink); opacity: 0.22;"></div>
+              </div>
+              <sc-for list="{{ fragFail }}" as="f" hint-placeholder-count="3">
+                <div style="display: flex; align-items: flex-start; gap: 14px; padding: 9px 10px; border-radius: var(--radius); opacity: 0.42;">
+                  <span style="width: 22px; flex-shrink: 0; font-size: 10px; color: var(--muted-soft); font-variant-numeric: tabular-nums; padding-top: 2px;">{{ f.idx }}</span>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="display: flex; align-items: baseline; gap: 12px;">
+                      <span style="flex: 1; min-width: 0; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-decoration: line-through;">{{ f.head }}{{ f.tail }}</span>
+                      <span style="flex-shrink: 0; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted-soft);">{{ f.scoreStr }}</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-top: 6px;">
+                      <span style="width: 120px; flex-shrink: 0; height: 3px; background: var(--border-subtle); border-radius: 2px; position: relative; overflow: hidden;"><span style="{{ f.meterFillStyle }}"></span></span>
+                      <span style="font-size: 10px; color: var(--muted-soft); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ f.sub }}</span>
+                    </div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showJoin }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <sc-for list="{{ joinPass }}" as="j" hint-placeholder-count="4">
+                <div style="display: flex; gap: 16px; align-items: flex-start; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px;">
+                  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+                    <sc-for list="{{ j.lines }}" as="ln" hint-placeholder-count="2">
+                      <span style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ln.head }}<span style="text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px;">{{ ln.tail }}</span></span>
+                    </sc-for>
+                  </div>
+                  <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
+                    <span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted-soft);">сочетание</span>
+                    <span style="width: 70px; height: 3px; background: var(--border-subtle); border-radius: 2px; position: relative; overflow: hidden;"><span style="{{ j.meterFillStyle }}"></span></span>
+                    <span style="font-size: 12px; font-variant-numeric: tabular-nums;">{{ j.scoreStr }}</span>
+                  </div>
+                </div>
+              </sc-for>
+              <div style="display: flex; align-items: center; gap: 12px; margin: 12px 2px;">
+                <div style="flex: 1; height: 1px; background: var(--ink); opacity: 0.22;"></div>
+                <span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted-soft); white-space: nowrap;">порог {{ thresholdStr }} · отсеяно склеек {{ culledJoinStr }}</span>
+                <div style="flex: 1; height: 1px; background: var(--ink); opacity: 0.22;"></div>
+              </div>
+              <sc-for list="{{ joinFail }}" as="j" hint-placeholder-count="2">
+                <div style="display: flex; gap: 16px; align-items: flex-start; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px; opacity: 0.42;">
+                  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+                    <sc-for list="{{ j.lines }}" as="ln" hint-placeholder-count="2">
+                      <span style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ln.head }}{{ ln.tail }}</span>
+                    </sc-for>
+                  </div>
+                  <div style="flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
+                    <span style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted-soft);">сочетание</span>
+                    <span style="width: 70px; height: 3px; background: var(--border-subtle); border-radius: 2px; position: relative; overflow: hidden;"><span style="{{ j.meterFillStyle }}"></span></span>
+                    <span style="font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted-soft);">{{ j.scoreStr }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showSurv }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <sc-for list="{{ survCenter }}" as="s" hint-placeholder-count="6">
+                <div style="display: flex; align-items: center; gap: 14px; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 8px;">
+                  <span style="flex: 1; min-width: 0; font-size: 13px;">{{ s.text }}</span>
+                  <span style="{{ s.tagStyle }}">{{ s.tag }}</span>
+                  <span style="flex-shrink: 0; font-size: 12px; font-variant-numeric: tabular-nums;">{{ s.scoreStr }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ZONE C — VERDICT / CURATION -->
+    <aside style="width: 328px; flex-shrink: 0; border-left: 1px solid var(--border-subtle); display: flex; flex-direction: column; min-height: 0;">
+      <div style="padding: 22px 22px 14px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px;">
+          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted-soft);">Отбор · выжившие</div>
+          <span style="font-size: 12px; font-variant-numeric: tabular-nums;">{{ acceptedCountStr }} / 6</span>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 12px;">
+          <button onClick="{{ acceptAll }}" style="appearance: none; background: transparent; color: var(--muted); border: 1px solid var(--muted-soft); border-radius: var(--radius); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 12px; cursor: pointer;" style-hover="color: var(--ink); border-color: var(--ink)">Принять всё</button>
+          <button onClick="{{ clearAll }}" style="appearance: none; background: transparent; color: var(--muted); border: 1px solid var(--muted-soft); border-radius: var(--radius); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 12px; cursor: pointer;" style-hover="color: var(--ink); border-color: var(--ink)">Сбросить</button>
+          <span style="margin-left: auto; align-self: center; font-size: 9px; color: var(--muted-soft);">J / K · пробел</span>
+        </div>
+      </div>
+
+      <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 14px 22px;">
+        <sc-for list="{{ survCards }}" as="s" hint-placeholder-count="6">
+          <div onClick="{{ s.onToggle }}" style="display: flex; align-items: center; gap: 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 11px 12px; cursor: pointer; margin-bottom: 8px;" style-hover="border-color: var(--border-soft)">
+            <span style="width: 16px; height: 16px; border: 1px solid var(--muted-soft); border-radius: 4px; flex-shrink: 0; background: {{ s.boxBg }};"></span>
+            <span style="flex: 1; min-width: 0; font-size: 12px; line-height: 1.5;">{{ s.text }}</span>
+            <span style="flex-shrink: 0; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted-soft);">{{ s.scoreStr }}</span>
+          </div>
+        </sc-for>
+        <button style="appearance: none; background: var(--ink); color: var(--canvas); border: 1px solid var(--ink); border-radius: var(--radius); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; padding: 11px 16px; cursor: pointer; width: 100%; margin-top: 6px;" style-hover="background: var(--muted-hard); border-color: var(--muted-hard)">Добавить отмеченные ({{ acceptedCountStr }}) в библиотеку →</button>
+      </div>
+
+      <div style="border-top: 1px solid var(--border-subtle); padding: 16px 22px 20px; flex-shrink: 0;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted-soft);">История сессий</div>
+          <span style="font-size: 9px; color: var(--muted-soft);">по дате ▾</span>
+        </div>
+        <sc-for list="{{ sessions }}" as="ss" hint-placeholder-count="3">
+          <div style="{{ ss.rowStyle }}">
+            <span style="flex: 1; min-width: 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ss.name }}</span>
+            <span style="flex-shrink: 0; font-size: 10px; color: var(--muted-soft); font-variant-numeric: tabular-nums;">{{ ss.date }}</span>
+            <span style="flex-shrink: 0; width: 34px; text-align: right; font-size: 10px; color: var(--muted-soft); font-variant-numeric: tabular-nums;">{{ ss.lines }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </aside>
+
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1440, &quot;height&quot;: 900}}">
+class Component extends DCLogic {
+  state = {
+    activePass: 2,
+    activeStage: 'fragments',
+    threshold: 0.60,
+    theme: 'light',
+    runNonce: 0,
+    indicator: { left: 0, width: 0, ready: false },
+    survivors: [
+      { id: 1, text: 'Анжеро-Судженска в Кемеровской · там северный Кувейт и Клондайк', score: 0.79, accepted: true },
+      { id: 2, text: 'бить и щекотать все теми · парике из Лондона и с', score: 0.71, accepted: true },
+      { id: 3, text: 'дерьмо же ты! — бросил Оскар · отсидел в тюрьме ЮАР', score: 0.64, accepted: false },
+      { id: 4, text: 'в скалах Коктебеля в 1970-ом · я вообще написал в 1982-ом', score: 0.57, accepted: true },
+      { id: 5, text: 'Я всегда умел работать · Стоило все это копейки', score: 0.52, accepted: false },
+      { id: 6, text: 'Моя мама еврейка. Я · кончится работа для меня', score: 0.48, accepted: false }
+    ]
+  };
+
+  passes = [
+    { name: 'Куплет', idx: 'проход 01', counts: { intake: 180, fragments: 96, joins: 22, survivors: 7 }, glyph: [10, 7, 5, 3] },
+    { name: 'Хук', idx: 'проход 02', counts: { intake: 210, fragments: 84, joins: 19, survivors: 4 }, glyph: [10, 6, 4, 2] },
+    { name: 'Куплет', idx: 'проход 03', counts: { intake: 350, fragments: 120, joins: 28, survivors: 6 }, glyph: [10, 6, 3, 2] }
+  ];
+  joiners = ['— припев —', '— куплет —'];
+
+  STAGES = [
+    { key: 'intake', name: 'Интейк', sub: 'сгенерировано', ck: 'intake' },
+    { key: 'fragments', name: 'Оценка фрагментов', sub: 'прошли порог', ck: 'fragments' },
+    { key: 'joins', name: 'Склейка', sub: 'сочетаний', ck: 'joins' },
+    { key: 'survivors', name: 'Выжившие', sub: 'выжило', ck: 'survivors' }
+  ];
+
+  FRAGS = [
+    ['Анжеро-Судженска в Кемер', 'овской', 0.82, '0.70', '8', 'абаб'],
+    ['там северный Кувейт и Клонд', 'айк', 0.74, '0.68', '9', 'абаб'],
+    ['бить и щекотать все т', 'еми', 0.69, '0.71', '7', 'абаб'],
+    ['парике из Л', 'ондона и с', 0.63, '0.66', '8', 'абаб'],
+    ['дерьмо же ты! — бросил Оск', 'ар', 0.61, '0.72', '8', 'аабб'],
+    ['отсидел в тюрьме ЮАР. Очень', ' и', 0.58, '0.55', '9', 'абаб'],
+    ['в скалах Коктебеля в 1970-ом', ' там на', 0.55, '0.61', '9', 'абаб'],
+    ['я вообще написал в 1982-', 'ом', 0.52, '0.50', '8', 'аабб'],
+    ['Я всегда умел раб', 'отать и', 0.49, '0.58', '7', 'абаб'],
+    ['Стоило все это коп', 'ейки', 0.44, '0.47', '7', 'аабб'],
+    ['кончится работа для ме', 'ня', 0.36, '0.39', '7', 'аабб']
+  ];
+
+  JOINS = [
+    { lines: [['Анжеро-Судженска в Кемер', 'овской'], ['там северный Кувейт и Клонд', 'айк']], score: 0.79 },
+    { lines: [['бить и щекотать все т', 'еми'], ['парике из Л', 'ондона и с']], score: 0.71 },
+    { lines: [['дерьмо же ты! — бросил Оск', 'ар'], ['отсидел в тюрьме ЮАР', ' Очень и']], score: 0.64 },
+    { lines: [['в скалах Коктебеля', ' там на'], ['я вообще написал в 1982-', 'ом']], score: 0.57 },
+    { lines: [['Я всегда умел раб', 'отать'], ['Стоило все это коп', 'ейки']], score: 0.48 },
+    { lines: [['Моя мама еврейка.', ' Я'], ['кончится работа для ме', 'ня']], score: 0.41 }
+  ];
+
+  sessions = [
+    { name: '«Ночной панк» · проход 03', date: '18 июл 05:07', lines: 350, current: true },
+    { name: '«Ночной панк» · проход 02', date: '17 июл 22:41', lines: 210 },
+    { name: '«Ночной панк» · проход 01', date: '17 июл 19:15', lines: 180 }
+  ];
+
+  DARK = { '--canvas': '#141414', '--ink': '#ededed', '--muted-hard': '#cfcfcf', '--muted': '#949494', '--muted-soft': '#5c5c5c', '--border-soft': '#3d3d3d', '--border-subtle': '#232323' };
+
+  navRef = (el) => { this._nav = el; };
+  pipeRef = (el) => { this._pt = el; this.seat(); };
+  themeRef = (el) => { this._theme = el; this.applyTheme(); };
+
+  seat() {
+    if (!this._nav || !this._pt) return;
+    var l = this._pt.offsetLeft, w = this._pt.offsetWidth;
+    var ind = this.state.indicator;
+    if (ind.left !== l || ind.width !== w || !ind.ready) this.setState({ indicator: { left: l, width: w, ready: true } });
+  }
+  applyTheme() {
+    var el = this._theme; if (!el) return;
+    var d = this.DARK, dark = this.state.theme === 'dark';
+    for (var k in d) { if (dark) el.style.setProperty(k, d[k]); else el.style.removeProperty(k); }
+  }
+  componentDidMount() { this.applyTheme(); this.seat(); this._onR = () => this.seat(); window.addEventListener('resize', this._onR); }
+  componentDidUpdate() { this.applyTheme(); }
+  componentWillUnmount() { window.removeEventListener('resize', this._onR); }
+
+  selectPass(i) { this.setState({ activePass: i }); }
+  selectStage(k) { this.setState({ activeStage: k }); }
+  onThreshold(e) { this.setState({ threshold: parseFloat(e.target.value) }); }
+  toggle(id) { this.setState({ survivors: this.state.survivors.map(s => s.id === id ? Object.assign({}, s, { accepted: !s.accepted }) : s) }); }
+  acceptAll() { this.setState({ survivors: this.state.survivors.map(s => Object.assign({}, s, { accepted: true })) }); }
+  clearAll() { this.setState({ survivors: this.state.survivors.map(s => Object.assign({}, s, { accepted: false })) }); }
+  toggleTheme() { this.setState({ theme: this.state.theme === 'dark' ? 'light' : 'dark' }); }
+  run() { this.setState({ runNonce: this.state.runNonce + 1 }); }
+
+  renderVals() {
+    var st = this.state, P = this.passes[st.activePass], thr = st.threshold;
+    var ind = st.indicator;
+
+    // spine
+    var spineItems = [];
+    this.passes.forEach((p, i) => {
+      var active = i === st.activePass;
+      spineItems.push({
+        isNode: true, isJoiner: false, name: p.name, idx: p.idx,
+        inOut: p.counts.intake + ' → ' + p.counts.survivors,
+        nodeStyle: 'border:1px solid ' + (active ? 'var(--ink)' : 'var(--border-subtle)') + ';border-radius:var(--radius);padding:12px 14px;cursor:pointer;background:' + (active ? 'color-mix(in srgb, var(--ink) 5%, transparent)' : 'transparent') + ';transition:border-color .12s var(--ease), background-color .12s var(--ease)',
+        dotStyle: 'width:8px;height:8px;border-radius:50%;flex-shrink:0;' + (active ? 'background:var(--ink)' : 'background:transparent;border:1px solid var(--muted-soft)'),
+        glyphBars: p.glyph.map(h => ({ style: 'width:3px;height:' + h + 'px;background:' + (active ? 'var(--ink)' : 'var(--muted-soft)') + ';border-radius:1px' })),
+        onSel: () => this.selectPass(i)
+      });
+      if (i < this.passes.length - 1) spineItems.push({ isNode: false, isJoiner: true, label: this.joiners[i] });
+    });
+
+    // funnel ribbon
+    var stagesView = this.STAGES.map((s, i) => {
+      var count = P.counts[s.ck];
+      var prev = i > 0 ? P.counts[this.STAGES[i - 1].ck] : null;
+      var active = s.key === st.activeStage;
+      return {
+        name: s.name, sub: s.sub, countStr: String(count),
+        active: active,
+        colStyle: 'flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;padding:12px 6px 15px;position:relative;' + (i < 3 ? 'border-right:1px solid var(--border-subtle);' : '') + (active ? 'background:color-mix(in srgb, var(--ink) 4%, transparent);' : ''),
+        countStyle: 'font-variant-numeric:tabular-nums;font-size:25px;line-height:1;margin-top:5px;color:' + (active ? 'var(--ink)' : 'var(--muted-soft)'),
+        deltaStr: prev != null ? ('−' + (prev - count)) : '',
+        markStyle: active ? 'position:absolute;left:24px;right:24px;bottom:8px;height:2px;background:var(--ink)' : 'display:none',
+        onSel: () => this.selectStage(s.key)
+      };
+    });
+
+    // fragments
+    var frags = this.FRAGS.map((f, i) => {
+      var pass = f[2] >= thr;
+      return {
+        idx: String(i + 1).padStart(2, '0'), head: f[0], tail: f[1],
+        score: f[2], scoreStr: f[2].toFixed(2),
+        sub: 'дис ' + f[3] + ' · ' + f[4] + 'сл · ' + f[5],
+        meterFillStyle: 'position:absolute;left:0;top:0;bottom:0;width:' + Math.round(f[2] * 100) + '%;background:' + (pass ? 'var(--ink)' : 'var(--muted-soft)')
+      };
+    });
+    var fragPass = frags.filter(f => f.score >= thr);
+    var fragFail = frags.filter(f => f.score < thr);
+
+    // joins
+    var joins = this.JOINS.map(j => {
+      var pass = j.score >= thr;
+      return {
+        lines: j.lines.map(l => ({ head: l[0], tail: l[1] })),
+        score: j.score, scoreStr: j.score.toFixed(2),
+        meterFillStyle: 'position:absolute;left:0;top:0;bottom:0;width:' + Math.round(j.score * 100) + '%;background:' + (pass ? 'var(--ink)' : 'var(--muted-soft)')
+      };
+    });
+    var joinPass = joins.filter(j => j.score >= thr);
+    var joinFail = joins.filter(j => j.score < thr);
+
+    // intake stream
+    var intakeRows = [];
+    for (var i = 0; i < 14; i++) {
+      var f = this.FRAGS[i % this.FRAGS.length];
+      intakeRows.push({ idx: String(i + 1).padStart(2, '0'), text: f[0] + f[1], style: 'display:flex;align-items:center;gap:14px;padding:6px 10px;opacity:' + (0.9 - i * 0.05).toFixed(2) });
+    }
+
+    // survivors center
+    var survCenter = st.survivors.map(s => ({
+      text: s.text, scoreStr: s.score.toFixed(2),
+      tag: s.accepted ? 'принято' : '—',
+      tagStyle: 'flex-shrink:0;font-size:9px;text-transform:uppercase;letter-spacing:0.1em;color:' + (s.accepted ? 'var(--ink)' : 'var(--muted-soft)')
+    }));
+    var survCards = st.survivors.map(s => ({
+      text: s.text, scoreStr: s.score.toFixed(2),
+      boxBg: s.accepted ? 'var(--ink)' : 'transparent',
+      onToggle: () => this.toggle(s.id)
+    }));
+    var acceptedCount = st.survivors.filter(s => s.accepted).length;
+
+    var sessions = this.sessions.map(s => ({
+      name: s.name, date: s.date, lines: String(s.lines),
+      rowStyle: 'display:flex;align-items:center;gap:10px;padding:8px 10px;margin:0 -10px;border-radius:var(--radius);' + (s.current ? 'background:color-mix(in srgb, var(--ink) 5%, transparent);' : '')
+    }));
+
+    // active stage header
+    var titles = {
+      intake: ['Интейк · сырой поток', 'все кандидаты прохода до любой фильтрации'],
+      fragments: ['Оценка фрагментов', fragPass.length + '/' + frags.length + ' в образце · всего ' + P.counts.fragments + ' из ' + P.counts.intake],
+      joins: ['Склейка · сочетания', joinPass.length + '/' + joins.length + ' в образце · всего ' + P.counts.joins],
+      survivors: ['Выжившие · готовы к отбору →', P.counts.survivors + ' финальных склеек уходят в отбор']
+    };
+    var t = titles[st.activeStage];
+
+    return {
+      themeRef: this.themeRef, navRef: this.navRef, pipeRef: this.pipeRef,
+      toggleTheme: () => this.toggleTheme(), run: () => this.run(),
+      indicatorStyle: 'position:absolute;top:3px;bottom:3px;left:' + ind.left + 'px;width:' + ind.width + 'px;background:var(--ink);border-radius:var(--radius);z-index:0;opacity:' + (ind.ready ? 1 : 0) + ';transition:left .34s var(--ease-spring), width .34s var(--ease-spring), opacity .2s linear',
+      passTitle: '«Ночной панк» · ' + P.idx,
+      spineItems: spineItems,
+      stagesView: stagesView,
+      funnelPoints: '0,17 125,17 375,46.6 625,68.5 875,81 1000,81 1000,109 875,109 625,121.5 375,143.4 125,173 0,173',
+      showIntake: st.activeStage === 'intake',
+      showFrag: st.activeStage === 'fragments',
+      showJoin: st.activeStage === 'joins',
+      showSurv: st.activeStage === 'survivors',
+      showThreshold: st.activeStage === 'fragments' || st.activeStage === 'joins',
+      thresholdVal: String(thr), thresholdStr: thr.toFixed(2),
+      onThreshold: (e) => this.onThreshold(e),
+      fragPass: fragPass, fragFail: fragFail, culledFragStr: String(P.counts.intake - P.counts.fragments),
+      joinPass: joinPass, joinFail: joinFail, culledJoinStr: String(P.counts.fragments - P.counts.joins),
+      intakeRows: intakeRows, intakeRestStr: String(P.counts.intake - 14),
+      survCenter: survCenter, survCards: survCards,
+      acceptedCountStr: String(acceptedCount),
+      acceptAll: () => this.acceptAll(), clearAll: () => this.clearAll(),
+      sessions: sessions,
+      activeStageTitle: t[0], activeStageMeta: t[1],
+      listKey: st.activeStage + ':' + st.activePass + ':' + st.runNonce
+    };
+  }
+}
+</script>
+</body>
+</html>

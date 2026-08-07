@@ -1,0 +1,1036 @@
+{
+ "forms": [
+  {
+   "name": "Катрен перекрёстный",
+   "group": "классика",
+   "note": "абаб, ямб четырёхстопный",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    }
+   ]
+  },
+  {
+   "name": "Катрен парный",
+   "group": "классика",
+   "note": "аабб, ямб четырёхстопный",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    }
+   ]
+  },
+  {
+   "name": "Двустишие",
+   "group": "классика",
+   "note": "аа, короткая ударная пара — в датасете двустиший не было вовсе",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 6,
+     "max_syl": 9
+    },
+    {
+     "letter": "а",
+     "min_syl": 6,
+     "max_syl": 9
+    }
+   ]
+  },
+  {
+   "name": "Катрен парный короткий",
+   "group": "классика",
+   "note": "аабб 6-8, плотнее и короче обычного парного — припевная фактура",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 6,
+     "max_syl": 8
+    },
+    {
+     "letter": "а",
+     "min_syl": 6,
+     "max_syl": 8
+    },
+    {
+     "letter": "б",
+     "min_syl": 6,
+     "max_syl": 8
+    },
+    {
+     "letter": "б",
+     "min_syl": 6,
+     "max_syl": 8
+    }
+   ]
+  },
+  {
+   "name": "Катрен кольцевой",
+   "group": "классика",
+   "note": "абба, ямб четырёхстопный",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    }
+   ]
+  },
+  {
+   "name": "Балладная строфа",
+   "group": "классика",
+   "note": "абвб, чередование Я4/Я3 — рифмуются только 2-я и 4-я строки",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 6,
+     "max_syl": 7
+    },
+    {
+     "letter": "в",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 6,
+     "max_syl": 7
+    }
+   ]
+  },
+  {
+   "name": "Александрийский стих",
+   "group": "классика",
+   "note": "аабб, ямб шестистопный с цезурой",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 12,
+     "max_syl": 13
+    },
+    {
+     "letter": "а",
+     "min_syl": 12,
+     "max_syl": 13
+    },
+    {
+     "letter": "б",
+     "min_syl": 12,
+     "max_syl": 13
+    },
+    {
+     "letter": "б",
+     "min_syl": 12,
+     "max_syl": 13
+    }
+   ]
+  },
+  {
+   "name": "Онегинская строфа",
+   "group": "классика",
+   "note": "14 строк: AbAb CCdd EffE gg (крест — пара — кольцо — двустишие), ямб четырёхстопный",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "в",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "в",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "г",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "г",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "д",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "е",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "е",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "д",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "ж",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "ж",
+     "min_syl": 8,
+     "max_syl": 9
+    }
+   ]
+  },
+  {
+   "name": "Сонет шекспировский",
+   "group": "классика",
+   "note": "14 строк: abab cdcd efef gg, ямб пятистопный",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "в",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "г",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "в",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "г",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "д",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "е",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "д",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "е",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "ж",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "ж",
+     "min_syl": 10,
+     "max_syl": 11
+    }
+   ]
+  },
+  {
+   "name": "Сонет итальянский",
+   "group": "классика",
+   "note": "14 строк: замкнутая октава abba abba + секстет cde cde (один из канонических вариантов), ямб пятистопный",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "в",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "г",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "д",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "в",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "г",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "д",
+     "min_syl": 10,
+     "max_syl": 11
+    }
+   ]
+  },
+  {
+   "name": "Октава",
+   "group": "классика",
+   "note": "8 строк: abababcc, ямб пятистопный",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "в",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "в",
+     "min_syl": 10,
+     "max_syl": 11
+    }
+   ]
+  },
+  {
+   "name": "Терцины",
+   "group": "классика",
+   "note": "цепная рифмовка aba bcb cdc (3 терцета), ямб пятистопный — схема разомкнута дальше по тому же принципу",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "в",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "в",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "г",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "в",
+     "min_syl": 10,
+     "max_syl": 11
+    }
+   ]
+  },
+  {
+   "name": "Одическая строфа",
+   "group": "классика",
+   "note": "10 строк: AbAb CC deed (крест — пара — кольцо), ямб четырёхстопный",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "в",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "в",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "г",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "д",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "д",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "г",
+     "min_syl": 8,
+     "max_syl": 9
+    }
+   ]
+  },
+  {
+   "name": "Спенсерова строфа",
+   "group": "классика",
+   "note": "9 строк: ababbcbcc — 8 строк ямба пятистопного + 9-я александрийская",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "а",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "в",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "б",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "в",
+     "min_syl": 10,
+     "max_syl": 11
+    },
+    {
+     "letter": "в",
+     "min_syl": 12,
+     "max_syl": 13
+    }
+   ]
+  },
+  {
+   "name": "Децима (эспинела)",
+   "group": "классика",
+   "note": "10 строк: abbaaccddc — испанская форма, здесь в регистре русской Я4-имитации",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "в",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "в",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "г",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "г",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "в",
+     "min_syl": 8,
+     "max_syl": 9
+    }
+   ]
+  },
+  {
+   "name": "Гекзаметр",
+   "group": "классика",
+   "note": "дактилический гекзаметр, без рифмы, 6 строк",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 15,
+     "max_syl": 17
+    },
+    {
+     "letter": "б",
+     "min_syl": 15,
+     "max_syl": 17
+    },
+    {
+     "letter": "в",
+     "min_syl": 15,
+     "max_syl": 17
+    },
+    {
+     "letter": "г",
+     "min_syl": 15,
+     "max_syl": 17
+    },
+    {
+     "letter": "д",
+     "min_syl": 15,
+     "max_syl": 17
+    },
+    {
+     "letter": "е",
+     "min_syl": 15,
+     "max_syl": 17
+    }
+   ]
+  },
+  {
+   "name": "Хайку",
+   "group": "восток",
+   "note": "5/7/5 слогов, без рифмы",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 5,
+     "max_syl": 5
+    },
+    {
+     "letter": "б",
+     "min_syl": 7,
+     "max_syl": 7
+    },
+    {
+     "letter": "в",
+     "min_syl": 5,
+     "max_syl": 5
+    }
+   ]
+  },
+  {
+   "name": "Танка",
+   "group": "восток",
+   "note": "5/7/5/7/7 слогов, без рифмы",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 5,
+     "max_syl": 5
+    },
+    {
+     "letter": "б",
+     "min_syl": 7,
+     "max_syl": 7
+    },
+    {
+     "letter": "в",
+     "min_syl": 5,
+     "max_syl": 5
+    },
+    {
+     "letter": "г",
+     "min_syl": 7,
+     "max_syl": 7
+    },
+    {
+     "letter": "д",
+     "min_syl": 7,
+     "max_syl": 7
+    }
+   ]
+  },
+  {
+   "name": "Рубаи",
+   "group": "восток",
+   "note": "aaba — 3-я строка обычно без рифмы; персидская форма, в регистре Я5-Я6",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 11,
+     "max_syl": 13
+    },
+    {
+     "letter": "а",
+     "min_syl": 11,
+     "max_syl": 13
+    },
+    {
+     "letter": "б",
+     "min_syl": 11,
+     "max_syl": 13
+    },
+    {
+     "letter": "а",
+     "min_syl": 11,
+     "max_syl": 13
+    }
+   ]
+  },
+  {
+   "name": "Газель",
+   "group": "восток",
+   "note": "aa ba ca da (4 бейта) — цепная рифма по второй строке каждого бейта, персидско-арабская форма",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 11,
+     "max_syl": 13
+    },
+    {
+     "letter": "а",
+     "min_syl": 11,
+     "max_syl": 13
+    },
+    {
+     "letter": "б",
+     "min_syl": 11,
+     "max_syl": 13
+    },
+    {
+     "letter": "а",
+     "min_syl": 11,
+     "max_syl": 13
+    },
+    {
+     "letter": "в",
+     "min_syl": 11,
+     "max_syl": 13
+    },
+    {
+     "letter": "а",
+     "min_syl": 11,
+     "max_syl": 13
+    },
+    {
+     "letter": "г",
+     "min_syl": 11,
+     "max_syl": 13
+    },
+    {
+     "letter": "а",
+     "min_syl": 11,
+     "max_syl": 13
+    }
+   ]
+  },
+  {
+   "name": "Триолет",
+   "group": "модерн и постмодерн",
+   "note": "8 строк, рифма ABaAabAB (1,3,4,5,7 строки — одна рифма, 2,6,8 — другая; строки 1/4/7 и 2/8 также дословно повторяются, чего эта схема не отражает)",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 8,
+     "max_syl": 9
+    }
+   ]
+  },
+  {
+   "name": "Лимерик",
+   "group": "модерн и постмодерн",
+   "note": "aabba, 1/2/5 строки длиннее 3/4",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 10
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 10
+    },
+    {
+     "letter": "б",
+     "min_syl": 5,
+     "max_syl": 7
+    },
+    {
+     "letter": "б",
+     "min_syl": 5,
+     "max_syl": 7
+    },
+    {
+     "letter": "а",
+     "min_syl": 8,
+     "max_syl": 10
+    }
+   ]
+  },
+  {
+   "name": "Верлибр",
+   "group": "модерн и постмодерн",
+   "note": "без рифмы, свободная длина строки",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 4,
+     "max_syl": 13
+    },
+    {
+     "letter": "б",
+     "min_syl": 4,
+     "max_syl": 13
+    },
+    {
+     "letter": "в",
+     "min_syl": 4,
+     "max_syl": 13
+    },
+    {
+     "letter": "г",
+     "min_syl": 4,
+     "max_syl": 13
+    }
+   ]
+  },
+  {
+   "name": "Брахиколон",
+   "group": "модерн и постмодерн",
+   "note": "аабб, экспериментально короткие строки (1-2 слога)",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 1,
+     "max_syl": 2
+    },
+    {
+     "letter": "а",
+     "min_syl": 1,
+     "max_syl": 2
+    },
+    {
+     "letter": "б",
+     "min_syl": 1,
+     "max_syl": 2
+    },
+    {
+     "letter": "б",
+     "min_syl": 1,
+     "max_syl": 2
+    }
+   ]
+  },
+  {
+   "name": "Синквейн",
+   "group": "модерн и постмодерн",
+   "note": "2/4/6/8/2 слогов, без рифмы (американская форма, Crapsey)",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 2,
+     "max_syl": 2
+    },
+    {
+     "letter": "б",
+     "min_syl": 4,
+     "max_syl": 4
+    },
+    {
+     "letter": "в",
+     "min_syl": 6,
+     "max_syl": 6
+    },
+    {
+     "letter": "г",
+     "min_syl": 8,
+     "max_syl": 8
+    },
+    {
+     "letter": "д",
+     "min_syl": 2,
+     "max_syl": 2
+    }
+   ]
+  },
+  {
+   "name": "Частушка",
+   "group": "фольклор",
+   "note": "абвб, короткая рифмовка, хорей",
+   "lines": [
+    {
+     "letter": "а",
+     "min_syl": 7,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 7,
+     "max_syl": 9
+    },
+    {
+     "letter": "в",
+     "min_syl": 7,
+     "max_syl": 9
+    },
+    {
+     "letter": "б",
+     "min_syl": 7,
+     "max_syl": 9
+    }
+   ]
+  }
+ ]
+}

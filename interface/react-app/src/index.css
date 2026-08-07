@@ -1,0 +1,33 @@
+/* Базовый слой документа. От прежних 245 правил старого интерфейса осталось
+   ровно то, что реально попадает в новый: замерено в живом окне — из всех
+   селекторов файла матчились семь, и только один из них компонентный.
+   Остальное удалено вместе с App.jsx (Раунд 40).
+
+   ПОЧЕМУ ЭТО ВАЖНО, А НЕ УБОРКА РАДИ УБОРКИ. Мёртвый файл успел испортить
+   живой интерфейс: класс `.nl-tag` старого UI — жёлтая плашка #d9a441 —
+   совпал по имени с тегом нового списка, и владелец увидел «жёлтые плашки,
+   которые в дизайн-код не вписываются». Правило было мёртвым ровно до тех
+   пор, пока кто-то не переиспользовал имя. */
+
+* { box-sizing: border-box; }
+
+/* Переменные читают слои сцены фристайла: --panel стоит фоном .colorLayer,
+   --line и --cursor держат рамки строки. */
+:root {
+  --bg: #0e0e11; --panel: #17171c; --line: #26262e; --ink: #e8e8ee;
+  --dim: #8b8b96; --accent: #6ea8fe; --good: #46c47c; --bad: #e06666;
+  --cursor: #2a2f3a;
+}
+
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 15px/1.5 ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+/* Строка сцены фристайла — единственное компонентное правило, пережившее
+   старый интерфейс. */
+.line { display: flex; align-items: baseline; gap: 12px; padding: 8px 12px;
+  border-radius: 8px; border: 1px solid transparent; cursor: pointer; }

@@ -1,0 +1,30 @@
+# extendo — local, offline, CPU. No external APIs, no LLM (invariants #1/#2).
+# Runtime:
+pymorphy3>=2.0       # used by corpus.py (accept/reject-time lemmatization) — NOT by
+pymorphy3-dicts-ru   # generate.py, which reads the prebaked core/data/forms.json instead
+wordfreq>=3.1        # offline aggregated frequency counts for the banality filter
+flask>=3.0          # thin local server (api/server.py)
+pywebview>=5.0       # native window for launch.py (falls back to browser if absent)
+navec>=0.10          # static Russian word vectors (core/embeddings.py) — theme relevance
+                     # without literal-word stuffing, see PLAN.md 0.2. ONE dependency
+                     # (numpy, already transitive above) — no torch, deliberately: a
+                     # spike measured a 560M sentence encoder gave no better signal
+                     # than this 51MB word-vector model for the same class of problem.
+                     # Model file core/data/navec.tar is a committed build artifact,
+                     # same as forms.json/nl_rhyme.json — see embeddings.py for the
+                     # re-fetch URL if it's ever missing.
+
+# Dev only:
+pytest>=8.0          # tests/ — не нужен приложению, нужен разработке
+
+# Build-time only (NOT runtime dependencies) — needed only to grow the vocabulary
+# or to precompute nakedlunch rhyme keys:
+#   pip install ruaccent "transformers<5"
+# ruaccent's ONNX call breaks on transformers 5.x ('token_type_ids' missing from
+# input feed — a tokenizer-output shape change between major versions). Found
+# 2026-07-13 when a bare `pip install ruaccent` pulled transformers 5.13.1.
+# ruaccent itself runs on onnxruntime (CPU, ~10ms/fragment) — transformers is
+# only used for its tokenizer, so this pin doesn't reintroduce torch/RPST.
+# tools/build_lexicon.py  -> core/data/lexicon.json (wordfreq + pymorphy3, both already runtime deps)
+# tools/build_forms.py    -> core/data/forms.json   (+ ruaccent, for stress)
+# tools/build_nl_rhyme.py -> core/data/nl_rhyme.json (+ ruaccent, rhyme keys for nakedlunch fragments)
