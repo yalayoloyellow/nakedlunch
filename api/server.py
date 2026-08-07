@@ -45,6 +45,7 @@ import stats as stats_mod    # noqa: E402  (analytics log, see core/stats.py)
 import nlindex               # noqa: E402  (фоновый прогрев карты «текст → номер»)
 import jobs                  # noqa: E402  (цепочка фоновых сборок, см. core/jobs.py)
 import wordsuggest           # noqa: E402  (попап по слову — рифмы/по звуку/строкой, см. core/wordsuggest.py)
+import журнал                # noqa: E402  (один журнал на всё приложение, см. core/журнал.py)
 from corpus import Corpus  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -52,11 +53,55 @@ DIST = ROOT / "interface" / "react-app" / "dist"
 
 app = Flask(__name__, static_folder=None)
 
+
+# ---------------------------------------------------------------------------
+# ВСЁ, ЧТО СЛОМАЛОСЬ, ОБЯЗАНО НАЗВАТЬ СЕБЯ (Раунд 59).
+#
+# Программу дают людям, которые пишут тексты, а не читают стеки. Значит правило
+# такое: если что-то не работает, человек видит причину НА ЭКРАНЕ и отправляет
+# её одним нажатием. До этого раунда половина отказов уходила в stdout, которого
+# в собранном приложении не существует, — снаружи это выглядело как «просто не
+# работает», и починить такое можно было только гаданием.
+#
+# Пятисотку ловим ЦЕЛИКОМ, со стеком, и отвечаем внятным текстом. Ответ остаётся
+# машинно-разбираемым (JSON с полем error), но теперь в нём есть и «что делать».
+
+@app.errorhandler(Exception)
+def _любая_ошибка(e):
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return e                      # 404 и подобное — не поломка, а ответ
+    журнал.ошибка("сервер", f"{request.method} {request.path}", e)
+    return {"error": f"{type(e).__name__}: {e}",
+            "detail": "Ошибка записана в журнал. Настройки → Лог → «скопировать отчёт»."}, 500
+
+
+@app.before_request
+def _замерить_начало():
+    request.environ["_начало"] = time.time()
+
+
+@app.after_request
+def _записать_итог(ответ):
+    """В журнал идут ТОЛЬКО поломки и долгие запросы. Писать каждый успешный
+    опрос статуса — значит утопить в них то единственное, ради чего журнал и
+    заведён: строку, объясняющую отказ."""
+    try:
+        сек = time.time() - request.environ.get("_начало", time.time())
+        if ответ.status_code >= 400:
+            журнал.запись("сервер", f"{ответ.status_code} {request.method} {request.path}", "ошибка")
+        elif сек > 5.0 and not request.path.endswith("/status"):
+            журнал.запись("сервер", f"{request.method} {request.path} — {сек:.1f} с", "внимание")
+    except Exception:
+        pass
+    return ответ
+
 # One authoritative corpus for the single window; the browser is a mirror.
 CORPUS = Corpus.load()
 
 # Load the forms table + wordfreq's frequency data once at startup so every
 # /api/generate request is fast from the first one, not just the second.
+журнал.запись("сервер", "старт сервера")
 generate.warm_caches()
 filters.warm_caches()
 embeddings.warm_caches()   # navec (~0.3s) — see core/embeddings.py
@@ -1966,26 +2011,43 @@ def api_sheets_open_dir():
 
 @app.post("/api/ui/log")
 def api_ui_log():
-    """Ошибки ИНТЕРФЕЙСА — в файл (Раунд 56).
+    """Строка из ОКНА — в общий журнал (Раунд 59).
 
-    Окно «движок не работает» уперлись ровно в это: я
-    чинила по догадке, потому что настоящего сообщения из ЕГО окна не было ни
-    разу. Пусть окно говорит само.
-
-    Пишем в `data/интерфейс.log` — рядом с `data/сборки.log`, заведённым по той
-    же причине днём раньше. Он тогда выдал причину за минуту."""
+    Раньше окно писало в свой файл `data/интерфейс.log`, сервер — в свой, сборки
+    — в третий. Сопоставить их мог только тот, кто знает, где что лежит. Теперь
+    источник помечается полем, а журнал один: человек копирует одно и целиком."""
     payload = request.get_json(force=True, silent=True) or {}
-    строка = str(payload.get("text") or "")[:2000]
+    строка = str(payload.get("text") or "")[:4000]
     if not строка:
         return {"ok": False}
+    журнал.запись(str(payload.get("откуда") or "окно")[:12], строка,
+                  str(payload.get("уровень") or "инфо"))
+    return {"ok": True}
+
+
+@app.get("/api/журнал")
+def api_журнал():
+    """ОТЧЁТ ОДНИМ ТЕКСТОМ — то, что человек копирует одной кнопкой.
+
+    Сюда же собирается состояние приложения: без него половина обращений
+    объясняется не ошибкой, а тем, что артефакт не собран, — и понять это по
+    одному стеку нельзя."""
+    добавка = {}
     try:
-        путь = ROOT / "data" / "интерфейс.log"
-        путь.parent.mkdir(parents=True, exist_ok=True)
-        with open(путь, "ab") as f:
-            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {строка}\n".encode("utf-8"))
+        idx = nlindex.load()
+        добавка["индекс корпуса"] = ("испечён " + idx.built_at) if idx else "не испечён"
+        добавка["правила индекса"] = idx.rules if idx else "—"
+        добавка["фрагментов в индексе"] = f"{idx.n:,}".replace(",", " ") if idx else "0"
+        добавка["прогрев"] = "готов" if _ПРОГРЕВ["готов"] else _ПРОГРЕВ.get("этап", "идёт")
+        добавка["этапы прогрева"] = ", ".join(f"{и}={с}с" for и, с in _ПРОГРЕВ.get("этапы", []))
+    except Exception as e:                                       # noqa: BLE001
+        добавка["состояние"] = f"не удалось прочитать: {e}"
+    try:
+        добавка["источников включено"] = str(len(_nl().list_corpora())) if _nl() else "нет корпуса"
     except Exception:
         pass
-    return {"ok": True}
+    return {"текст": журнал.отчёт(добавка), "записи": журнал.записи(300),
+            "аварийно": журнал.не_закрыто()}
 
 
 @app.post("/api/rec/open-dir")
