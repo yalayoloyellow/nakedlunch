@@ -773,7 +773,7 @@ export default class Nakedlunch extends Component {
     return (
       <div ref={this.rootRef} style={s(ROOT_STYLE)}>
         {st.ядроМолчит ? renderЯдроМолчит(this) : null}
-        {st.логАвария ? renderАвария(this) : null}
+        {st.логАвария && !st.ядроМолчит ? renderАвария(this) : null}
         {SVG_FILTERS}
         <canvas aria-hidden="true" ref={this.uiGrainRef} style={s(uiGrainStyle)}></canvas>
         {renderHeader(this)}
