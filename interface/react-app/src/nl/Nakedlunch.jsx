@@ -7,7 +7,7 @@
 // сюда не переносятся — данные живут на бэке (см. ВСТРАИВАНИЕ.md дизайна).
 
 import { Component, Fragment } from 'react';
-import { s, injectBase } from './style.js';
+import { s, hov, injectBase } from './style.js';
 import * as api from './api.js';
 import { docMethods } from './methods.doc.js';
 import { sheetsMethods } from './methods.sheets.js';
@@ -118,6 +118,56 @@ const SVG_FILTERS = (
     </defs>
   </svg>
 );
+
+// ---------------------------------------------------------------------------
+// ЯДРО МОЛЧИТ (Раунд 59).
+//
+// Программа состоит из окна и ядра. Ядро может умереть отдельно — от нехватки
+// памяти на сборке индексов, от убитого процесса, от чего угодно. Окно при этом
+// остаётся на экране и выглядит рабочим: кнопки нажимаются, ничего не
+// происходит, объяснения нет нигде. Хуже такого отказа только молчаливый.
+//
+// Панель показывает состояние прямо, а копирует то, что знает САМО ОКНО:
+// сервера уже нет, спросить у него отчёт невозможно, и единственный источник —
+// местная копия журнала (см. main.jsx).
+function renderЯдроМолчит(c) {
+  var копировать = async function (e) {
+    var т = ['nakedlunch · ядро не отвечает',
+             'время: ' + new Date().toLocaleString('ru'),
+             'окно: ' + navigator.userAgent, '',
+             '--- последнее, что видело окно ---'].concat(window.__журналОкна || []).join('\n');
+    try { await navigator.clipboard.writeText(т); e.target.textContent = 'скопировано ✓'; }
+    catch (err) {
+      var ta = document.createElement('textarea');
+      ta.value = т; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); e.target.textContent = 'скопировано ✓'; }
+      catch (err2) { e.target.textContent = 'скопировать не вышло'; }
+      document.body.removeChild(ta);
+    }
+  };
+  return (
+    <div style={s('position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; '
+      + 'justify-content: center; background: rgba(0,0,0,.82); backdrop-filter: blur(3px);')}>
+      <div style={s('max-width: 520px; padding: 26px 24px; border-radius: 12px; '
+        + 'background: var(--panel); border: 1px solid var(--border-subtle); text-align: left;')}>
+        <div style={s('font-size: 13px; color: var(--ink); margin-bottom: 8px;')}>Ядро не отвечает</div>
+        <div style={s('font-size: 11px; line-height: 1.6; color: var(--muted); margin-bottom: 16px;')}>
+          Часть программы, которая считает, перестала отвечать. Окно живо, но
+          сделать оно сейчас ничего не может.<br /><br />
+          Закрой и открой программу заново — журнал этой сессии сохранится, и в
+          следующий раз он будет в настройках, во вкладке «Лог».
+        </div>
+        <button onClick={копировать}
+          style={s('appearance: none; border: 1px solid var(--border-subtle); border-radius: 999px; '
+            + 'padding: 8px 16px; font-family: inherit; font-size: 11px; cursor: pointer; '
+            + 'background: none; color: var(--ink);')}
+          className={hov('background: var(--ink); color: var(--canvas)')}>скопировать, что известно</button>
+      </div>
+    </div>
+  );
+}
+
 
 export default class Nakedlunch extends Component {
   // state — дословно из дизайна; fs-ключи (micOn/bcOn/camOn/fsv/...) — фаза 3.
@@ -694,6 +744,7 @@ export default class Nakedlunch extends Component {
       : 'position: fixed; inset: 0; width: 100%; height: 100%; z-index: 91; pointer-events: none; mix-blend-mode: overlay; opacity: ' + (0.1 + g / 100 * 0.8) + ';';
     return (
       <div ref={this.rootRef} style={s(ROOT_STYLE)}>
+        {st.ядроМолчит ? renderЯдроМолчит(this) : null}
         {SVG_FILTERS}
         <canvas aria-hidden="true" ref={this.uiGrainRef} style={s(uiGrainStyle)}></canvas>
         {renderHeader(this)}

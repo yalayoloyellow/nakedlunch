@@ -99,6 +99,7 @@ export const corpusMethods = {
       var было = JSON.stringify(this.state.jobs || []);
       if (было !== JSON.stringify(работы)) this.setState({ jobs: работы });
       this._statusFail = 0;
+      if (this.state.ядроМолчит) this.setState({ ядроМолчит: false });
       // СЕРИЯ ДЕЛАЕТ ФАЙЛЫ ФОНОМ (Раунд 55). До этого раунда панель листов их
       // не видела, пока пользователь не трогал что-нибудь руками: за ночь
       // появлялось тридцать текстов, а на экране не менялось ничего.
@@ -123,6 +124,11 @@ export const corpusMethods = {
     } catch (e) {
       // Сервер не ответил — не молчим бесконечно и не спамим: отступаем.
       this._statusFail = (this._statusFail || 0) + 1;
+      // ЯДРО УМЕРЛО ПОСРЕДИ РАБОТЫ (Раунд 59). Окно при этом живо и выглядит
+      // рабочим: кнопки нажимаются, ничего не происходит, и объяснения нет
+      // нигде. Три промаха подряд — это уже не сетевая икота, а отсутствие
+      // ядра, и об этом надо сказать прямо, а не молчать до перезапуска.
+      if (this._statusFail >= 3 && !this.state.ядроМолчит) this.setState({ ядроМолчит: true });
       this.statusSchedule(Math.min(60000, ОПРОС_ПОКОЙ * Math.pow(2, this._statusFail)));
     }
   },
@@ -509,8 +515,22 @@ export const corpusMethods = {
         + (Number(к['Мат']) === 0 ? '&no_mat=1' : '')
         + (Number(к['Мат']) >= 0.9995 ? '&only_mat=1' : '')
         + '&clausula=' + (Number(к['Клаузула']) || 0);
-      var пара = await Promise.all([api.stats(), api.nlFunnel(q).catch(function () { return null; })]);
-      this.setState({ statsData: пара[0], funnel: пара[1] });
+      // Отчёт тянем ВМЕСТЕ со статистикой: снимок панели должен показывать и
+      // среду, и число ошибок за сессию — иначе по нему нельзя отличить
+      // «работает плохо» от «не собрано».
+      var пара = await Promise.all([
+        api.stats(),
+        api.nlFunnel(q).catch(function () { return null; }),
+        api.журнал().catch(function () { return null; }),
+      ]);
+      var о = пара[2] || {};
+      var ошибок = ((о['записи'] || []).filter(function (з) { return з['уровень'] === 'ошибка'; })).length;
+      var среда = (о['текст'] || '').split('\n').filter(function (л) { return л.indexOf('среда') === 0; })[0] || '';
+      var версия = (о['текст'] || '').split('\n').filter(function (л) { return л.indexOf('правила индекса') === 0; })[0] || '';
+      this.setState({ statsData: пара[0], funnel: пара[1],
+                      логОшибок: ошибок,
+                      среда: среда.replace('среда', '').trim(),
+                      версия: версия ? 'индекс: ' + версия.split(' ').slice(-1)[0] : '' });
     }
     catch (e) { this.flash(e.message); }
   },
