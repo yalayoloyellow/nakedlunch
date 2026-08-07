@@ -352,3 +352,38 @@ def test_banalnost_smeshchaet_slova_v_obe_storony():
     банально, середина, свежо = среднее(0.0), среднее(0.5), среднее(1.0)
     assert банально > середина, "на минимуме слова обязаны быть ОБЫЧНЕЕ"
     assert свежо < середина, "на максимуме слова обязаны быть РЕЖЕ"
+
+
+@нет_индекса
+def test_klassika_slushaetsya_chyornogo_spiska():
+    """Классика отключает МНЕНИЯ о качестве, но не запреты пользователя.
+
+    Мат в ней применяется — он назван явным запросом на содержание. Чёрный
+    список ровно такой же запрос: слово, запрещённое навсегда, не смеет
+    возвращаться от переключения режима. До Раунда 59 возвращалось."""
+    import numpy as np
+    idx = nlindex.load()
+    правила = ["госпожа"]
+    з = nlindex.запрет(правила)
+    if з["маска"] is None or not з["маска"].any():
+        pytest.skip("на этом корпусе правило ничего не ловит")
+
+    запрещённые = set(np.flatnonzero(з["маска"]).tolist())
+    пул = np.ones(idx.n, dtype=bool)
+    пусто = np.zeros(idx.n, dtype=bool)
+    старые = nlindex._правила()
+    try:
+        nlindex.забыть_запрет()
+        import blacklist as _чс
+        было = _чс.читать
+        _чс.читать = lambda: правила          # подменяем источник правил
+        nlindex.забыть_запрет()
+        строки, _ = nlindex.select_light(idx, pool_mask=пул, hidden_mask=пусто,
+                                         no_mat=False, only_mat=False, clausula=0,
+                                         cap=400, seed=3)
+        карта = nlindex.text_ids(idx)
+        попали = [r["text"] for r in строки if карта.get(r["text"]) in запрещённые]
+        assert not попали, f"классика вернула запрещённое: {попали[:3]}"
+    finally:
+        _чс.читать = было
+        nlindex.забыть_запрет()
