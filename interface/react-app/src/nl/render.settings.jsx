@@ -283,9 +283,15 @@ export function renderЛог(c) {
   return (
     <Fragment>
       <div style={s('display: flex; gap: 6px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;')}>
+        {/* ГЛАВНАЯ КНОПКА — ФАЙЛ, а не буфер: буфер теряется при первом же
+            копировании чего-нибудь ещё, а файл лежит на виду, пока его не
+            перетащат. Внутри — все сессии, а не только текущая. */}
+        <button style={s(кнопка + ' background: var(--ink); color: var(--canvas); border-color: var(--ink);')}
+                onClick={function () { c.сохранитьЛог(); }}>
+          {st.логФайл ? 'сохранено: ' + st.логФайл : 'сохранить отчёт на рабочий стол'}</button>
         <button style={s(кнопка)} className={hov('background: var(--ink); color: var(--canvas)')}
                 onClick={function () { c.копироватьЛог(); }}>
-          {st.логСкопирован ? 'скопировано ✓' : 'скопировать отчёт'}</button>
+          {st.логСкопирован ? 'скопировано ✓' : 'скопировать'}</button>
         <button style={s(кнопка)} className={hov('background: var(--ink); color: var(--canvas)')}
                 onClick={function () { c.обновитьЛог(); }}>обновить</button>
         {st.логАвария ? (
@@ -293,6 +299,8 @@ export function renderЛог(c) {
         ) : null}
       </div>
       <div style={s('font-size: 9.5px; color: var(--muted-soft); line-height: 1.5; margin-bottom: 10px;')}>
+        Файл ложится на рабочий стол и открывается в проводнике — остаётся
+        перетащить его в переписку. Внутри все запуски, а не только этот.<br />
         В отчёте видно состояние программы, последние действия и ошибки — вместе
         со строками текстов, которые в это время были на экране.
       </div>

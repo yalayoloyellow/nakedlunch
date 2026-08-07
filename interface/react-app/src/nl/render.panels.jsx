@@ -282,8 +282,21 @@ export function renderHeader(c) {
             {st.openPill === 'jobs' && renderStatsPanel(c)}
           </div>
 
-          {/* ---- общие настройки ---- */}
+          {/* ОШИБКУ НЕЛЬЗЯ НЕ ЗАМЕТИТЬ, НО ОНА НЕ МЕШАЕТ (Раунд 59).
+              Не окно поверх работы: ошибка случается, когда человек занят
+              строкой, и модальное окно он закроет не читая. Метка на шестерёнке
+              не уходит сама, ведёт прямо во вкладку «Лог» и при нуле ошибок не
+              существует вовсе — обычный пользователь её не видит никогда. */}
           <div data-pop="1" style={s('position: relative; z-index: 60;')}>
+            {st.логОшибок ? (
+              <span onClick={function () { c.setState({ cfgTab: 'лог' }); c.tog('cfg'); c.обновитьЛог(); }}
+                title={'ошибок за сессию: ' + st.логОшибок + ' — нажми, чтобы отправить отчёт'}
+                style={s('position: absolute; top: -3px; right: -3px; z-index: 61; min-width: 14px; '
+                  + 'height: 14px; padding: 0 3px; border-radius: 999px; background: #e05252; '
+                  + 'color: #fff; font-size: 9px; line-height: 14px; text-align: center; '
+                  + 'cursor: pointer; box-shadow: 0 0 0 2px var(--canvas);')}>
+                {st.логОшибок > 9 ? '9+' : st.логОшибок}</span>
+            ) : null}
             <button onClick={() => c.tog('cfg')} aria-label="Настройки" title="Общие настройки" style={s(hudBtn(st.openPill === 'cfg'))}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3.2"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.24.6.8 1 1.44 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"></path></svg>
             </button>

@@ -120,6 +120,34 @@ const SVG_FILTERS = (
 );
 
 // ---------------------------------------------------------------------------
+// ПОСЛЕ ПАДЕНИЯ — ОДИН ВОПРОС, ОДНА КНОПКА (Раунд 59).
+//
+// Прошлый запуск закончился аварийно: об этом знает журнал, и это единственный
+// момент, когда человека уместно потревожить — он всё равно уже столкнулся с
+// тем, что программа закрылась сама.
+//
+// Полоса, а не окно: работать она не мешает и закрывается одним нажатием. И
+// закрывается НАСОВСЕМ для этого случая: спрашивать дважды об одном падении
+// значит превратить заботу в назойливость.
+function renderАвария(c) {
+  return (
+    <div style={s('position: fixed; left: 0; right: 0; top: 0; z-index: 998; display: flex; '
+      + 'align-items: center; justify-content: center; gap: 10px; padding: 8px 14px; '
+      + 'background: #e05252; color: #fff; font-size: 11px;')}>
+      <span>Прошлый запуск закрылся сам. Причина записана — отправь отчёт, и это починят.</span>
+      <button onClick={function () { c.сохранитьЛог(); c.setState({ логАвария: false }); }}
+        style={s('appearance: none; border: 1px solid rgba(255,255,255,.6); border-radius: 999px; '
+          + 'padding: 4px 12px; font-family: inherit; font-size: 11px; cursor: pointer; '
+          + 'background: none; color: #fff;')}>сохранить отчёт</button>
+      <button onClick={function () { c.setState({ логАвария: false }); }}
+        style={s('appearance: none; border: none; background: none; color: rgba(255,255,255,.75); '
+          + 'font-family: inherit; font-size: 11px; cursor: pointer;')}>позже</button>
+    </div>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
 // ЯДРО МОЛЧИТ (Раунд 59).
 //
 // Программа состоит из окна и ядра. Ядро может умереть отдельно — от нехватки
@@ -745,6 +773,7 @@ export default class Nakedlunch extends Component {
     return (
       <div ref={this.rootRef} style={s(ROOT_STYLE)}>
         {st.ядроМолчит ? renderЯдроМолчит(this) : null}
+        {st.логАвария ? renderАвария(this) : null}
         {SVG_FILTERS}
         <canvas aria-hidden="true" ref={this.uiGrainRef} style={s(uiGrainStyle)}></canvas>
         {renderHeader(this)}
