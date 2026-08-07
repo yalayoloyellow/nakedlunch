@@ -76,6 +76,19 @@ SPLASH = ("<!doctype html><meta charset=utf-8><style>" + _SPLASH_CSS + "</style>
           "<div class=b><div class=n>nakedlunch</div>"
           "<div class=r><i></i></div>"
           "<div class=s>поднимаю корпус и индексы</div></div>")
+def _дочерний():
+    """core/дочерний.py — как запускаются части программы."""
+    core = str(Path(__file__).resolve().parent / "core")
+    if core not in sys.path:
+        sys.path.insert(0, core)
+    import дочерний
+    return дочерний
+
+
+def _упаковано() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
 def журнал():
     """core/журнал.py — один журнал на всё приложение. launch.py лежит уровнем
     выше core, поэтому путь добавляется здесь же."""
@@ -339,6 +352,10 @@ def child_env() -> dict:
 
 
 def ensure_build() -> bool:
+    # В собранном приложении фронт уже внутри, а npm на машине человека может
+    # не быть вовсе — и не должно быть: он ставил программу, а не среду.
+    if _упаковано():
+        return True
     """Build the front end if dist/ is missing or older than the source."""
     if DIST_INDEX.exists():
         dist_mtime = DIST_INDEX.stat().st_mtime
@@ -640,8 +657,10 @@ def main() -> int:
 
     port = free_port()
     url = f"http://127.0.0.1:{port}"
-    proc = subprocess.Popen([PY, SERVER, "--port", str(port), "--host", "127.0.0.1"],
-                            cwd=str(HERE), env=child_env())
+    # В собранном приложении питона нет: программа зовёт саму себя с именем
+    # роли (см. core/дочерний.py и main.py).
+    _ядро = _дочерний().команда("сервер") + ["--port", str(port), "--host", "127.0.0.1"]
+    proc = subprocess.Popen(_ядро, cwd=str(HERE), env=child_env())
 
     def cleanup():
         if proc.poll() is None:

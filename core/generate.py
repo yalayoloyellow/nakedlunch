@@ -21,6 +21,7 @@ from itertools import accumulate
 from pathlib import Path
 
 from corpus import lemmatize
+import пути               # где что лежит, см. core/пути.py
 
 
 @dataclass
@@ -198,7 +199,7 @@ _STARTERS = ("но", "а", "хотя", "зато")
 # open-pool entries carry none — they give breadth, the seed gives direction.
 # ---------------------------------------------------------------------------
 
-LEXICON_PATH = Path(__file__).resolve().parent / "data" / "lexicon.json"
+LEXICON_PATH = пути.таблица("lexicon.json")
 
 
 def _merge(seed: list[tuple[str, set]], open_lemmas: list[list]) -> list[tuple[str, frozenset]]:
@@ -230,7 +231,7 @@ def _vocab() -> dict:
 # generation speed is independent of vocabulary size.
 # ---------------------------------------------------------------------------
 
-FORMS_PATH = Path(__file__).resolve().parent / "data" / "forms.json"
+FORMS_PATH = пути.таблица("forms.json")
 
 
 @lru_cache(maxsize=1)

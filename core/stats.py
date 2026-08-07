@@ -15,7 +15,9 @@ import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+import пути
+
+DATA_DIR = пути.ДАННЫЕ
 STATS_PATH = DATA_DIR / "stats.jsonl"
 
 

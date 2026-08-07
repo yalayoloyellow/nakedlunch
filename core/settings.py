@@ -27,7 +27,9 @@ from pathlib import Path
 
 import clean
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+import пути
+
+DATA_DIR = пути.ДАННЫЕ
 SETTINGS_PATH = DATA_DIR / "settings.json"
 
 # Only what the settings PANEL owns. Deliberately not the theme: that's the

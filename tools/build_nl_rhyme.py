@@ -244,6 +244,54 @@ def _extra_fields(text: str) -> dict:
             "tokens": tokens, "content": len(обычные)}
 
 
+def акцентуатор():
+    """Акцентуатор, поднятый ЛЕГКО: только то, что проходы правда трогают.
+
+    `RUAccent.load()` поднимает четыре модели, а здесь используются ровно две
+    вещи (см. шапку файла): готовый словарь ударений и модель на одно слово для
+    тех процентов, которых в словаре нет. Модель омографов при этом не просто
+    лишняя — она весит 351 МБ и грузится безусловно, а в собранном приложении
+    её пришлось бы тащить внутрь бандла ради кода, который к ней не обращается.
+
+    Разбор омографов нам и не положен: генератор читает предрасчитанные
+    ударения без контекста предложения (см. scan.py), и брать здесь более умный
+    разбор значило бы рассогласовать два пути, обязанных давать одинаковые
+    ключи.
+
+    НЕ ВЫШЕЛ ЛЁГКИЙ ПУТЬ — поднимаем обычным `load()`. Он опирается на
+    внутренности чужого пакета, и когда те изменятся, программа должна стать
+    медленнее и толще, а не сломаться.
+    """
+    import gzip
+    import pathlib as _pl
+    from ruaccent import RUAccent
+
+    acc = RUAccent()
+    корень = _pl.Path(__import__("ruaccent").__file__).resolve().parent
+    словарь = корень / "dictionary" / "accents.json.gz"
+    модель = корень / "nn" / "nn_accent"
+    try:
+        if not (словарь.exists() and (модель / "model.onnx").exists()):
+            raise FileNotFoundError("нет словаря ударений или модели на слово")
+        acc.accents = json.load(gzip.open(словарь))
+        acc.accents.update(acc.letters_accent)
+        acc.accent_model.load(str(модель))
+        # Словарь ё: его читает `_restore_yo`. Поймано проверкой ключей — без
+        # него лёгкий путь падал на первом же слове, а не выдавал другой ответ,
+        # и это ровно та ошибка, которую хочется ловить до сборки, а не после.
+        ё = корень / "dictionary" / "yo_words.json.gz"
+        acc.yo_words = json.load(gzip.open(ё)) if ё.exists() else {}
+        acc.tiny_mode = True
+        print(f"акцентуатор: словарь {len(acc.accents)} словоформ, "
+              f"ё-словарь {len(acc.yo_words)}, без омографа", flush=True)
+        return acc
+    except Exception as e:                                       # noqa: BLE001
+        print(f"акцентуатор: лёгкий путь не вышел ({e}), поднимаю полностью", flush=True)
+        acc = RUAccent()
+        acc.load(omograph_model_size="turbo2", use_dictionary=True, tiny_mode=False)
+        return acc
+
+
 def build(existing: dict, mode: str = "incremental") -> dict:
     # Say "running" BEFORE the slow model load, not at the first checkpoint:
     # api/server.py's double-spawn guard can only see runs it didn't start
@@ -253,9 +301,7 @@ def build(existing: dict, mode: str = "incremental") -> dict:
     _write_status(len(existing), "running", mode)
 
     morph = pymorphy3.MorphAnalyzer()
-    from ruaccent import RUAccent
-    acc = RUAccent()
-    acc.load(omograph_model_size="turbo2", use_dictionary=True, tiny_mode=False)
+    acc = акцентуатор()
 
     store = nlbridge.open_store()
     fragments = store.get_all_fragments()
@@ -412,9 +458,7 @@ def rekey(existing: dict) -> dict:
     список текстов."""
     _write_status(len(existing), "running", "rekey")
     morph = pymorphy3.MorphAnalyzer()
-    from ruaccent import RUAccent
-    acc = RUAccent()
-    acc.load(omograph_model_size="turbo2", use_dictionary=True, tiny_mode=False)
+    acc = акцентуатор()
 
     out = dict(existing)
     t0 = last_status = time.time()

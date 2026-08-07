@@ -30,7 +30,9 @@ import json
 import os
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent / "data"
+import пути
+
+DATA_DIR = пути.АРТЕФАКТЫ
 СПИСОК = DATA_DIR / "blacklist.json"
 
 

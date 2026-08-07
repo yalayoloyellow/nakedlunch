@@ -31,6 +31,7 @@ import nlbridge
 import nlindex          # колоночный индекс корпуса (Раунд 31); None-безопасен
 import scan as scan_mod
 from corpus import lemmatize
+import пути               # где что лежит, см. core/пути.py
 
 VOWELS = "аеёиоуыэюя"
 
@@ -160,7 +161,7 @@ def has_mat(text: str) -> bool:
     nakedlunch-фрагменты (_score_strict_table / _nl_scored) — зовут её."""
     return _MAT_RE.search(text.lower().replace("ё", "е")) is not None
 
-_NL_RHYME_PATH = Path(__file__).resolve().parent / "data" / "nl_rhyme.json"
+_NL_RHYME_PATH = пути.артефакт("nl_rhyme.json")
 _NL_RHYME: dict = {}
 
 

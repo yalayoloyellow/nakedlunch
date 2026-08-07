@@ -19,9 +19,11 @@ import json
 import склад
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+import пути
+
+DATA_DIR = пути.ДАННЫЕ
 PROFILES_PATH = DATA_DIR / "stanza_profiles.json"
-BUILTIN_PATH = Path(__file__).resolve().parent / "data" / "stanza_forms.json"
+BUILTIN_PATH = пути.таблица("stanza_forms.json")
 
 _builtin_cache: list[dict] | None = None
 

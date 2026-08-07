@@ -28,7 +28,9 @@ from pathlib import Path
 
 import numpy as np
 
-_MODEL_PATH = Path(__file__).resolve().parent / "data" / "navec.tar"
+import пути
+
+_MODEL_PATH = пути.таблица("navec.tar")
 
 _vectors: np.ndarray | None = None
 _index: dict[str, int] | None = None

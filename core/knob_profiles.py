@@ -26,7 +26,9 @@ from pathlib import Path
 
 import clean
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+import пути
+
+DATA_DIR = пути.ДАННЫЕ
 PROFILES_PATH = DATA_DIR / "knob_profiles.json"
 
 # Стартовые профили. Не «вкусовые пресеты» (их пользователь соберёт сам под свой

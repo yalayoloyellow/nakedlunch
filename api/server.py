@@ -46,6 +46,8 @@ import nlindex               # noqa: E402  (фоновый прогрев кар
 import jobs                  # noqa: E402  (цепочка фоновых сборок, см. core/jobs.py)
 import wordsuggest           # noqa: E402  (попап по слову — рифмы/по звуку/строкой, см. core/wordsuggest.py)
 import журнал                # noqa: E402  (один журнал на всё приложение, см. core/журнал.py)
+import пути                  # noqa: E402  (где что лежит, см. core/пути.py)
+import дочерний              # noqa: E402  (как запускаются части программы)  (один журнал на всё приложение, см. core/журнал.py)
 from corpus import Corpus  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -197,7 +199,7 @@ def _nl_ready() -> bool:
 
 # tools/build_nl_rhyme.py's sidecar — see that file for why this is separate
 # from the (large) cache file it describes.
-_NL_RHYME_STATUS_PATH = ROOT / "core" / "data" / "nl_rhyme.status.json"
+_NL_RHYME_STATUS_PATH = пути.артефакт("nl_rhyme.status.json")
 _NL_RHYME_SCRIPT = ROOT / "tools" / "build_nl_rhyme.py"
 _NL_RHYME_STALE_SECONDS = 180   # no checkpoint in 3min → probably not actively running
 _NL_RHYME_PROC = None            # this process's own handle — avoids double-spawn
@@ -245,7 +247,7 @@ def _nl_rhyme_ensure_running(full: bool = False, reban: bool = False) -> None:
         except Exception:
             pass
     import subprocess
-    args = [sys.executable, str(_NL_RHYME_SCRIPT)]
+    args = дочерний.команда("ударения")
     if full:
         args.append("--full")
     elif reban:
@@ -295,7 +297,7 @@ _NL_INDEX_PROC = None
 #
 # Обе сборки запускались с stdout и stderr в DEVNULL. Значит УПАВШАЯ сборка
 # выглядела ровно так же, как не запускавшаяся, и на вопрос вопрос «почему 251 727 строк вне индекса» ответить было нечем: следов не осталось.
-_СБОРКИ_ЛОГ = ROOT / "data" / "сборки.log"
+_СБОРКИ_ЛОГ = пути.данные("сборки.log")
 
 
 def _лог_сборки(имя):
@@ -356,7 +358,7 @@ def _nl_index_ensure_running() -> None:
     import subprocess
     _журнал = _лог_сборки("индекс корпуса")
     _NL_INDEX_PROC = subprocess.Popen(
-        [sys.executable, str(_NL_INDEX_SCRIPT)], cwd=str(ROOT),
+        дочерний.команда("индекс"), cwd=str(ROOT),
         stdout=_журнал, stderr=subprocess.STDOUT,
     )
     # Испекли — но процесс держит в памяти СТАРЫЙ индекс и старую карту
@@ -435,7 +437,7 @@ def _nl_store_status() -> dict | None:
             "detail": f"{_ПРОГРЕВ['этап']} · {сек} с — до этого генерация подождёт"}
 
 
-_ИНДЕКС_СБОРКА_ПУТЬ = ROOT / "core" / "data" / "nl_index.status.json"
+_ИНДЕКС_СБОРКА_ПУТЬ = пути.артефакт("nl_index.status.json")
 
 
 def _индекс_сборка() -> dict:

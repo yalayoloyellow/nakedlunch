@@ -19,7 +19,9 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+import пути
+
+DATA_DIR = пути.ДАННЫЕ
 CORPUS_PATH = DATA_DIR / "corpus.json"
 
 _DAY = 86400.0

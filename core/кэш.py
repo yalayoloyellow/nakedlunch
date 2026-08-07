@@ -25,7 +25,9 @@ import os
 from pathlib import Path
 from typing import Iterator
 
-DATA_DIR = Path(__file__).resolve().parent / "data"
+import пути
+
+DATA_DIR = пути.АРТЕФАКТЫ
 СТАРЫЙ = DATA_DIR / "nl_rhyme.json"        # один огромный dict
 СТРОЧНЫЙ = DATA_DIR / "nl_rhyme.jsonl"     # одна запись на строку
 
