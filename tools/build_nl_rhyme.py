@@ -106,6 +106,10 @@ def _write_status(cached: int, state: str, mode: str, error: str | None = None) 
     skip-everything-already-cached incremental pass as the auto-trigger, so
     clicking it when the cache was already ~100% complete finished in
     seconds with nothing visibly different from doing nothing at all."""
+    # Каталог может не существовать: на новой машине программа ещё ничего не
+    # писала. Писатель обязан создать своё место сам — иначе первый же отчёт о
+    # прогрессе роняет сборку, и снаружи это выглядит как «ничего не началось».
+    STATUS.parent.mkdir(parents=True, exist_ok=True)
     STATUS.write_text(json.dumps({
         "cached": cached, "state": state, "mode": mode,
         "error": error, "updated_at": time.time(),
@@ -118,6 +122,7 @@ def _write_out(out: dict) -> None:
     previous complete file in place, not a torn JSON that every reader
     (filters.warm_caches, this script's own incremental resume) would crash
     on. Path.replace is atomic on the same filesystem."""
+    OUT.parent.mkdir(parents=True, exist_ok=True)
     tmp = OUT.parent / (OUT.name + ".tmp")
     tmp.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
     tmp.replace(OUT)
