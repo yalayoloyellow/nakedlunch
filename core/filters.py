@@ -333,7 +333,7 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
     words on the page). Score is theme-bias (an intrinsic property of what
     was just typed, not a learned preference from accept/favorite history) —
     with nothing else left to rank by, this is what lets `run()` scan the
-    OWNER'S WHOLE active pool every time (2026-07-14: "пусть обрабатывается и
+    the USER'S WHOLE active pool every time (2026-07-14: "пусть обрабатывается и
     перебирается всегда именно полная база") instead of a small sample, since
     the theme-relevant fragments among 150k+ candidates now surface by score
     instead of by luck of the sample.
