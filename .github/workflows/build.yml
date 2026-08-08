@@ -18,6 +18,11 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# Русский вывод не должен зависеть от кодировки консоли сборочной машины.
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8" 
+
 jobs:
   build:
     name: сборка · ${{ matrix.id }}

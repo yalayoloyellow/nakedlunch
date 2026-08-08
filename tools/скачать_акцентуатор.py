@@ -20,6 +20,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "core"))
+import пути  # noqa: E402,F401  (перенастраивает вывод в utf-8, см. core/пути.py)
+
 # Ровно те файлы, к которым обращается наш путь.
 НУЖНОЕ = [
     "dictionary/accents.json.gz",     # готовый словарь ударений
@@ -55,12 +58,18 @@ def main() -> int:
         try:
             hf_hub_download(repo_id=РЕПО, filename=имя, local_dir=str(корень))
             сколько += 1
-            print(f"  забрано: {имя}", flush=True)
         except Exception as e:                                   # noqa: BLE001
             # Часть файлов у модели может называться иначе в новых версиях —
             # это не повод валить всю установку: без необязательного файла
             # модель обычно поднимается, а без обязательного упадёт понятно.
             print(f"  не вышло: {имя} ({e})", file=sys.stderr, flush=True)
+            continue
+        # Печать ПОСЛЕ учёта успеха и вне общего try: упавшая строка отчёта не
+        # смеет превращать удачную загрузку в неудачную (Раунд 60, Windows).
+        try:
+            print(f"  забрано: {имя}", flush=True)
+        except Exception:
+            pass
 
     итог = sum((корень / и).stat().st_size for и in НУЖНОЕ if (корень / и).exists())
     print(f"акцентуатор: {было} уже было, {сколько} забрано, "
