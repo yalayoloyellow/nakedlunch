@@ -98,6 +98,7 @@ def test_polnaya_zapis_ostayotsya_gde_nuzhna(tmp_path):
 # ---------------------------------------------------------------------------
 
 import json
+import shutil
 import subprocess
 
 import pytest
@@ -106,9 +107,9 @@ import pytest
 
 
 def node(тело: str):
-    if subprocess.run(["which", "node"], capture_output=True).returncode != 0:
+    if shutil.which("node") is None:
         pytest.skip("node не установлен")
-    src = f"import {{ corpusMethods }} from '{КОРПУС_JS.as_posix()}';\n{тело}"
+    src = f"import {{ corpusMethods }} from '{КОРПУС_JS.as_uri()}';\n{тело}"
     p = subprocess.run(["node", "--input-type=module", "-e", src],
                        capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, f"node упал:\n{p.stderr}"

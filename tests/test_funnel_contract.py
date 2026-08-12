@@ -23,6 +23,7 @@
 # Прогон: .venv/bin/python -m pytest tests/test_funnel_contract.py -q
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -104,10 +105,10 @@ def почему(funnel: dict, params: dict | None = None) -> str:
     """Настоящая `почемуПусто` из methods.gen.js, скормленная настоящей
     воронкой. Через node: сборка тут не поможет — она зелёная и когда функция
     читает несуществующие поля."""
-    if subprocess.run(["which", "node"], capture_output=True).returncode:
+    if shutil.which("node") is None:
         pytest.skip("node не установлен — проверка фронта пропущена")
     src = f"""
-    import {{ genMethods }} from '{ГЕН.as_posix()}';
+    import {{ genMethods }} from '{ГЕН.as_uri()}';
     const self = {{ state: {{ params: {json.dumps(params or {}, ensure_ascii=False)} }} }};
     console.log(JSON.stringify(genMethods.почемуПусто.call(
       self, {{ funnel: {json.dumps(funnel, ensure_ascii=False)} }})));
