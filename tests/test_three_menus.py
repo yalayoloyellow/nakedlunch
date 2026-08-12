@@ -20,6 +20,7 @@
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -35,9 +36,9 @@ NL = КОРЕНЬ / "interface" / "react-app" / "src" / "nl"
 
 
 def node(тело: str):
-    if not subprocess.run(["which", "node"], capture_output=True).returncode == 0:
+    if shutil.which("node") is None:
         pytest.skip("node не установлен — проверка фронта пропущена")
-    src = f"import {{ panelMethods }} from '{ПАНЕЛИ.as_posix()}';\n{тело}"
+    src = f"import {{ panelMethods }} from '{ПАНЕЛИ.as_uri()}';\n{тело}"
     p = subprocess.run(["node", "--input-type=module", "-e", src],
                        capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, f"node упал:\n{p.stderr}"

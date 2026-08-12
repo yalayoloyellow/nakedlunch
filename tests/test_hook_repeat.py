@@ -18,6 +18,7 @@
 # Прогон: .venv/bin/python -m pytest tests/test_hook_repeat.py -q
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -308,9 +309,9 @@ def test_krutilka_snimaet_shtraf_mezhdu_strofami():
 # чтением исходника.
 
 def перенумеровать(rep, перевод, длина):
-    if subprocess.run(["which", "node"], capture_output=True).returncode:
+    if shutil.which("node") is None:
         pytest.skip("node не установлен — проверка фронта пропущена")
-    src = (f"import {{ shelfMethods }} from '{ПОЛКИ.as_posix()}';\n"
+    src = (f"import {{ shelfMethods }} from '{ПОЛКИ.as_uri()}';\n"
            f"console.log(JSON.stringify(shelfMethods.чинитьПовторы.call({{}}, "
            f"{json.dumps(rep)}, {json.dumps(перевод)}, {длина})));")
     p = subprocess.run(["node", "--input-type=module", "-e", src],
@@ -463,11 +464,11 @@ def test_seriya_nahodit_vstroennuyu_po_imeni():
 def выбрать_цепочку(имя):
     """Настоящий `pickChain` из methods.shelves.js — то, что реально кладёт
     запись полки в состояние. Запись может быть верной, а перекладка терять."""
-    if subprocess.run(["which", "node"], capture_output=True).returncode:
+    if shutil.which("node") is None:
         pytest.skip("node не установлен — проверка фронта пропущена")
     полка = json.dumps(chain_profiles.builtin(), ensure_ascii=False)
     src = f"""
-    import {{ shelfMethods }} from '{ПОЛКИ.as_posix()}';
+    import {{ shelfMethods }} from '{ПОЛКИ.as_uri()}';
     let patch = null;
     const self = Object.assign(Object.create(shelfMethods), {{
       state: {{ chainList: {полка} }}, closeSub: () => {{}},
