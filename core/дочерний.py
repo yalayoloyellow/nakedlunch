@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 import пути
 
@@ -35,10 +34,12 @@ def команда(роль: str) -> list[str]:
         return [sys.executable, роль]
     # В разработке предпочитаем питон окружения проекта: у системного может не
     # быть зависимостей, и ребёнок умрёт на первом же импорте.
-    свой = пути.КОРЕНЬ_КОДА / ".venv" / "bin" / "python"
-    питон = str(свой) if свой.exists() else sys.executable
-    return [питон, str(РОЛИ[роль])]
-
-
-def путь_роли(роль: str) -> Path:
-    return РОЛИ[роль]
+    # ДВЕ РАСКЛАДКИ ВЕНВА (Раунд 61). На POSIX это `.venv/bin/python`, на
+    # Windows — `.venv\Scripts\python.exe`. Проверялась только первая, значит на
+    # Windows защита не срабатывала никогда: брался системный питон — ровно то,
+    # чего комментарий выше обещает избежать.
+    for отн in (("bin", "python"), ("Scripts", "python.exe")):
+        свой = пути.КОРЕНЬ_КОДА / ".venv" / отн[0] / отн[1]
+        if свой.exists():
+            return [str(свой), str(РОЛИ[роль])]
+    return [sys.executable, str(РОЛИ[роль])]

@@ -20,7 +20,6 @@ import json
 import random
 import re
 from operator import itemgetter
-from pathlib import Path
 
 from wordfreq import zipf_frequency
 

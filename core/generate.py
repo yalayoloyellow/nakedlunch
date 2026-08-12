@@ -18,7 +18,6 @@ import random
 from dataclasses import dataclass, field
 from functools import lru_cache
 from itertools import accumulate
-from pathlib import Path
 
 from corpus import lemmatize
 import пути               # где что лежит, см. core/пути.py

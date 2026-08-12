@@ -41,6 +41,8 @@ import tempfile
 import time
 from pathlib import Path, PurePosixPath
 
+import пути
+
 import scan
 
 TRASH = ".корзина"
@@ -70,8 +72,11 @@ class SheetError(ValueError):
 # ---- служебное: пути, имена, атомарная запись ---------------------------
 
 def _vault() -> Path:
-    env = os.environ.get("NAKEDLUNCH_VAULT")
-    p = Path(env).expanduser() if env else DEFAULT_VAULT
+    # Через `пути.хранилище` (Раунд 61): своя переменная → NAKEDLUNCH_HOME →
+    # умолчание. Раньше листы уводились только своей переменной, и «изоляция
+    # одной NAKEDLUNCH_HOME» их не покрывала — при живой проверке они писались
+    # бы в настоящее хранилище.
+    p = пути.хранилище("NAKEDLUNCH_VAULT", "листы", DEFAULT_VAULT)
     p.mkdir(parents=True, exist_ok=True)
     return p
 

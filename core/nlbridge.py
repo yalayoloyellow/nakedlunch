@@ -26,6 +26,8 @@ import time
 from functools import lru_cache
 from pathlib import Path
 
+import пути
+
 # Каталог CLI больше НЕ нужен для работы: его код внесён в core/nlsrc
 # (2026-08-01). Данные корпуса лежали и лежат отдельно — см. ниже.
 NAKEDLUNCH_PROG_DIR = Path.home() / "Documents" / "nakedlunch"
@@ -33,8 +35,11 @@ NAKEDLUNCH_PROG_DIR = Path.home() / "Documents" / "nakedlunch"
 # листов и NAKEDLUNCH_RECORDINGS у записей (Раунд 56). Нужно ровно затем, чтобы
 # проверять заливку книг на ВРЕМЕННОМ корпусе, а не на настоящем: боевой
 # state.json весит 549 МБ и содержит книги пользователя.
-NAKEDLUNCH_DATA = Path(os.environ["NAKEDLUNCH_DATA"]) if os.environ.get("NAKEDLUNCH_DATA") \
-    else NAKEDLUNCH_PROG_DIR / "data"
+# Через `пути.хранилище` (Раунд 61): своя переменная → NAKEDLUNCH_HOME → умолчание.
+# Раньше NAKEDLUNCH_HOME корпус не покрывал вовсе, и «изоляция проверки» одной
+# переменной была обещанием, которого никто не выполнял.
+NAKEDLUNCH_DATA = пути.хранилище("NAKEDLUNCH_DATA", "корпус",
+                                 NAKEDLUNCH_PROG_DIR / "data")
 NAKEDLUNCH_CONFIG = NAKEDLUNCH_PROG_DIR / "config.json"
 
 # Same schema nakedlunch.py itself reads/writes — sharing the one file keeps
