@@ -113,10 +113,17 @@ def почему(funnel: dict, params: dict | None = None) -> str:
     console.log(JSON.stringify(genMethods.почемуПусто.call(
       self, {{ funnel: {json.dumps(funnel, ensure_ascii=False)} }})));
     """
+    # ВЫВОД ДЕКОДИРУЕМ САМИ, В UTF-8 (Раунд 61). При text=True питон берёт
+    # кодировку локали, и на Windows кириллица из node приходила мойбейком —
+    # поймано первым же прогоном тестов на трёх системах. node печатает UTF-8
+    # всегда, гадать тут нечего.
     p = subprocess.run(["node", "--input-type=module", "-e", src],
-                       capture_output=True, text=True, timeout=60)
-    assert p.returncode == 0, f"node упал:\n{p.stderr}"
-    return json.loads(p.stdout)
+                       capture_output=True, timeout=60)
+    вывод = (p.stdout or b"").decode("utf-8", "replace")
+    ошибки = (p.stderr or b"").decode("utf-8", "replace")
+    assert p.returncode == 0, f"node упал:\n{ошибки}"
+    assert вывод.strip(), f"node ничего не напечатал. stderr:\n{ошибки}"
+    return json.loads(вывод)
 
 
 ОБЩАЯ = "ни одна строка не прошла отбор — ослабь условия"
