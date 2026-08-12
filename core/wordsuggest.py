@@ -34,8 +34,21 @@ import embeddings  # navec-вектора для слоя «близкое» —
 import filters   # _NL_RHYME (пул фрагментов), has_mat, _last_word — переиспользуем, не копируем
 import scan      # VOWELS/_DEVOICE — те же таблицы, что внутри rhyme_key
 
-_INDEX_PATH = Path(__file__).resolve().parent / "data" / "rhyme_index.json"
-_THES_PATH = Path(__file__).resolve().parent.parent / "data" / "thesaurus.json"
+import пути      # где что лежит — тот же корень, куда пишет tools/build_rhyme_index.py
+
+# ЧЕРЕЗ `пути`, А НЕ ОТ `__file__` (Раунд 61). Писатель
+# (tools/build_rhyme_index.py) уже переведён на записываемый корень, а читатель
+# остался смотреть рядом с кодом. Вне бандла это один каталог, внутри — два
+# разных: попап по слову (рифмы, по звуку, синонимы) молча оставался пустым.
+#
+# Обе таблицы СТАТИЧНЫ: строятся из словаря, а не из корпуса пользователя,
+# поэтому едут вместе с программой (nakedlunch.spec) и одинаковы у всех.
+# `пути.таблица` сначала смотрит в записываемый корень — туда попадает
+# пересобранная на месте версия, — и только потом в бандл.
+_INDEX_PATH = пути.таблица("rhyme_index.json")
+_THES_PATH = пути.данные("thesaurus.json")
+if not _THES_PATH.exists():
+    _THES_PATH = пути.таблица("thesaurus.json")
 
 TOP_RHYMES = 30  # рифмы / по звуку — список в попапе скроллится (max-height
                  # 214px), поэтому длину ограничивает не экран, а честность

@@ -51,7 +51,12 @@ import дочерний              # noqa: E402  (как запускаютс�
 from corpus import Corpus  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-DIST = ROOT / "interface" / "react-app" / "dist"
+# КОРЕНЬ ЧТЕНИЯ, А НЕ `ROOT` (Раунд 61). `ROOT` считается как родитель родителя
+# от `__file__`, и в бандле это каталог НАД распакованными данными:
+# `…/Contents` вместо `…/Contents/Frameworks`. Проверено сборкой — фронт лежит
+# внутри, а `send_from_directory` смотрел наружу и отдавал 404 на «/»: окно
+# оставалось на заставке навсегда, без единого сообщения об ошибке.
+DIST = пути.ЧТЕНИЕ / "interface" / "react-app" / "dist"
 
 app = Flask(__name__, static_folder=None)
 
