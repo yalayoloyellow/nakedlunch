@@ -33,10 +33,18 @@ if not дист.is_dir():
 ДАННЫЕ.append((str(дист), "interface/react-app/dist"))
 
 # --- входные таблицы --------------------------------------------------------
-for имя in ("forms.json", "lexicon.json", "stanza_forms.json", "navec.tar"):
+# rhyme_index.json и thesaurus.json (Раунд 61) — тоже входные таблицы, а не
+# испечённое из корпуса: строятся из словаря и одинаковы у всех. Без них попап
+# по слову (рифмы, по звуку, синонимы) молча пуст, а собрать их на месте нечем —
+# роли для них нет в core/дочерний.py.
+for имя in ("forms.json", "lexicon.json", "stanza_forms.json", "navec.tar",
+            "rhyme_index.json"):
     п = КОРЕНЬ / "core" / "data" / имя
     if п.exists():                       # navec необязателен
         ДАННЫЕ.append((str(п), "core/data"))
+_тезаурус = КОРЕНЬ / "data" / "thesaurus.json"
+if _тезаурус.exists():
+    ДАННЫЕ.append((str(_тезаурус), "core/data"))
 
 # --- акцентуатор: только то, что реально используется ------------------------
 import ruaccent

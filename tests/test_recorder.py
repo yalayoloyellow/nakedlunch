@@ -414,7 +414,15 @@ def test_sigkill_mid_write_leaves_readable_wav(tmp_path, kill_after):
     p.kill()                                     # -9, без шансов на atexit
     p.wait()
     lived = time.monotonic() - t0
-    assert p.returncode in (-9, 137), f"ожидали SIGKILL, получили {p.returncode}"
+    # КОД ВОЗВРАТА ЗАВИСИТ ОТ СИСТЕМЫ (Раунд 61). На POSIX это −9 (или 137 из
+    # оболочки), на Windows `kill()` — это TerminateProcess, и код там просто
+    # ненулевой. Смысл проверки один и тот же: процесс убит снаружи, а не вышел
+    # сам, — значит atexit не отработал, и `.partial` обязан быть целым без
+    # всякой помощи со стороны программы. Проверка ниже платформ не различает.
+    if os.name == "nt":
+        assert p.returncode != 0, f"ожидали убийство, процесс вышел сам ({p.returncode})"
+    else:
+        assert p.returncode in (-9, 137), f"ожидали SIGKILL, получили {p.returncode}"
 
     assert os.path.exists(partial), ".partial не пережил убийство"
     assert not final.exists(), "финальное имя без close появляться не должно"

@@ -18,6 +18,7 @@
 # Прогон: .venv/bin/python -m pytest tests/test_hook_repeat.py -q
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -308,15 +309,22 @@ def test_krutilka_snimaet_shtraf_mezhdu_strofami():
 # чтением исходника.
 
 def перенумеровать(rep, перевод, длина):
-    if subprocess.run(["which", "node"], capture_output=True).returncode:
+    if shutil.which("node") is None:
         pytest.skip("node не установлен — проверка фронта пропущена")
-    src = (f"import {{ shelfMethods }} from '{ПОЛКИ.as_posix()}';\n"
+    src = (f"import {{ shelfMethods }} from '{ПОЛКИ.as_uri()}';\n"
            f"console.log(JSON.stringify(shelfMethods.чинитьПовторы.call({{}}, "
            f"{json.dumps(rep)}, {json.dumps(перевод)}, {длина})));")
+    # ВЫВОД ДЕКОДИРУЕМ САМИ, В UTF-8 (Раунд 61). При text=True питон берёт
+    # кодировку локали, и на Windows кириллица из node приходила мойбейком —
+    # поймано первым же прогоном тестов на трёх системах. node печатает UTF-8
+    # всегда, гадать тут нечего.
     p = subprocess.run(["node", "--input-type=module", "-e", src],
-                       capture_output=True, text=True, timeout=60)
-    assert p.returncode == 0, f"node упал:\n{p.stderr}"
-    return json.loads(p.stdout)
+                       capture_output=True, timeout=60)
+    вывод = (p.stdout or b"").decode("utf-8", "replace")
+    ошибки = (p.stderr or b"").decode("utf-8", "replace")
+    assert p.returncode == 0, f"node упал:\n{ошибки}"
+    assert вывод.strip(), f"node ничего не напечатал. stderr:\n{ошибки}"
+    return json.loads(вывод)
 
 
 def test_perestanovka_zvenyev_taschit_ssylku_za_soboy():
@@ -463,11 +471,11 @@ def test_seriya_nahodit_vstroennuyu_po_imeni():
 def выбрать_цепочку(имя):
     """Настоящий `pickChain` из methods.shelves.js — то, что реально кладёт
     запись полки в состояние. Запись может быть верной, а перекладка терять."""
-    if subprocess.run(["which", "node"], capture_output=True).returncode:
+    if shutil.which("node") is None:
         pytest.skip("node не установлен — проверка фронта пропущена")
     полка = json.dumps(chain_profiles.builtin(), ensure_ascii=False)
     src = f"""
-    import {{ shelfMethods }} from '{ПОЛКИ.as_posix()}';
+    import {{ shelfMethods }} from '{ПОЛКИ.as_uri()}';
     let patch = null;
     const self = Object.assign(Object.create(shelfMethods), {{
       state: {{ chainList: {полка} }}, closeSub: () => {{}},
@@ -476,10 +484,17 @@ def выбрать_цепочку(имя):
     shelfMethods.pickChain.call(self, {json.dumps(имя, ensure_ascii=False)});
     console.log(JSON.stringify(patch));
     """
+    # ВЫВОД ДЕКОДИРУЕМ САМИ, В UTF-8 (Раунд 61). При text=True питон берёт
+    # кодировку локали, и на Windows кириллица из node приходила мойбейком —
+    # поймано первым же прогоном тестов на трёх системах. node печатает UTF-8
+    # всегда, гадать тут нечего.
     p = subprocess.run(["node", "--input-type=module", "-e", src],
-                       capture_output=True, text=True, timeout=60)
-    assert p.returncode == 0, f"node упал:\n{p.stderr}"
-    return json.loads(p.stdout)
+                       capture_output=True, timeout=60)
+    вывод = (p.stdout or b"").decode("utf-8", "replace")
+    ошибки = (p.stderr or b"").decode("utf-8", "replace")
+    assert p.returncode == 0, f"node упал:\n{ошибки}"
+    assert вывод.strip(), f"node ничего не напечатал. stderr:\n{ошибки}"
+    return json.loads(вывод)
 
 
 def test_vybor_vstroennoy_donosit_povtory_do_sostoyaniya():

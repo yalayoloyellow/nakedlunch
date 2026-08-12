@@ -98,6 +98,7 @@ def test_polnaya_zapis_ostayotsya_gde_nuzhna(tmp_path):
 # ---------------------------------------------------------------------------
 
 import json
+import shutil
 import subprocess
 
 import pytest
@@ -106,13 +107,20 @@ import pytest
 
 
 def node(тело: str):
-    if subprocess.run(["which", "node"], capture_output=True).returncode != 0:
+    if shutil.which("node") is None:
         pytest.skip("node не установлен")
-    src = f"import {{ corpusMethods }} from '{КОРПУС_JS.as_posix()}';\n{тело}"
+    src = f"import {{ corpusMethods }} from '{КОРПУС_JS.as_uri()}';\n{тело}"
+    # ВЫВОД ДЕКОДИРУЕМ САМИ, В UTF-8 (Раунд 61). При text=True питон берёт
+    # кодировку локали, и на Windows кириллица из node приходила мойбейком —
+    # поймано первым же прогоном тестов на трёх системах. node печатает UTF-8
+    # всегда, гадать тут нечего.
     p = subprocess.run(["node", "--input-type=module", "-e", src],
-                       capture_output=True, text=True, timeout=60)
-    assert p.returncode == 0, f"node упал:\n{p.stderr}"
-    return json.loads(p.stdout)
+                       capture_output=True, timeout=60)
+    вывод = (p.stdout or b"").decode("utf-8", "replace")
+    ошибки = (p.stderr or b"").decode("utf-8", "replace")
+    assert p.returncode == 0, f"node упал:\n{ошибки}"
+    assert вывод.strip(), f"node ничего не напечатал. stderr:\n{ошибки}"
+    return json.loads(вывод)
 
 
 ОСНОВА = """

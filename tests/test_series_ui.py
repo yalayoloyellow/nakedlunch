@@ -13,6 +13,7 @@
 # Прогон: .venv/bin/python -m pytest tests/test_series_ui.py -q
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -30,13 +31,20 @@ import sheets  # noqa: E402
 
 
 def node(модуль: Path, импорт: str, тело: str):
-    if not subprocess.run(["which", "node"], capture_output=True).returncode == 0:
+    if shutil.which("node") is None:
         pytest.skip("node не установлен — проверка фронта пропущена")
-    src = f"import {{ {импорт} }} from '{модуль.as_posix()}';\n{тело}"
+    src = f"import {{ {импорт} }} from '{модуль.as_uri()}';\n{тело}"
+    # ВЫВОД ДЕКОДИРУЕМ САМИ, В UTF-8 (Раунд 61). При text=True питон берёт
+    # кодировку локали, и на Windows кириллица из node приходила мойбейком —
+    # поймано первым же прогоном тестов на трёх системах. node печатает UTF-8
+    # всегда, гадать тут нечего.
     p = subprocess.run(["node", "--input-type=module", "-e", src],
-                       capture_output=True, text=True, timeout=60)
-    assert p.returncode == 0, f"node упал:\n{p.stderr}"
-    return json.loads(p.stdout)
+                       capture_output=True, timeout=60)
+    вывод = (p.stdout or b"").decode("utf-8", "replace")
+    ошибки = (p.stderr or b"").decode("utf-8", "replace")
+    assert p.returncode == 0, f"node упал:\n{ошибки}"
+    assert вывод.strip(), f"node ничего не напечатал. stderr:\n{ошибки}"
+    return json.loads(вывод)
 
 
 @pytest.fixture()
