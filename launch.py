@@ -29,12 +29,24 @@ except ImportError:
     webview = None
 
 HERE = Path(__file__).resolve().parent
+
+# core/пути.py — единственный источник правды о том, где что лежит. launch.py
+# лежит уровнем выше core, поэтому путь добавляется здесь же, ДО импорта.
+#
+# Раунд 61. Раньше launch.py считал пути сам, от `Path(__file__)`. В исходниках
+# это совпадает с `пути`, поэтому расхождение не видел никто; в собранном
+# приложении оно фатально — см. source_stamp и INSTANCE ниже.
+sys.path.insert(0, str(HERE / "core"))
+import пути  # noqa: E402
+
 VENV_PY = HERE / ".venv" / "bin" / "python"
 PY = str(VENV_PY) if VENV_PY.exists() else sys.executable
 SERVER = str(HERE / "api" / "server.py")
 REACT_APP = HERE / "interface" / "react-app"
-DIST_INDEX = REACT_APP / "dist" / "index.html"
-ICON = HERE / "interface" / "icon" / "nakedlunch.icns"   # см. tools/make_icon.py
+# Читаемое едет вместе с программой, поэтому берётся из корня ЧТЕНИЯ: вне
+# бандла он тот же самый, внутри — распакованный каталог PyInstaller.
+DIST_INDEX = пути.ЧТЕНИЕ / "interface" / "react-app" / "dist" / "index.html"
+ICON = пути.ЧТЕНИЕ / "interface" / "icon" / "nakedlunch.icns"   # tools/make_icon.py
 
 # --- один экземпляр и свежесть кода ------------------------------------------
 # Двойной клик по ярлыку обязан давать ТЕКУЩУЮ программу. До 2026-08-03 не
@@ -49,7 +61,11 @@ ICON = HERE / "interface" / "icon" / "nakedlunch.icns"   # см. tools/make_icon
 #   запущенное свежее      → поднять его окно и выйти, второго окна не будет;
 #   запущенное устарело    → перезапустить, это и есть «дай мне обновления»;
 #   идёт запись фристайла  → не трогать: дубль дороже апдейта.
-INSTANCE = HERE / "data" / "instance.json"
+# ЗАПИСЫВАЕМЫЙ корень, а не папка рядом с кодом (Раунд 61): в /Applications и в
+# Program Files бандл на запись недоступен, запись молча падала в OSError, и
+# механизм «один экземпляр» переставал существовать — каждый клик поднимал
+# второй сервер и второй прогрев корпуса.
+INSTANCE = пути.данные("instance.json")
 _INSTANCE_LOCK = threading.Lock()   # мост записи ходит сюда из своих потоков
 
 # --- заставка на время подъёма сервера ---------------------------------------
@@ -181,7 +197,20 @@ def source_stamp() -> float:
     """Отпечаток версии: самое свежее время изменения того, что реально влияет
     на программу — собранный фронт и живой питон-код. Данные и словари не
     считаем: корпус меняется при каждой работе, и по нему любой экземпляр
-    считался бы устаревшим через минуту после запуска."""
+    считался бы устаревшим через минуту после запуска.
+
+    В СОБРАННОМ ПРИЛОЖЕНИИ ИСХОДНИКОВ НА ДИСКЕ НЕТ (Раунд 61). PyInstaller
+    держит модули внутри архива, а `__file__` указывает на несуществующий путь
+    вида `…/_internal/launch.py`. Прежний код звал по нему `stat()` и ронял
+    программу ДО открытия окна — поймано тестером на Windows:
+    `[WinError 2] Не удается найти указанный файл: C:\\yala\\_internal\\launch.py`.
+    Отпечатком служит сам исполняемый файл: он и есть версия программы, и
+    меняется ровно тогда, когда её обновили."""
+    if _упаковано():
+        try:
+            return Path(sys.executable).stat().st_mtime
+        except OSError:
+            return 0.0
     stamps = [Path(__file__).stat().st_mtime]
     if DIST_INDEX.exists():
         stamps.append(DIST_INDEX.stat().st_mtime)
@@ -342,21 +371,26 @@ def brand_app() -> None:
 def child_env() -> dict:
     # A Finder/.app launch doesn't source ~/.zshrc, so Homebrew's bin dirs (where
     # node/npm live) may be off PATH. Prepend the usual locations.
+    #
+    # РАЗДЕЛИТЕЛЬ БЕРЁМ У СИСТЕМЫ (Раунд 61). Двоеточие здесь было зашито, и на
+    # Windows, где PATH разделён точкой с запятой, `C:\Windows;C:\Python`
+    # распадалось на куски вида `C` и `\Windows;C`. Ребёнок получал искалеченный
+    # PATH и не находил ни npm, ни библиотек.
     env = os.environ.copy()
-    parts = env.get("PATH", "").split(":")
+    parts = env.get("PATH", "").split(os.pathsep)
     for p in ("/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin", "/usr/local/sbin"):
         if p not in parts and Path(p).is_dir():
             parts.insert(0, p)
-    env["PATH"] = ":".join(parts)
+    env["PATH"] = os.pathsep.join(parts)
     return env
 
 
 def ensure_build() -> bool:
+    """Build the front end if dist/ is missing or older than the source."""
     # В собранном приложении фронт уже внутри, а npm на машине человека может
     # не быть вовсе — и не должно быть: он ставил программу, а не среду.
     if _упаковано():
         return True
-    """Build the front end if dist/ is missing or older than the source."""
     if DIST_INDEX.exists():
         dist_mtime = DIST_INDEX.stat().st_mtime
         stale = any(p.stat().st_mtime > dist_mtime for p in (REACT_APP / "src").rglob("*") if p.is_file())
