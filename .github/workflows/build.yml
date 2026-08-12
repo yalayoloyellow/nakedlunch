@@ -135,7 +135,23 @@ jobs:
           NAKEDLUNCH_DATA: ${{ runner.temp }}/nl-data
         run: |
           set -u
-          ./dist/nakedlunch/nakedlunch сервер --port 8899 > server.log 2>&1 &
+          # ПРОВЕРЯЕМ ТО, ЧТО ОТГРУЖАЕТСЯ (Раунд 61).
+          #
+          # PyInstaller делает два дерева: onedir `dist/nakedlunch/` и бандл
+          # `dist/nakedlunch.app`. На macOS в .dmg кладётся ВТОРОЕ, а проверялось
+          # первое — людям уезжало то, чего никто не запускал. Данные там одни и
+          # те же, но «одни и те же» — предположение, а предположения сегодня уже
+          # дважды оказывались ложными.
+          #
+          # На Linux и Windows дыры нет: архивы делаются ровно из `dist/nakedlunch/`.
+          if [ "${{ matrix.id }}" = "macos" ]; then
+            bin="dist/nakedlunch.app/Contents/MacOS/nakedlunch"
+          else
+            bin="dist/nakedlunch/nakedlunch"
+          fi
+          test -x "$bin" || { echo "ОТКАЗ: нет исполняемого файла $bin"; exit 1; }
+          echo "проверяю: $bin"
+          "./$bin" сервер --port 8899 > server.log 2>&1 &
           pid=$!
           code=""
           for i in $(seq 1 60); do
@@ -179,7 +195,7 @@ jobs:
             exit 1
           fi
           echo "словари отвечают: рифмы и синонимы не пусты"
-          ./dist/nakedlunch/nakedlunch индекс --check > index.log 2>&1 || true
+          "./$bin" индекс --check > index.log 2>&1 || true
           cat index.log
           if ! grep -q "индекс" index.log; then
             echo "ОТКАЗ: роль «индекс» не отработала — разводка ролей сломана"
