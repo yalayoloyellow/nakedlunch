@@ -23,7 +23,6 @@ import json
 import os
 
 import склад
-from pathlib import Path
 
 import clean
 

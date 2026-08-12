@@ -391,7 +391,11 @@ class Session:
 
     def __init__(self, directory=None):
         if directory is None:
-            root = Path(os.environ.get("NAKEDLUNCH_RECORDINGS") or DEFAULT_ROOT)
+            # Через `пути.хранилище` (Раунд 61): своя переменная →
+            # NAKEDLUNCH_HOME → умолчание. Записи — третье хранилище, которое
+            # одна NAKEDLUNCH_HOME раньше не покрывала.
+            import пути
+            root = пути.хранилище("NAKEDLUNCH_RECORDINGS", "записи", DEFAULT_ROOT)
             root.mkdir(parents=True, exist_ok=True)
             directory = _unique_dir(root, time.strftime("%Y-%m-%d %H-%M-%S"))
         self.dir = Path(directory)

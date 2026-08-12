@@ -52,6 +52,25 @@ OUT = пути.артефакт("nl_index")
 from nlindex import RULES  # noqa: E402
 
 
+def _снести(каталог: Path) -> None:
+    """Убрать каталог со всем содержимым, если он есть.
+
+    Один помощник на `.tmp` и `.old`: раньше чистился только первый, и
+    оставшийся `.old` навсегда блокировал пересборку индекса (Раунд 61).
+    Плоский обход, а не `shutil.rmtree`: внутри индекса лежат только файлы, и
+    рекурсивное удаление по вычисленному пути — не та мощь, которую стоит
+    держать под рукой в сборщике.
+    """
+    if not каталог.exists():
+        return
+    for п in каталог.iterdir():
+        if п.is_dir():
+            _снести(п)
+        else:
+            п.unlink()
+    каталог.rmdir()
+
+
 # ПРОГРЕСС ВИДЕН СНАРУЖИ (Раунд 56). Требование: состояние отображается чётко и в реальном времени, из реальных данных..
 #
 # У сборки ударений сайдкар со статусом был с самого начала, у сборки индекса —
@@ -362,10 +381,7 @@ def build() -> int:
     # оставит полуиндекс, который загрузчик примет за целый
     t = time.time()
     tmp = OUT.with_name(OUT.name + ".tmp")
-    if tmp.exists():
-        for p in tmp.iterdir():
-            p.unlink()
-        tmp.rmdir()
+    _снести(tmp)
     tmp.mkdir(parents=True)
     for name, arr in (("banal", banal), ("taut", taut), ("bind", bind), ("mat", mat),
                       ("syl", syl), ("key_id", key_id), ("span_a", span_a), ("span_b", span_b),
@@ -390,11 +406,16 @@ def build() -> int:
     }, ensure_ascii=False), "utf-8")
     if OUT.exists():
         old = OUT.with_name(OUT.name + ".old")
+        # СТУХШИЙ `.old` СНОСИТСЯ ПЕРЕД ИСПОЛЬЗОВАНИЕМ (Раунд 61). Раньше
+        # чистился только `.tmp`, а `.old` — нет. Смерть процесса в окне между
+        # переименованием и удалением (эта сборка прожорлива по памяти, см.
+        # api/server.py) оставляла каталог, и СЛЕДУЮЩАЯ сборка падала на
+        # `rename` в непустой каталог — навсегда, без пути к восстановлению из
+        # интерфейса. Одна строка против невосстановимого состояния.
+        _снести(old)
         OUT.rename(old)
         tmp.rename(OUT)
-        for p in old.iterdir():
-            p.unlink()
-        old.rmdir()
+        _снести(old)
     else:
         tmp.rename(OUT)
     size = sum(p.stat().st_size for p in OUT.iterdir())
