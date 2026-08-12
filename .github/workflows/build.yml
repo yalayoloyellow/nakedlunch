@@ -68,6 +68,22 @@ jobs:
       - name: модели акцентуатора
         run: python tools/скачать_акцентуатор.py
 
+      # ТАБЛИЦЫ, КОТОРЫХ НЕТ В РЕПОЗИТОРИИ (Раунд 61).
+      #
+      # navec.tar и rhyme_index.json лежат в .gitignore как артефакты сборки. На
+      # машине разработчика они есть с давних пор, на сборочной не появлялись
+      # никогда, а спека молча пропускала отсутствующее. Цена: тема не работала
+      # ни в одном выпущенном релизе, попап по слову был пуст, и об этом никто
+      # не знал — сервер поднимается и без словарей, поэтому проверка запуска
+      # такую сборку пропускала.
+      #
+      # Теперь спека на отсутствие таблицы падает, а эти два шага её кормят.
+      - name: векторы
+        run: python tools/скачать_векторы.py
+
+      - name: рифмовник
+        run: python tools/build_rhyme_index.py
+
       - name: интерфейс
         working-directory: interface/react-app
         run: |
@@ -127,6 +143,17 @@ jobs:
             code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8899/ || echo "")
             if [ "$code" = "200" ]; then break; fi
           done
+          # ТАБЛИЦЫ ОБЯЗАНЫ РАБОТАТЬ, А НЕ ЛЕЖАТЬ (Раунд 61). Проверка «файл на
+          # месте» уже один раз пропустила неполную сборку: сервер поднимается и
+          # без словарей. Дёргаем попап по слову — он читает rhyme_index.json и
+          # thesaurus.json, и пустой ответ здесь означает ровно то, что у
+          # человека вкладка окажется пустой.
+          рифмы=$(curl -s -X POST -H "Content-Type: application/json" \
+                  -d '{"word":"камень","tab":"рифмы","line":""}' \
+                  http://127.0.0.1:8899/api/word/suggest 2>/dev/null || echo "")
+          синонимы=$(curl -s -X POST -H "Content-Type: application/json" \
+                     -d '{"word":"камень","tab":"синонимы","line":""}' \
+                     http://127.0.0.1:8899/api/word/suggest 2>/dev/null || echo "")
           kill "$pid" 2>/dev/null || true
           echo "--- лог сервера ---"
           tail -40 server.log || true
@@ -135,6 +162,17 @@ jobs:
             exit 1
           fi
           echo "сервер поднялся и отдал интерфейс"
+          echo "рифмы: $(echo "$рифмы" | head -c 120)"
+          echo "синонимы: $(echo "$синонимы" | head -c 120)"
+          if ! echo "$рифмы" | grep -q '"items"' || echo "$рифмы" | grep -q '"items": *\[\]'; then
+            echo "ОТКАЗ: вкладка «рифмы» пуста — нет core/data/rhyme_index.json"
+            exit 1
+          fi
+          if ! echo "$синонимы" | grep -q '"items"' || echo "$синонимы" | grep -q '"items": *\[\]'; then
+            echo "ОТКАЗ: вкладка «синонимы» пуста — нет data/thesaurus.json"
+            exit 1
+          fi
+          echo "словари отвечают: рифмы и синонимы не пусты"
           ./dist/nakedlunch/nakedlunch индекс --check > index.log 2>&1 || true
           cat index.log
           if ! grep -q "индекс" index.log; then
@@ -163,6 +201,20 @@ jobs:
             } catch { $code = 0 }
             if ($code -eq 200) { break }
           }
+          # Словари обязаны отвечать, а не просто лежать — см. пояснение в ветке
+          # macOS/Linux выше.
+          function Спросить($вкладка) {
+            $тело = @{ word = "камень"; tab = $вкладка; line = "" } | ConvertTo-Json -Compress
+            $байты = [System.Text.Encoding]::UTF8.GetBytes($тело)
+            try {
+              $о = Invoke-WebRequest -Uri "http://127.0.0.1:8899/api/word/suggest" `
+                     -Method POST -Body $байты -ContentType "application/json; charset=utf-8" `
+                     -UseBasicParsing -TimeoutSec 60
+              return ($о.Content | ConvertFrom-Json).items.Count
+            } catch { return -1 }
+          }
+          $нРифм = Спросить "рифмы"
+          $нСин  = Спросить "синонимы"
           Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           Write-Host "--- лог сервера ---"
           if (Test-Path server.log) { Get-Content server.log -Tail 40 }
@@ -172,6 +224,16 @@ jobs:
             exit 1
           }
           Write-Host "сервер поднялся и отдал интерфейс"
+          Write-Host "рифм: $нРифм · синонимов: $нСин"
+          if ($нРифм -le 0) {
+            Write-Host "ОТКАЗ: вкладка «рифмы» пуста — нет core/data/rhyme_index.json"
+            exit 1
+          }
+          if ($нСин -le 0) {
+            Write-Host "ОТКАЗ: вкладка «синонимы» пуста — нет data/thesaurus.json"
+            exit 1
+          }
+          Write-Host "словари отвечают: рифмы и синонимы не пусты"
           $idx = (& "dist\nakedlunch\nakedlunch.exe" индекс --check 2>&1 | Out-String)
           $global:LASTEXITCODE = 0
           Write-Host $idx
