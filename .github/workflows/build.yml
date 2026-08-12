@@ -148,10 +148,16 @@ jobs:
           # без словарей. Дёргаем попап по слову — он читает rhyme_index.json и
           # thesaurus.json, и пустой ответ здесь означает ровно то, что у
           # человека вкладка окажется пустой.
-          рифмы=$(curl -s -X POST -H "Content-Type: application/json" \
+          # ИМЕНА ПЕРЕМЕННЫХ ТОЛЬКО ASCII — см. предупреждение выше. Я написала
+          # его и тут же назвала переменные `рифмы` и `синонимы`: bash такое
+          # присваивание не считает присваиванием и пытается ВЫПОЛНИТЬ строку,
+          # отчего в логе появляется «...: command not found» с ответом сервера
+          # внутри. PowerShell кириллицу допускает, поэтому Windows проходил, а
+          # macOS и Linux падали — редкий случай, когда ломается не Windows.
+          rifmy=$(curl -s -X POST -H "Content-Type: application/json" \
                   -d '{"word":"камень","tab":"рифмы","line":""}' \
                   http://127.0.0.1:8899/api/word/suggest 2>/dev/null || echo "")
-          синонимы=$(curl -s -X POST -H "Content-Type: application/json" \
+          sinonimy=$(curl -s -X POST -H "Content-Type: application/json" \
                      -d '{"word":"камень","tab":"синонимы","line":""}' \
                      http://127.0.0.1:8899/api/word/suggest 2>/dev/null || echo "")
           kill "$pid" 2>/dev/null || true
@@ -162,13 +168,13 @@ jobs:
             exit 1
           fi
           echo "сервер поднялся и отдал интерфейс"
-          echo "рифмы: $(echo "$рифмы" | head -c 120)"
-          echo "синонимы: $(echo "$синонимы" | head -c 120)"
-          if ! echo "$рифмы" | grep -q '"items"' || echo "$рифмы" | grep -q '"items": *\[\]'; then
+          echo "рифмы: $(echo "$rifmy" | head -c 120)"
+          echo "синонимы: $(echo "$sinonimy" | head -c 120)"
+          if ! echo "$rifmy" | grep -q '"items"' || echo "$rifmy" | grep -q '"items": *\[\]'; then
             echo "ОТКАЗ: вкладка «рифмы» пуста — нет core/data/rhyme_index.json"
             exit 1
           fi
-          if ! echo "$синонимы" | grep -q '"items"' || echo "$синонимы" | grep -q '"items": *\[\]'; then
+          if ! echo "$sinonimy" | grep -q '"items"' || echo "$sinonimy" | grep -q '"items": *\[\]'; then
             echo "ОТКАЗ: вкладка «синонимы» пуста — нет data/thesaurus.json"
             exit 1
           fi
