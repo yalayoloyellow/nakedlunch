@@ -28,6 +28,7 @@
 # Прогон: .venv/bin/python -m pytest tests/test_reference_knobs.py -q
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -48,13 +49,20 @@ def node(тело: str):
     """Выполнить кусок ES-модуля рядом с полками и вернуть разобранный JSON,
     который он напечатает. Пропускаем тест, если node не установлен: это
     проверка фронта, а не повод красить бэкенд в красный."""
-    if not subprocess.run(["which", "node"], capture_output=True).returncode == 0:
+    if shutil.which("node") is None:
         pytest.skip("node не установлен — проверка фронта пропущена")
-    src = f"import {{ shelfMethods }} from '{ПОЛКИ.as_posix()}';\n{тело}"
+    src = f"import {{ shelfMethods }} from '{ПОЛКИ.as_uri()}';\n{тело}"
+    # ВЫВОД ДЕКОДИРУЕМ САМИ, В UTF-8 (Раунд 61). При text=True питон берёт
+    # кодировку локали, и на Windows кириллица из node приходила мойбейком —
+    # поймано первым же прогоном тестов на трёх системах. node печатает UTF-8
+    # всегда, гадать тут нечего.
     p = subprocess.run(["node", "--input-type=module", "-e", src],
-                       capture_output=True, text=True, timeout=60)
-    assert p.returncode == 0, f"node упал:\n{p.stderr}"
-    return json.loads(p.stdout)
+                       capture_output=True, timeout=60)
+    вывод = (p.stdout or b"").decode("utf-8", "replace")
+    ошибки = (p.stderr or b"").decode("utf-8", "replace")
+    assert p.returncode == 0, f"node упал:\n{ошибки}"
+    assert вывод.strip(), f"node ничего не напечатал. stderr:\n{ошибки}"
+    return json.loads(вывод)
 
 
 ЗОВ = """

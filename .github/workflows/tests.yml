@@ -14,7 +14,19 @@ on:
 
 jobs:
   pytest:
-    runs-on: macos-latest
+    # ТРИ СИСТЕМЫ, А НЕ ОДНА (Раунд 61). Выпускается три сборки, а тесты шли
+    # только на macOS — значит ветки `os.name == "nt"` и XDG в core/пути.py не
+    # исполнялись в CI никогда, как и путь к венву в core/дочерний.py, который
+    # на Windows не существует по определению (.venv\Scripts, а не .venv/bin).
+    #
+    # fail-fast выключен намеренно: падение на новой системе — это сведения о
+    # ней, а не повод отменять прогон на остальных.
+    name: тесты · ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 

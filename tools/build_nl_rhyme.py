@@ -291,14 +291,28 @@ def акцентуатор():
         ё = корень / "dictionary" / "yo_words.json.gz"
         acc.yo_words = json.load(gzip.open(ё)) if ё.exists() else {}
         acc.tiny_mode = True
-        print(f"акцентуатор: словарь {len(acc.accents)} словоформ, "
-              f"ё-словарь {len(acc.yo_words)}, без омографа", flush=True)
-        return acc
     except Exception as e:                                       # noqa: BLE001
         print(f"акцентуатор: лёгкий путь не вышел ({e}), поднимаю полностью", flush=True)
         acc = RUAccent()
         acc.load(omograph_model_size="turbo2", use_dictionary=True, tiny_mode=False)
         return acc
+
+    # ОТЧЁТ ВНЕ try (Раунд 61). Пока печать стояла внутри, любая её осечка —
+    # закрытый поток, кодировка консоли — уводила выполнение в except, то есть в
+    # полный `load()`. А он тянет 1.3 ГБ с HuggingFace и пишет ВНУТРЬ пакета
+    # ruaccent, который в собранном приложении недоступен на запись: первая же
+    # заливка книги на чистой машине падала бы, обвиняя лёгкий путь, который на
+    # самом деле отработал.
+    #
+    # Тот же приём уже применён в tools/скачать_акцентуатор.py — там он появился
+    # после Windows-сборки, где отчёт об успешной загрузке ронял процесс и
+    # рапортовал о провале. Сюда его тогда не перенесли.
+    try:
+        print(f"акцентуатор: словарь {len(acc.accents)} словоформ, "
+              f"ё-словарь {len(acc.yo_words)}, без омографа", flush=True)
+    except Exception:                                            # noqa: BLE001
+        pass
+    return acc
 
 
 def build(existing: dict, mode: str = "incremental") -> dict:

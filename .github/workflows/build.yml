@@ -92,21 +92,94 @@ jobs:
         if: matrix.id == 'linux'
         run: tar -czf nakedlunch-linux.tar.gz -C dist nakedlunch
 
-      # Дым-проверка: собранный файл существует и запускается. Полноценно
-      # проверить работу на сборочной машине нельзя — там нет ни корпуса, ни
-      # окна, — но упавший на старте артефакт до релиза доходить не должен.
-      - name: дым-проверка (macOS, Linux)
+      # ЗАПУСК, А НЕ ПРОВЕРКА НАЛИЧИЯ ФАЙЛА (Раунд 61).
+      #
+      # Прежняя проверка смотрела только `test -x`, и в комментарии к ней было
+      # написано, почему: «полноценно проверить работу на сборочной машине
+      # нельзя — там нет ни корпуса, ни окна». Убеждение оказалось ложным:
+      # РОЛЬ СЕРВЕРА ПОДНИМАЕТСЯ БЕЗ КОРПУСА И БЕЗ ОКНА, и `GET /` отдаёт
+      # интерфейс — проверено на настоящем бандле 2026-08-12.
+      #
+      # Ценой этого убеждения стал релиз v2.1.0: он падал до открытия окна
+      # (`stat()` по несуществующему в бандле пути) и не отдал бы фронт даже
+      # после починки старта (`DIST` смотрел выше распакованных данных). Обе
+      # ошибки ловились одним `curl`.
+      #
+      # Проверяем два пути: сервер поднимается и отдаёт интерфейс; разводка
+      # ролей доходит до ЧУЖОЙ роли. Второе важно отдельно — в бандле роль
+      # запускается командой «сам себя с именем роли», и этот путь не
+      # проверялся ничем.
+      #
+      # Имена переменных оболочки — только ASCII: кириллические не присваиваются
+      # и молча дают пустую строку (поймано на живой проверке 2026-08-12).
+      - name: запуск собранного (macOS, Linux)
         if: matrix.id != 'windows'
+        env:
+          NAKEDLUNCH_HOME: ${{ runner.temp }}/nl-home
+          NAKEDLUNCH_DATA: ${{ runner.temp }}/nl-data
         run: |
-          test -x dist/nakedlunch/nakedlunch
-          ls -la dist/nakedlunch/nakedlunch
-          echo "исполняемый файл на месте"
+          set -u
+          ./dist/nakedlunch/nakedlunch сервер --port 8899 > server.log 2>&1 &
+          pid=$!
+          code=""
+          for i in $(seq 1 60); do
+            sleep 2
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8899/ || echo "")
+            if [ "$code" = "200" ]; then break; fi
+          done
+          kill "$pid" 2>/dev/null || true
+          echo "--- лог сервера ---"
+          tail -40 server.log || true
+          if [ "$code" != "200" ]; then
+            echo "ОТКАЗ: собранный сервер не отдал 200 на / (получено: '$code')"
+            exit 1
+          fi
+          echo "сервер поднялся и отдал интерфейс"
+          ./dist/nakedlunch/nakedlunch индекс --check > index.log 2>&1 || true
+          cat index.log
+          if ! grep -q "индекс" index.log; then
+            echo "ОТКАЗ: роль «индекс» не отработала — разводка ролей сломана"
+            exit 1
+          fi
+          echo "разводка ролей работает"
 
-      - name: дым-проверка (Windows)
+      - name: запуск собранного (Windows)
         if: matrix.id == 'windows'
+        shell: pwsh
+        env:
+          NAKEDLUNCH_HOME: ${{ runner.temp }}\nl-home
+          NAKEDLUNCH_DATA: ${{ runner.temp }}\nl-data
         run: |
-          if (-not (Test-Path dist/nakedlunch/nakedlunch.exe)) { exit 1 }
-          echo "исполняемый файл на месте"
+          $proc = Start-Process -FilePath "dist\nakedlunch\nakedlunch.exe" `
+                                -ArgumentList "сервер","--port","8899" `
+                                -PassThru -RedirectStandardOutput server.log `
+                                -RedirectStandardError server.err
+          $code = 0
+          for ($i = 0; $i -lt 60; $i++) {
+            Start-Sleep -Seconds 2
+            try {
+              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8899/" -UseBasicParsing -TimeoutSec 5
+              $code = $r.StatusCode
+            } catch { $code = 0 }
+            if ($code -eq 200) { break }
+          }
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          Write-Host "--- лог сервера ---"
+          if (Test-Path server.log) { Get-Content server.log -Tail 40 }
+          if (Test-Path server.err) { Get-Content server.err -Tail 40 }
+          if ($code -ne 200) {
+            Write-Host "ОТКАЗ: собранный сервер не отдал 200 на / (получено: $code)"
+            exit 1
+          }
+          Write-Host "сервер поднялся и отдал интерфейс"
+          $idx = (& "dist\nakedlunch\nakedlunch.exe" индекс --check 2>&1 | Out-String)
+          $global:LASTEXITCODE = 0
+          Write-Host $idx
+          if ($idx -notmatch "индекс") {
+            Write-Host "ОТКАЗ: роль «индекс» не отработала — разводка ролей сломана"
+            exit 1
+          }
+          Write-Host "разводка ролей работает"
 
       - uses: actions/upload-artifact@v4
         with:
