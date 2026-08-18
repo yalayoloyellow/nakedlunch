@@ -404,20 +404,32 @@ def build(existing: dict, mode: str = "incremental") -> dict:
     return out
 
 
+def _ключ_и_span(morph, acc, text: str) -> tuple[str, list[int] | None, bool]:
+    """Ключ рифмы, подсветка и «знаменательного слова не нашлось» для текста.
+
+    ОДНА КОПИЯ НА ЧЕТЫРЕ ПУТИ (2026-08-18). Расчёт жил в двух местах —
+    `_поля_фрагмента` (сборка) и `rekey` (перепись ключей). Когда у `--rekey`
+    появилась потоковая ветка, копий стало бы три; в этом проекте два списка
+    одного и того же расходятся с гарантией, и правило ключа — худшее, чему
+    можно дать разойтись: тогда «строкой» и рифмо-бонус перестают попадать
+    друг в друга молча."""
+    tokens = text.split()
+    idx = _last_content_index(morph, tokens) if tokens else None
+    if idx is None:
+        return "", None, True
+    surface = _clean(tokens[idx])
+    key = _word_rhyme_key(acc, surface, tokens[idx])
+    return key, _highlight_span(text, idx, surface, key), False
+
+
 def _поля_фрагмента(morph, acc, text: str) -> tuple[dict, bool]:
     """Поля одного фрагмента: (что записать, был ли фрагмент без ключа).
 
     ОДНА КОПИЯ НА ОБА ПУТИ (Раунд 62). Расчёт стоял прямо в теле `build`, и
     когда рядом появилась потоковая сборка, второй такой же кусок был бы ровно
     тем «вторым источником правды», от которого проект уже горел трижды."""
-    tokens = text.split()
-    idx = _last_content_index(morph, tokens) if tokens else None
-    if idx is None:
-        return {"key": "", "span": None, **_extra_fields(text)}, True
-    surface = _clean(tokens[idx])
-    key = _word_rhyme_key(acc, surface, tokens[idx])
-    return ({"key": key, "span": _highlight_span(text, idx, surface, key),
-             **_extra_fields(text)}, False)
+    key, span, пусто = _ключ_и_span(morph, acc, text)
+    return {"key": key, "span": span, **_extra_fields(text)}, пусто
 
 
 def build_потоком(mode: str = "incremental") -> int:
@@ -537,6 +549,48 @@ def reban_потоком() -> int:
     return п.записано
 
 
+def rekey_потоком() -> int:
+    """Перепись ключей БЕЗ загрузки кэша в память (2026-08-18).
+
+    ЧЕГО ЗДЕСЬ НЕ БЫЛО. У `--reban` развилка на построчный формат появилась в
+    Раунде 57, у обычной сборки — в Раунде 62, а `--rekey` так и остался
+    единственным режимом, который читает `OUT` БЕЗУСЛОВНО. Значит на доме, где
+    лежит только `nl_rhyme.jsonl`, он говорил «нечего переписывать: ... нет» —
+    при полном кэше рядом; а если старый файл всё же был, он переписывал
+    ключи в файле, КОТОРЫЙ НИКТО НЕ ЧИТАЕТ, и правило ключа менялось только
+    на бумаге. Ровно та же болезнь, что в `build_потоком`, только с ключами.
+
+    Заодно снимается память: старый путь держал 2.4 млн записей (около 6 ГБ),
+    из-за чего OOM-киллер уже забирал процесс. Здесь строка вошла — строка
+    вышла.
+
+    Ключ считается тем же `_ключ_и_span`, что и на сборке: расхождения правила
+    между режимами быть не может по построению."""
+    import кэш
+    if not кэш.есть_строчный():
+        raise SystemExit("нет построчного кэша — сперва: build_nl_rhyme.py --jsonl")
+    _write_status(0, "running", "rekey")
+    morph = pymorphy3.MorphAnalyzer()
+    acc = акцентуатор()
+    t0 = time.time()
+    n_changed = 0
+    with кэш.Писатель() as п:
+        for текст, поля in кэш.поток():
+            key, span, _ = _ключ_и_span(morph, acc, текст)
+            if key != поля.get("key"):
+                n_changed += 1
+            # только два поля: всё остальное зависит от текста, а он не менялся
+            п.запиши(текст, {**поля, "key": key, "span": span})
+            if п.записано % 500_000 == 0:
+                print(f"  {п.записано}  ({time.time()-t0:.0f}с) — изменено {n_changed}",
+                      flush=True)
+                _write_status(п.записано, "running", "rekey")
+    print(f"перепись ключей потоком: {п.записано} за {time.time()-t0:.0f}с, "
+          f"ключ изменился у {n_changed}", flush=True)
+    _write_status(п.записано, "done", "rekey")
+    return п.записано
+
+
 def reban(existing: dict) -> dict:
     """Пересчитать ТОЛЬКО banal и content у уже закэшированных фрагментов.
 
@@ -603,14 +657,7 @@ def rekey(existing: dict) -> dict:
                   flush=True)
             _write_status(len(out), "running", "rekey")
             last_status = now
-        tokens = text.split()
-        idx = _last_content_index(morph, tokens) if tokens else None
-        if idx is None:
-            key, span = "", None
-        else:
-            surface = _clean(tokens[idx])
-            key = _word_rhyme_key(acc, surface, tokens[idx])
-            span = _highlight_span(text, idx, surface, key)
+        key, span, _ = _ключ_и_span(morph, acc, text)
         if key != entry.get("key"):
             n_changed += 1
         out[text] = {**entry, "key": key, "span": span}
@@ -675,6 +722,21 @@ def main() -> int:
         _write_status(len(out), "done", "reban")
         return 0
     if args.rekey:
+        # Построчный кэш есть — идём потоком, в тот файл, который читают.
+        # Развилки здесь не было вовсе (2026-08-18): единственный режим,
+        # читавший `OUT` безусловно, — см. `rekey_потоком`.
+        import кэш as _кэш
+        if _кэш.есть_строчный():
+            try:
+                rekey_потоком()
+            except Exception as e:
+                _write_status(0, "error", "rekey", error=str(e))
+                raise
+            except BaseException:
+                # Прервали — это не «идёт»: тот же разбор, что у `--reban`.
+                _write_status(0, "error", "rekey", error="перепись прервана")
+                raise
+            return 0
         if not OUT.exists():
             sys.exit(f"нечего переписывать: {OUT} нет")
         было = json.loads(OUT.read_text(encoding="utf-8"))

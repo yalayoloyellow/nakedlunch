@@ -30,7 +30,7 @@ import nlbridge
 import nlindex          # колоночный индекс корпуса (Раунд 31); None-безопасен
 import scan as scan_mod
 from corpus import lemmatize
-import пути               # где что лежит, см. core/пути.py
+import кэш               # кэш ударений: он же и отвечает, есть ли что читать
 
 VOWELS = "аеёиоуыэюя"
 
@@ -160,7 +160,15 @@ def has_mat(text: str) -> bool:
     nakedlunch-фрагменты (_score_strict_table / _nl_scored) — зовут её."""
     return _MAT_RE.search(text.lower().replace("ё", "е")) is not None
 
-_NL_RHYME_PATH = пути.артефакт("nl_rhyme.json")
+# НАДГРОБИЕ 2026-08-18: `_NL_RHYME_PATH = пути.артефакт("nl_rhyme.json")` убран
+# (вместе с ним — импорт `пути`, других читателей у него здесь не было).
+# Это была ВТОРАЯ копия `кэш.СТАРЫЙ` (буквально то же выражение), и жила она
+# сторожем: `if _NL_RHYME_PATH.exists()`. Читал же код через `кэш.читать_всё()`,
+# который предпочитает построчный `nl_rhyme.jsonl`. В доме с одним только
+# `.jsonl` сторож отвечал «нечего» при полном кэше рядом — замер на временном
+# доме: `кэш.есть_строчный()` True, `читать_всё()` отдаёт запись, а после
+# `warm_caches()` в `_NL_RHYME` ноль записей. Теперь спрашиваем у загрузчика
+# (`кэш.есть()`), и список форматов остаётся один — в `core/кэш.py`.
 _NL_RHYME: dict = {}
 
 
@@ -186,7 +194,7 @@ def warm_caches() -> None:
     # единственный способ вообще что-то ответить, пока индекс не испечён.
     if nlindex.available():
         return
-    if _NL_RHYME_PATH.exists():
+    if кэш.есть():
         # {text: {"key", "span", "banal", "taut", "lemmas", "tokens"}} — see
         # tools/build_nl_rhyme.py's module docstring for what each field is
         # and why they're precomputed offline (2026-07-14: makes a FULL-pool
@@ -197,7 +205,6 @@ def warm_caches() -> None:
         # ЧЕРЕЗ ОБЩИЙ ЧИТАТЕЛЬ (Раунд 57): он предпочитает построчный формат,
         # если тот есть. Разбор одной гигантской строки давал пик вдвое больше
         # результата; поток — ровно столько, сколько занимает сам словарь.
-        import кэш
         _NL_RHYME = кэш.читать_всё()
 
 
