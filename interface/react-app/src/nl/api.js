@@ -196,7 +196,7 @@ export async function saveFile(filename, content, mime) {
 }
 
 // ---------------------------------------------------------------------------
-// ЗДЕСЬ БЫЛ КЛИЕНТ ЛИСТОВ — /api/sheets (вырезано 2026-08-18, 16 функций):
+// ЗДЕСЬ БЫЛ КЛИЕНТ ЛИСТОВ — /api/sheets (вырезано 2026-08-18, 14 функций):
 // sheetsList / Read / Write / Create / Rename / Duplicate / Trash / Restore /
 // Purge / PurgeAll / Move / FolderCreate / FolderDelete / OpenDir.
 // Листы и папки жили под редактором документа; редактор вырезан целиком, и
