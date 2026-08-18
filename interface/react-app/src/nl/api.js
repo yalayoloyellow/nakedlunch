@@ -48,7 +48,10 @@ export function post(url, body, timeoutMs) {
 export const generate = (payload) => post('/api/generate', payload, GEN_TIMEOUT_MS);
 // {corpus, accepted} — accepted это список строк избранного, новые сверху
 export const state = () => get('/api/state');
-// {available, sources, pool_total, pool_available, retention}
+// {available, sources, pool_total, pool_available} — поле retention убрано
+// 2026-08-18 вместе с роутами /api/nl/retention: экрана у срока хранения
+// «показанного» самого nakedlunch не было никогда, и форма ответа обещала
+// значение, которого больше нет
 export const nlState = () => get('/api/nl/state');
 export const stats = () => get('/api/stats');
 // {items:[{text,template,tags,shown_at,restored_at,expired}], stats}
