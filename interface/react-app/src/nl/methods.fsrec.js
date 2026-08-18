@@ -344,7 +344,7 @@ export const fsRecMethods = {
     this.recPaint();
 
     this._recBusy = false;
-    this.setState({ recOn: true, recLock: true });
+    this.setState({ recOn: true });
   },
 
   // Соседний модуль вправе отдать массив дорожек, пару {mic, loop} или одну
@@ -388,7 +388,7 @@ export const fsRecMethods = {
     this.recLockOff();
     this.recHudHide();
     this._recBusy = false;
-    this.setState({ recOn: false, recLock: false }, () => this.recShowDone(results, ms));
+    this.setState({ recOn: false }, () => this.recShowDone(results, ms));
   },
 
   // ---- замок хрома -------------------------------------------------------

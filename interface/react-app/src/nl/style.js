@@ -96,8 +96,9 @@ const BASE_CSS = `
   [data-row="1"] input[type="range"] { width: 146px; }
   [data-pa] input[type="range"] { width: 146px; }
   [data-row="1"] select { width: 146px; max-width: 146px; }
-  [contenteditable] { outline: none; }
-  [contenteditable]:empty::before { content: attr(data-ph); color: var(--muted-soft); }
+  /* Правила [contenteditable] (снятие обводки и подсказка-плейсхолдер через
+     data-ph) вырезаны 2026-08-18 вместе с редактором: редактируемых узлов в
+     приложении не осталось ни одного. */
   input[type="text"], input[type="number"] { outline: none; }
   input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
@@ -112,7 +113,7 @@ const BASE_CSS = `
   input[type="range"]::-moz-range-track { height: 1px; background: var(--border-soft); border: none; }
   input[type="range"]::-moz-range-thumb { width: 11px; height: 11px; border: none; border-radius: 50%; background: var(--ink); cursor: pointer; }
   input[type="range"]:focus, input[type="range"]:focus-visible { outline: none; }
-  /* хром редактора и фристайла: виден только под курсором — открытый попап панель не проявляет.
+  /* хром ленты и фристайла: виден только под курсором — открытый попап панель не проявляет.
      уход мгновенный (переход объявлен только в состоянии «показан»), появление — плавное */
   [data-chrome] { opacity: 0; transition: opacity 0s; }
   /* во фристайле хром — плавающий слой поверх сцены: высоты не занимает, но свою плашку несёт,
@@ -133,7 +134,7 @@ const BASE_CSS = `
   [data-reclock="1"] [data-chrome]:has(:focus-visible) {
     opacity: 0 !important; pointer-events: none !important; transition: none !important;
   }
-  /* документ листается без системной полосы; в панелях настроек она остаётся — там она нужна */
+  /* лента листается без системной полосы; в панелях настроек она остаётся — там она нужна */
   [data-noscrollbar] { scrollbar-width: none; -ms-overflow-style: none; }
   [data-noscrollbar]::-webkit-scrollbar { width: 0; height: 0; display: none; }
   ::-webkit-scrollbar { width: 7px; }

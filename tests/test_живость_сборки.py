@@ -1,0 +1,270 @@
+# nakedlunch — «ИДЁТ» ПРОВЕРЯЕТСЯ, А НЕ ПОДРАЗУМЕВАЕТСЯ (Раунд 62, волна 0).
+#
+# ЧТО БЫЛО. Живость фоновой сборки ударений судилась по ОДНОМУ сердцебиению:
+# `state == "running" and сейчас - updated_at < 180`. Это ошибается в обе
+# стороны, и обе стоят дорого:
+#
+#   • ноутбук уснул на четыре минуты — живая сборка объявлена вставшей, и
+#     `_nl_rhyme_ensure_running` вправе запустить ВТОРУЮ поверх той же записи.
+#     Две сессии ONNX на один файл — ровно тот отказ, которого этот сторож и
+#     должен не допускать;
+#   • сборку убила система за память — она ещё три минуты выглядит здоровой,
+#     и всё это время кнопка «пересчитать» молча отказывает.
+#
+# На диске такой мертвец лежал прямо в момент правки: `{"cached": 1, "state":
+# "running", "mode": "reban"}` от 00:07 при полном кэше на 2 434 632 записи.
+#
+# ЧТО СТАЛО. Сборщик кладёт в сайдкар свой номер процесса, читатель судит по
+# нему. Нет процесса — нечему идти, и это видно в ту же секунду, а не через
+# три минуты. Номер, однако, переживает перезагрузку и достаётся другому,
+# поэтому живой номер при долгом молчании доверия не получает.
+#
+# Прогон: .venv/bin/python -m pytest tests/test_живость_сборки.py -q
+
+import ast
+import json
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+КОРЕНЬ = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(КОРЕНЬ / "core"))
+sys.path.insert(0, str(КОРЕНЬ / "tools"))
+
+import nlindex
+
+
+@pytest.fixture(scope="module")
+def сервер():
+    """`api/server.py` с заглушенными тяжёлыми прогревами (см. test_wordsuggest):
+    судья живости — чистая функция, корпус ему не нужен, а импорт без заглушек
+    стоил бы 5.5 ГБ."""
+    # `nlbridge.open_store` БОЛЬШЕ НЕ ГЛУШИТСЯ (2026-08-18). Глушилка стояла
+    # против ПЕРВОГО ЭТАПА фонового прогрева, а тот стартовал на уровне модуля.
+    # Прогрев уехал в `main()` (см. `_поднять_прогрев` в api/server.py), и с тех
+    # пор голый импорт корпус не трогает вовсе — глушилка защищала от того,
+    # чего больше не происходит. Оставить её значило бы уверять следующего
+    # читателя, что `open_store` зовётся на импорте; сторож этого обратного
+    # утверждения — `test_boot.py::test_korpus_ne_gruzitsya_na_urovne_modulya`.
+    import embeddings
+    import filters
+    import generate
+    было = (filters.warm_caches, generate.warm_caches, embeddings.warm_caches)
+    filters.warm_caches = lambda: None
+    generate.warm_caches = lambda: None
+    embeddings.warm_caches = lambda: None
+    sys.path.insert(0, str(КОРЕНЬ / "api"))
+    try:
+        import server
+    finally:
+        (filters.warm_caches, generate.warm_caches,
+         embeddings.warm_caches) = было
+    return server
+
+
+ЖИВОЙ = 10 ** 9          # такого номера процесса не бывает — os.kill скажет «нет»
+
+
+def сайдкар(*, молчит: float, pid=None, state="running") -> dict:
+    s = {"state": state, "cached": 1, "mode": "incremental",
+         "updated_at": time.time() - молчит}
+    if pid is not None:
+        s["pid"] = pid
+    return s
+
+
+# --------------------------------------------------------------- 0.2 живость
+
+def test_mertvaya_sborka_vidna_srazu(сервер):
+    """ГЛАВНОЕ: сердцебиение свежее, а процесса нет — значит не идёт. Раньше
+    такая запись ещё три минуты читалась как здоровая."""
+    assert сервер._сборка_идёт(сайдкар(молчит=1, pid=ЖИВОЙ)) is False
+
+
+def test_zhivaya_no_molchashchaya_sborka_ne_stanovitsya_vstavshey(сервер):
+    """Обратная сторона той же ошибки: ноутбук уснул, сборка жива. Раньше
+    сервер объявлял её вставшей и запускал вторую поверх той же записи."""
+    import os
+    свой = os.getpid()
+    assert сервер._сборка_идёт(сайдкар(молчит=600, pid=свой)) is True
+
+
+def test_zhivoy_nomer_pri_dolgom_molchanii_doveriya_ne_poluchaet(сервер):
+    """Номер процесса переживает перезагрузку и достаётся другому. Час тишины
+    при живом номере — это чужой процесс, а не наша сборка."""
+    import os
+    свой = os.getpid()
+    молчит = сервер._NL_RHYME_ЗАБЫТЬ_СЕКУНД + 60
+    assert сервер._сборка_идёт(сайдкар(молчит=молчит, pid=свой)) is False
+
+
+def test_staryy_saydkar_bez_nomera_sudit_kak_ranshe(сервер):
+    """Совместимость: сайдкар от прежней версии номера не несёт, и судить его
+    нечем, кроме сердцебиения. Молчаливо считать такую запись мёртвой — значит
+    разрешить второй прогон поверх идущего первого."""
+    assert сервер._сборка_идёт(сайдкар(молчит=1)) is True
+    assert сервер._сборка_идёт(сайдкар(молчит=сервер._NL_RHYME_STALE_SECONDS + 1)) is False
+
+
+def test_ne_running_nikogda_ne_idyot(сервер):
+    for state in ("done", "error", "stalled"):
+        assert сервер._сборка_идёт(сайдкар(молчит=0, pid=None, state=state)) is False
+
+
+def test_bityy_nomer_ne_ronyaet_sudyu(сервер):
+    """Сайдкар пишет чужой код; мусор в поле не имеет права ронять шапку."""
+    for мусор in ("не число", None, -1, 0, [], {"a": 1}):
+        s = сайдкар(молчит=1)
+        s["pid"] = мусор
+        assert сервер._сборка_идёт(s) is True      # решило сердцебиение
+        s["updated_at"] = time.time() - 10_000
+        assert сервер._сборка_идёт(s) is False
+
+
+def test_sborshchik_kladyot_svoy_nomer(tmp_path, monkeypatch):
+    """Судья бесполезен, если писатель номера не кладёт."""
+    import os
+    import build_nl_rhyme as сб
+    monkeypatch.setattr(сб, "STATUS", tmp_path / "nl_rhyme.status.json")
+    # ЗАПИСЬ ЗАКРЫТА ФЛАГОМ (2026-08-18), и поднимать его надо ЯВНО.
+    #
+    # Без этой строки тест зеленел ТОЛЬКО в компании: флаг глобальный, и его
+    # поднимал сосед по прогону, успевший позвать `main()`. В одиночку падал.
+    # Зелёный по случайности хуже красного — он врёт молча.
+    monkeypatch.setattr(сб, "_ПИШЕМ_СТАТУС", True)
+    сб._write_status(7, "running", "incremental")
+    s = json.loads((tmp_path / "nl_rhyme.status.json").read_text("utf-8"))
+    assert s["pid"] == os.getpid()
+
+
+def test_sudya_odin_na_oba_voprosa():
+    """СТОРОЖ НА ПРИЧИНУ, А НЕ НА СЛЕДСТВИЕ.
+
+    Живость нужна в двух местах: «можно ли запускать новую сборку» и «что
+    писать в шапку». Именно такие пары в этом коде расходились уже трижды
+    (список прогрева — дважды, формат кэша рифм — один раз), и каждый раз
+    молча. Здесь проверяется, что сравнение с порогом молчания осталось ровно
+    в ОДНОМ месте — внутри судьи, — а оба вызывающих ходят через него."""
+    исходник = (КОРЕНЬ / "api" / "server.py").read_text("utf-8")
+    дерево = ast.parse(исходник)
+
+    судья = [f for f in ast.walk(дерево)
+             if isinstance(f, ast.FunctionDef) and f.name == "_сборка_идёт"]
+    assert судья, "судья живости пропал"
+    строки_судьи = range(судья[0].lineno, судья[0].end_lineno + 1)
+
+    # Объявления самих порогов — не «второе место», где судят живость.
+    объявления = {n.lineno for n in ast.walk(дерево)
+                  if isinstance(n, ast.Assign)
+                  and any(isinstance(t, ast.Name) and t.id.startswith("_NL_RHYME_")
+                          for t in n.targets)}
+    снаружи = [n.lineno for n in ast.walk(дерево)
+               if isinstance(n, ast.Name) and n.id == "_NL_RHYME_STALE_SECONDS"
+               and n.lineno not in строки_судьи and n.lineno not in объявления]
+    assert not снаружи, (
+        f"порог молчания читают в обход судьи (строки {снаружи}) — "
+        "живость снова живёт в двух местах")
+
+    зовут = sum(1 for n in ast.walk(дерево)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id == "_сборка_идёт")
+    assert зовут >= 2, f"судью зовут только {зовут} раз — второй вопрос судит кто-то ещё"
+
+
+# ------------------------------------------------------- 0.3 штамп по составу
+
+class ЗаглушкаИндекса:
+    """Ровно те поля, которые читает `Index.отпечаток`. Настоящий индекс здесь
+    не нужен и вреден: проверяется правило, а не конкретный корпус."""
+    отпечаток = nlindex.Index.отпечаток
+
+    def __init__(self, тексты, built_at="когда-то"):
+        import numpy as np
+        self._t = list(тексты)
+        self.n = len(self._t)
+        self.built_at = built_at
+        off, p = [0], 0
+        for t in self._t:
+            p += len(t.encode("utf-8"))
+            off.append(p)
+        self.text_off = np.array(off, dtype=np.int64)
+        # Рифмо-ключ — это последнее слово. Здесь он подделан хвостом строки:
+        # важно не КАК он считается, а что правка конца строки его меняет.
+        self.key_id = np.array([sum(map(ord, t[-3:])) for t in self._t], dtype=np.int32)
+        self._отпечаток = None
+
+    def text(self, i):
+        return self._t[i]
+
+
+СТРОКИ = [f"строка номер {i} про воду и камень" for i in range(200)]
+
+
+def test_perepechka_bez_izmeneniya_strok_ne_obestsenivaet_semena():
+    """ГЛАВНОЕ 0.3: `--reban` пересчитывает КОЛОНКУ, строки при этом не
+    двигаются — значит записанный номер прогона обязан остаться годным.
+    Раньше штамп был `n@built_at`, и любая перепечка объявляла все номера
+    снятыми с прежнего корпуса."""
+    до = ЗаглушкаИндекса(СТРОКИ, built_at="2026-08-06T17:13")
+    после = ЗаглушкаИндекса(СТРОКИ, built_at="2026-08-14T03:40")
+    assert nlindex.штамп(до) == nlindex.штамп(после)
+
+
+def test_novaya_kniga_shtamp_menyaet():
+    добавили = ЗаглушкаИндекса(СТРОКИ + ["строка из новой книги"])
+    assert nlindex.штамп(ЗаглушкаИндекса(СТРОКИ)) != nlindex.штамп(добавили)
+
+
+def test_podmena_v_vyborke_vidna():
+    """Одни смещения такую подмену не видят — её ловят выборочные тексты.
+    Позиция взята ИЗ выборки нарочно: 200 строк дают шаг 3, и первая версия
+    этого теста правила строку 7, в выборку не попавшую. Отпечаток честно
+    промолчал, и это его настоящая граница, а не промах теста."""
+    другие = list(СТРОКИ)
+    другие[6] = "СТРОКА НОМЕР 6 про воду и камень"[:len(другие[6])]
+    assert len(другие[6]) == len(СТРОКИ[6]), "проверяем именно равную длину"
+    assert nlindex.штамп(ЗаглушкаИндекса(СТРОКИ)) != nlindex.штамп(ЗаглушкаИндекса(другие))
+
+
+def test_pravka_kontsa_stroki_vidna_vsegda():
+    """Ради чего в отпечаток добавлен `key_id`: правка, меняющая текст, почти
+    всегда трогает КОНЕЦ — ровно это делает ретро-подрезка обрывков (волна D2,
+    341 680 фрагментов). Конец виден весь, а не выборкой, поэтому позиция здесь
+    взята ВНЕ выборки."""
+    другие = list(СТРОКИ)
+    другие[7] = СТРОКИ[7][:-6] + "океан"
+    assert nlindex.штамп(ЗаглушкаИндекса(СТРОКИ)) != nlindex.штамп(ЗаглушкаИндекса(другие))
+
+
+def test_perestanovka_strok_vidna():
+    """Порядок и есть номер фрагмента: те же строки, переставленные местами, —
+    другой материал для семени."""
+    другой = list(СТРОКИ)
+    другой[0], другой[-1] = другой[-1], другой[0]
+    assert nlindex.штамп(ЗаглушкаИндекса(СТРОКИ)) != nlindex.штамп(ЗаглушкаИндекса(другой))
+
+
+def test_otpechatok_schitaetsya_odin_raz():
+    idx = ЗаглушкаИндекса(СТРОКИ)
+    первый = idx.отпечаток()
+    idx._t[0] = "подменили тайком"          # кэш обязан удержать прежний ответ
+    assert idx.отпечаток() == первый
+
+
+def test_bez_indeksa_shtamp_ne_padaet(monkeypatch):
+    monkeypatch.setattr(nlindex, "load", lambda: None)
+    assert nlindex.штамп() == "без индекса"
+
+
+@pytest.mark.skipif(nlindex.load() is None, reason="индекс не испечён")
+def test_na_zhivom_indekse_otpechatok_ustoychiv():
+    """Правило 12: замер на заглушках держит мир неподвижным. На настоящем
+    индексе отпечаток обязан повторяться между разными объектами Index —
+    иначе тот же корпус читался бы как чужой при каждом перезапуске."""
+    from pathlib import Path as P
+    d = nlindex.INDEX_DIR
+    a, b = nlindex.Index(P(d)), nlindex.Index(P(d))
+    assert a.отпечаток() == b.отпечаток()
+    assert len(a.отпечаток()) == 16

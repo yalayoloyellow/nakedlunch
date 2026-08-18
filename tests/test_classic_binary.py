@@ -206,8 +206,12 @@ def test_форма_ответа_совпадает_с_алгоритмом(сл
     кл = прогон(shortlist=4)
     ал = filters.run([], clean.knobs({"shortlist": 4, "real_text": 1.0, "classic": 0.0}),
                      Corpus(), nl_fragments=list(ФРАГМЕНТЫ), rhyme="none")
-    assert set(кл) == set(ал) == {"shortlist", "funnel", "forced_notice"}
+    assert set(кл) == set(ал) == {"shortlist", "funnel", "forced_notice", "seed"}
     assert set(кл["funnel"]) == set(ал["funnel"])
+    # Штамп семени тоже одной формы на обоих путях (Раунд 62): по нему клиент
+    # решает, можно ли повторить прогон, и разная форма значила бы «на классике
+    # повторить нельзя» без единого слова об этом.
+    assert set(кл["seed"]) == set(ал["seed"]) == {"seed", "index", "pool", "hidden"}
     for r in кл["shortlist"] + ал["shortlist"]:
         assert {"text", "template", "lemmas", "classic", "anchor", "rhyme"} <= set(r)
         assert "_lem" not in r and "_pctl" not in r

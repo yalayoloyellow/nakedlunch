@@ -3,8 +3,9 @@
 // обработчики 4049..4097) — миксин: интегратор делает
 // Object.assign(Nakedlunch.prototype, panelMethods).
 // Раунд 50: крутилки и полки уехали в methods.shelves.js, панель — в
-// render.gen.jsx. Здесь остались общие вещи попапов и настроек: ярусы сжатия
-// шапки, стыки цепочки, порядок звеньев и вычислители общих настроек.
+// render.gen.jsx. 2026-08-18: стыки цепочки и порядок звеньев ушли вместе с
+// пайплайном. Здесь остались общие вещи попапов и настроек: ярусы сжатия
+// шапки, вычислители общих настроек и профиль генерации (строфа + крутилки).
 
 import * as api from './api.js';
 
@@ -25,14 +26,6 @@ export const PARAM_DEFAULTS = {
   // 0 «не повторять» (прежнее поведение), 1 «можно» — Раунд 52, хук
   'Диссонанс': 0.7, 'Связность': -1.0, 'Повтор': 0,
 };
-
-// PRESET_CHAINS ВЫРЕЗАН (Раунд 55). Три готовые цепочки жили здесь константой
-// ФРОНТА и полкой не были — а серия ищет цепочку по имени на полке. Отчёт: сохранённые пресеты пайплайна не отображались при выборе в серии..
-//
-// Он прав: это были три готовых пайплайна, и то, что серия их не видела, —
-// случайность реализации, а не замысел. Теперь они встроенные записи полки
-// (core/chain_profiles.py: builtin), как встроенные формы строф и профили
-// настроек, и приходят с бэка одним списком со своими.
 
 // гарнитуры общих настроек — константа дизайна (FONTS_BASE, строка 2597)
 export const FONTS_BASE = ['JetBrains Mono', 'Georgia', 'Helvetica'];
@@ -96,136 +89,25 @@ export const panelMethods = {
     }
   },
 
-  // ---- цепочка: стыки ----
-  // togChip / togJunc / setChipRole вырезаны (Раунд 50): горизонтальные чипы
-  // заменены списком ещё в Раунде 41 и с тех пор никем не звались, а роль
-  // перестала быть настройкой генерации. Ключи chipOpen/juncOpen в состоянии
-  // ОСТАЮТСЯ: их читает вычисление ключа закрытия попапов (Nakedlunch.jsx),
-  // и без них closePop начал бы возвращаться раньше времени.
-  setJunc(i, val) {
-    var j = (this.state.junctions || []).slice(); j[i] = val;
-    this.setState({ junctions: j, juncOpen: -1 });
-    var st = this.state;
-    if (st.chain[i + 1] && this.emitTrace) this.emitTrace('s:' + st.chain[i], 's:' + st.chain[i + 1], 0.85);
-  },
-  // Профиль строфы звена (Раунд 39 — теперь это САМА суть звена, а не
-  // переопределение роли). Массив параллелен chain — дыры до i заполняем
-  // null, чтобы JSON-снапшот профиля цепочки был стабильным.
-  setChipForm(i, name) {
-    var cf = (this.state.chainForms || []).slice();
-    while (cf.length <= i) cf.push(null);
-    cf[i] = name || null;
-    this.setState({ chainForms: cf, chipOpen: -1 });
-  },
-  // Секция — необязательный заголовок в документе («## ПРИПЕВ»), не настройка
-  // генерации. Пусто = звено без заголовка.
-  setChipSection(i, name) {
-    var ch = (this.state.chain || []).slice();
-    while (ch.length <= i) ch.push('');
-    ch[i] = name || '';
-    this.setState({ chain: ch, chipOpen: -1 });
-  },
-  // Порядок звеньев: chain и chainForms параллельны и переставляются вместе,
-  // иначе профили съедут на чужие звенья. Стыки НЕ трогаем — их смысл
-  // «между i и i+1», и при перестановке они остаются на своих местах.
-  // Раунд 51: вместе со звеном переставляются ВСЕ его параллельные массивы.
-  // chainKnobs (профиль настроек звена) забыли при вводе — а читается он строго
-  // по индексу, поэтому после перестановки или удаления настройки съезжали на
-  // чужие звенья молча, без единого признака.
-  moveChip(i, шаг) {
-    var j = i + шаг, ch = (this.state.chain || []).slice();
-    if (i < 0 || j < 0 || j >= ch.length) return;
-    var cf = this._параллельно('chainForms', ch.length);
-    var ck = this._параллельно('chainKnobs', ch.length);
-    var rep = this._параллельно('chainRepeat', ch.length);
-    var реф = (this.state.refChain || []).slice();
-    var своп = function (a) { if (a.length > Math.max(i, j)) { var t = a[i]; a[i] = a[j]; a[j] = t; } };
-    var t = ch[i]; ch[i] = ch[j]; ch[j] = t;
-    своп(cf); своп(ck); своп(реф);
-    // Ссылки повтора — ИНДЕКСЫ, их мало переставить: цель тоже переехала, а
-    // ссылка могла развернуться вперёд (см. чинитьПовторы).
-    var перевод = ch.map(function (_, k) { return k === i ? j : (k === j ? i : k); });
-    var было = (rep || []).filter(function (v) { return v != null; }).length;
-    rep = this.чинитьПовторы(rep, перевод, ch.length);
-    if (было && rep.filter(function (v) { return v != null; }).length < было) {
-      this.flash('повтор смотрел бы вперёд — снят с переехавшего звена');
-    }
-    this.setState({ chain: ch, chainForms: cf, chainKnobs: ck, chainRepeat: rep,
-                    refChain: реф.length ? реф : this.state.refChain, chipOpen: j });
-  },
-
-  // общий помощник: массив той же длины, что цепочка, добитый null
-  _параллельно(имя, длина) {
-    var a = (this.state[имя] || []).slice();
-    while (a.length < длина) a.push(null);
-    return a;
-  },
-  removeChip(i) {
-    var ch = (this.state.chain || []).slice();
-    if (i < 0 || i >= ch.length || ch.length <= 1) return;   // пустая цепочка — не цепочка
-    var cf = this._параллельно('chainForms', ch.length);
-    var ck = this._параллельно('chainKnobs', ch.length);
-    var rep = this._параллельно('chainRepeat', ch.length);
-    var реф = (this.state.refChain || []).slice();
-    // перевод строится ДО удаления: звенья правее сдвигаются, само удалённое
-    // теряет номер, а звенья, которые его повторяли, становятся обычными
-    var перевод = ch.map(function (_, k) { return k === i ? null : (k > i ? k - 1 : k); });
-    ch.splice(i, 1); cf.splice(i, 1); ck.splice(i, 1);
-    if (i < реф.length) реф.splice(i, 1);
-    var было = rep.filter(function (v) { return v != null; }).length;
-    rep = this.чинитьПовторы(rep, перевод, ch.length);
-    if (было && rep.filter(function (v) { return v != null; }).length < было) {
-      this.flash('звено, которое повторяли, убрано — повтор снят');
-    }
-    var j = (this.state.junctions || []).slice();
-    if (i < j.length) j.splice(i, 1);        // стык уходит вместе со звеном
-    this.setState({ chain: ch, chainForms: cf, chainKnobs: ck, chainRepeat: rep,
-                    refChain: реф.length ? реф : null, junctions: j, chipOpen: -1 });
-  },
-  // Новое звено наследует форму и профиль у ПРЕДЫДУЩЕГО (Раунд 55).
+  // ---------------------------------------------------------------------------
+  // ЗДЕСЬ БЫЛА ЦЕПОЧКА: СТЫКИ, ЗВЕНЬЯ И ЕЁ СНИМОК (вырезано 2026-08-18, 128 строк).
   //
-  // До этого оно брало их из панели — а панель была ещё и невидимым запасным
-  // источником для звеньев без полок, и вместе это давало «звено выглядит
-  // пустым, а набирается неизвестно чем». Наследование у соседа честнее и
-  // ровно так же удобно: в песне подряд идут однотипные куплеты, а строка
-  // серии наследует поля точно так же (methods.series.js: addSeriesLink).
-  // Пустых звеньев после этого не бывает — если, конечно, предыдущее не пусто
-  // само, а такое возможно только у самого первого.
-  addChip() {
-    var st = this.state;
-    var n = (st.chain || []).length;
-    var cf = this._параллельно('chainForms', n);
-    var ck = this._параллельно('chainKnobs', n);
-    var rep = this._параллельно('chainRepeat', n);
-    // у звена-повтора своей формы нет — наследуем от того, кого оно повторяет
-    var донор = n ? (rep[n - 1] != null ? rep[n - 1] : n - 1) : -1;
-    var ch = (st.chain || []).concat('');
-    cf = cf.concat(донор >= 0 ? (cf[донор] || st.stanzaProfile || null) : (st.stanzaProfile || null));
-    ck = ck.concat(донор >= 0 ? (ck[донор] || st.knobProfile || null) : (st.knobProfile || null));
-    // новое звено встаёт В КОНЕЦ, поэтому чужие индексы не едут
-    rep = rep.concat(null);
-    this.setState({ chain: ch, chainForms: cf, chainKnobs: ck, chainRepeat: rep, chipOpen: -1 });
-  },
-
-  // ---- профили цепочек ----
-  // chainForms и pipeRuns — фаза 1: формы звеньев и число сочетаний прогона —
-  // тоже часть профиля, без них «сохранить» не замечал бы их смену
-  // Снимок цепочки для «изменено?». Раунд 50: только то, что в цепочке есть —
-  // threshold/limit/pipeRuns вырезаны из состояния ещё в Раундах 47-49, но
-  // продолжали сюда попадать как undefined и ездить на диск в сохранённых
-  // профилях.
-  snap() {
-    var st = this.state;
-    return JSON.stringify([st.chain, st.junctions, st.chainForms || [],
-                           st.refText || '', st.refPct != null ? st.refPct : 1]);
-  },
-  // Раунд 50: chainProfiles() и saveProfile() вырезаны. Полка цепочек уехала
-  // на бэк отдельным файлом со своим валидатором (core/chain_profiles.py), а
-  // сохранение стало СЛЕПКОМ — см. methods.shelves.js: saveChain/pickChain.
+  //   setJunc — стык между соседними звеньями (рифмовать / свободно / слом ритма).
+  //   setChipForm / setChipSection — форма звена и заголовок секции.
+  //   moveChip / removeChip / addChip — порядок звеньев, удаление, добавление с
+  //     наследованием формы и профиля у соседа.
+  //   _параллельно — общий помощник: массив длиной с цепочку, добитый null.
+  //   snap — снимок цепочки для вопроса «изменено?».
   //
-  // Раунд 55: следом ушёл pickProfile — разбор ПРЕСЕТА из константы фронта.
-  // Встроенные цепочки приходят с бэка обычными записями полки, и разбирает
-  // их тот же pickChain, что и свои.
+  // ПОЧЕМУ. Решение владельца дословно: «pipeline и серия это бесполезные режимы
+  // на самом деле… с практической точки зрения бесполезны, их можно вырезать.
+  // Строфа единственным режимом и всё». Замер журнала за десять живых дней: 29
+  // прогонов цепи против 587 одиночных строф, медиана цепи 24.2 с.
+  //
+  // Вместе с ними ушёл целый класс ошибок, который эти методы и сторожили:
+  // параллельные массивы chain/chainForms/chainKnobs/chainRepeat, съезжающие по
+  // индексам при любой перестановке. Параллельных массивов больше нет.
+  // ---------------------------------------------------------------------------
 
   // ---- Раунд 50: здесь были мёртвые обработчики -------------------------
   // onLimit / onPipeRuns / onThr / onPoolPer / setPipeWeight / setPipeRepeats —
@@ -239,11 +121,16 @@ export const panelMethods = {
   // потерять три ручки. Перевод теперь ОДИН — methods.shelves.js:
   // knobsOfProfile, зеркало core/clean.py: knobs_from_profile.
 
-  // диссонанс — обычная крутилка профиля настроек; отдельный обработчик
-  // остался, потому что фристайл-панель зовёт его напрямую
-  onDis(e) { this.setKnob('Диссонанс', parseFloat(e.target.value) || 0); },
+  // onDis вырезан (Раунд 63). Комментарий над ним обещал, что «фристайл-панель
+  // зовёт его напрямую» — по всему дереву фронта не звал никто: панель
+  // фристайла ходит через setParam/setKnob, как и все остальные.
 
   setParam(n, v) { this.setKnob(n, v); },
+
+  // Число с разрядами — переехало сюда из methods.doc.js (2026-08-18) вместе со
+  // сносом редактора: читателем всегда была шапка (корпус, статистика), а не
+  // документ, и жить ему тут.
+  fmt(n) { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' '); },
 
   // ---- вычислители общих настроек (renderVals 3406..3445, 3510..3517) ----
   cfgNumItem(key, label, min, max, step, dflt, unit) {
@@ -272,7 +159,10 @@ export const panelMethods = {
     return [
       { name: 'текст', items: [
         cfgPick('uiFont', 'интерфейс', FONTS_BASE, 'JetBrains Mono'),
-        cfgPick('docFont', 'документ', ['как интерфейс'].concat(FONTS_BASE), 'как интерфейс')
+        // Ключ `docFont` НЕ переименован при сносе документа: он лежит в
+        // сохранённом виде (nl_view) и в профилях вида на диске. Меняем только
+        // подпись — тот же приём, что у «Точности рифм» (methods.shelves.js).
+        cfgPick('docFont', 'лента', ['как интерфейс'].concat(FONTS_BASE), 'как интерфейс')
       ] },
       { name: 'пост', items: [
         cfgNum('uiGlow', 'свечение', 0, 100, 1, 0),
@@ -332,12 +222,16 @@ export const DEFAULT_SPEC = [
 export const genProfileMethods = {
   RHYME_LETTERS: RHYME_LETTERS,
 
-  // открытие пилюли профиля всегда со свёрнутым списком форм: иначе попап
-  // открывается на том, чем его закрыли в прошлый раз, и конструктора не видно
+  // Раунд 63: отсюда ушёл `stanzaPick: false` («открывать со свёрнутым списком
+  // форм»). Сворачивать давно нечего — список форм в попапе рисуется всегда, и
+  // флаг был обещанием поведения, которого нет.
   togProfile() {
     var open = this.state.openPill === 'stanza';
-    this.setState({ stanzaPick: false });
     this.tog('stanza');
+    // Форма пула на ОТКРЫТИЕ, а не только на движение ручки: иначе панель
+    // впервые показывалась бы без неё, и «из чего выбирается» появлялось бы
+    // лишь после того, как что-нибудь тронешь.
+    if (!open && this.спроситьФормуПула) this.спроситьФормуПула();
     return open;
   },
 
@@ -370,32 +264,11 @@ export const genProfileMethods = {
     }, 600);
   },
 
-  /** Живая цепочка на диск — «где закрыл, там открыл» (Раунд 55).
-   *
-   *  Зовётся из componentDidUpdate, поэтому первым делом проверяет, менялось
-   *  ли ЧТО-ТО из шести ключей цепочки: без этой проверки запись уходила бы
-   *  на каждую перерисовку документа.
-   *
-   *  Полка цепочек при этом остаётся полкой: там СЛЕПКИ, которые пользователь
-   *  сохранил осознанно и которые не меняются от правки полок. Здесь — просто
-   *  то, что стоит в меню прямо сейчас, как и положения ползунков рядом. */
-  saveChainSoon() {
-    var st = this.state;
-    var снимок = JSON.stringify([st.chain, st.chainForms, st.chainKnobs,
-                                 st.chainRepeat, st.junctions, st.profile]);
-    if (снимок === this._chainSaved) return;
-    this._chainSaved = снимок;
-    if (this._chainFirst === undefined) { this._chainFirst = 1; return; }  // первый кадр — это boot
-    var self = this;
-    clearTimeout(this._chainT);
-    this._chainT = setTimeout(function () {
-      api.settingsSet({ nl_chain: {
-        chain: self.state.chain || [], forms: self.state.chainForms || [],
-        knobs: self.state.chainKnobs || [], repeat: self.state.chainRepeat || [],
-        junctions: self.state.junctions || [], profile: self.state.profile || '',
-      } }).catch(function (e) { self.flash(e && e.message ? e.message : String(e)); });
-    }, 600);
-  },
+  // saveChainSoon вырезан 2026-08-18 вместе с цепочкой. Он писал живую цепочку
+  // в settings.nl_chain на каждом componentDidUpdate («где закрыл, там открыл»,
+  // Раунд 55) — и был единственным вызовом из componentDidUpdate в этот файл.
+  // Каркас строфы и положения крутилок переживают перезапуск сами:
+  // saveGenProfileSoon выше пишет stanza / stanza_profile / nl_params.
 
   // правка схемы руками = профиль больше не «тот самый»: имя гасим, чтобы
   // подпись не врала, будто на экране Онегинская строфа
@@ -415,7 +288,7 @@ export const genProfileMethods = {
     // звеньев свои выпадашки в меню «Пайплайн», и записи в чужой этаж не
     // остаётся вовсе — вместе с ней умерло само понятие «выбранное звено».
     this.setState({ stanzaSpec: f.lines.map(function (l) { return Object.assign({}, l); }),
-                    stanzaProfile: name, stanzaPick: false },
+                    stanzaProfile: name },
                   this.saveGenProfileSoon.bind(this));
   },
 

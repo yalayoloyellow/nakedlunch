@@ -248,14 +248,12 @@ def warm_caches() -> None:
     _forms()
 
 
-def vocab_size() -> int:
-    """How many unique lemmas the generator draws from — the honest 'pool' the
-    grammar pipeline samples candidate lines out of, shown in the funnel
-    infographic (2026-07-14, user: counters must say from how many things
-    each pipeline actually picks). Re-added after Round 13 removed it as an
-    n-formula input; here it's display-only, not wired into candidate count."""
-    v = _vocab()
-    return len(v["nouns"]) + len(v["adjs"]) + len(v["verbs"])
+# `vocab_size` ВЫРЕЗАН (2026-08-14). Считал число лемм словаря «на показ» — для
+# воронки, которая обязана говорить, из скольких вещей выбирает каждый путь.
+# Воронка с тех пор считает свои числа сама (tests/test_funnel_contract.py
+# сторожит её договор), и вызывающих у него не осталось ни одного. Удалялся уже
+# однажды (Раунд 13, как вход формулы n) и вернулся ради показа; возвращать его
+# в третий раз стоит только вместе с тем, кто его ПОКАЖЕТ.
 
 
 def _gkey(grammemes: set[str]) -> str:

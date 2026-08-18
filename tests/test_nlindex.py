@@ -190,7 +190,7 @@ def test_классика_не_судит_о_качестве():
     строгие = int(ИНДЕКС.gate_mask(nlindex.Ворота(слова_верх=4.875), True).sum())
     все = ИНДЕКС.n
     assert все - строгие > 0, "на этом корпусе нечего проверять"
-    строки, выжило = nlindex.select_light(
+    строки, выжило, _ = nlindex.select_light(
         ИНДЕКС, pool_mask=np.ones(все, dtype=bool),
         hidden_mask=np.zeros(все, dtype=bool), no_mat=False, only_mat=False, clausula=0, cap=50, seed=1)
     # Раунд 51: классика подчиняется ВОРОТАМ, и целостность — ворота, а не
@@ -218,14 +218,14 @@ def test_классика_равномерно_случайна():
     а верхушка какого-то скрытого рейтинга."""
     пул = np.ones(ИНДЕКС.n, dtype=bool)
     пусто = np.zeros(ИНДЕКС.n, dtype=bool)
-    a, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
+    a, _, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
                                 no_mat=False, only_mat=False, clausula=0, cap=40, seed=1)
-    b, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
+    b, _, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
                                 no_mat=False, only_mat=False, clausula=0, cap=40, seed=2)
     assert all(abs(r["score"] - 0.6) < 1e-9 for r in a), "оценка обязана быть плоской"
     assert {r["text"] for r in a} != {r["text"] for r in b}
     # то же зерно — та же выборка (воспроизводимость важнее «побольше хаоса»)
-    c, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
+    c, _, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
                                 no_mat=False, only_mat=False, clausula=0, cap=40, seed=1)
     assert [r["text"] for r in a] == [r["text"] for r in c]
 
@@ -235,7 +235,7 @@ def test_классика_не_несёт_перцентиль():
     """`_pctl` — признак строки АЛГОРИТМИЧЕСКОГО яруса: по его наличию
     _select_with_rhyme отличает её от классической. Появись он у классики —
     она попала бы в тематический якорь, которого у неё нет."""
-    строки, _ = nlindex.select_light(
+    строки, _, _ = nlindex.select_light(
         ИНДЕКС, pool_mask=np.ones(ИНДЕКС.n, dtype=bool),
         hidden_mask=np.zeros(ИНДЕКС.n, dtype=bool), no_mat=True, only_mat=False, clausula=0, cap=20, seed=2)
     assert строки and all("_pctl" not in r for r in строки)
@@ -248,9 +248,9 @@ def test_мат_отсекается_и_в_классике():
     содержание, поэтому действует и здесь (в отличие от банальности)."""
     пул = np.ones(ИНДЕКС.n, dtype=bool)
     пусто = np.zeros(ИНДЕКС.n, dtype=bool)
-    _, с_матом = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
+    _, с_матом, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
                                       no_mat=False, only_mat=False, clausula=0, cap=5, seed=3)
-    _, без_мата = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
+    _, без_мата, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
                                        no_mat=True, only_mat=False, clausula=0, cap=5, seed=3)
     # считаем только по целым: обрывки отсеяны на обоих путях одинаково
     цел = ИНДЕКС.whole_mask().copy()
@@ -288,11 +288,30 @@ def test_kesh_daet_te_zhe_chisla():
 
 @нет_индекса
 def test_drugie_ruchki_drugaya_tablica():
+    """Связность в ключе кэша — но только когда ей есть на чём работать.
+
+    Раньше этот тест крутил связность БЕЗ темы и требовал разных таблиц. С
+    Раунда 62 без темы ранжирования нет вовсе (см. nlindex._таблица: замер
+    показал, что «ранжир без темы» — это номер фрагмента в корпусе, и вся
+    выдача шла из одной книги). Значит одинаковая таблица без темы — теперь
+    ПРАВИЛЬНЫЙ ответ, и проверять надо оба факта."""
     idx = ИНДЕКС
+    # sims индексируется словарём navec, а не нашими леммами (тот же приём и
+    # размер, что в test_relevance_bez_temy_nol выше)
+    sims = np.arange(500002, dtype=np.float64) / 500002.0
+    общ = (idx, {"тема"}, sims, nlindex.Ворота(слова_верх=6.0), False, False, 0)
+
     nlindex.забыть_таблицу()
-    a = nlindex._таблица(idx, set(), None, nlindex.Ворота(слова_верх=6.0), False, False, 0, 0.5, 0.8)
-    b = nlindex._таблица(idx, set(), None, nlindex.Ворота(слова_верх=6.0), False, False, 0, 0.9, 0.8)   # другая связность
+    a = nlindex._таблица(*общ, 0.5, 0.8)
+    b = nlindex._таблица(*общ, 0.9, 0.8)          # другая связность
     assert a[2] is not b[2], "кэш отдал таблицу от ДРУГИХ крутилок"
+    assert not np.array_equal(a[2], b[2]), "связность с темой обязана менять оценку"
+
+    nlindex.забыть_таблицу()
+    c = nlindex._таблица(idx, set(), None, nlindex.Ворота(слова_верх=6.0), False, False, 0, 0.5, 0.8)
+    d = nlindex._таблица(idx, set(), None, nlindex.Ворота(слова_верх=6.0), False, False, 0, 0.9, 0.8)
+    assert c[2] is d[2], "без темы связности не на чем работать — таблица одна"
+    assert len(set(np.asarray(c[2]).tolist())) == 1, "без темы оценка обязана быть одна на всех"
 
 
 @нет_индекса
@@ -310,7 +329,7 @@ def test_istoriya_ne_keshiruetsya():
                clausula=0, cohesion=0.5, pctl_scale=0.8, literal_cap=None, cap=50,
                reserve_n=0, use_theme_anchor=False, syllable_spec=None, per_bucket=4,
                sims=None, seed=1)
-    было, n1, _ = nlindex.select(idx, pool_mask=пул, hidden_mask=пусто, **общ)
+    было, n1, _, _ = nlindex.select(idx, pool_mask=пул, hidden_mask=пусто, **общ)
     # Прятать надо тех, кто ВЫЖИЛ ворота: остальные и так не считаются, и
     # ожидание «минус пять» было бы неверным (первая версия теста ошиблась
     # ровно на этом — минус четыре из пяти).
@@ -318,7 +337,7 @@ def test_istoriya_ne_keshiruetsya():
                                 False, False, 0, 0.5, 0.8)[0]
     скрыт = пусто.copy()
     скрыт[[int(r) for r in выжившие[:5]]] = True
-    стало, n2, _ = nlindex.select(idx, pool_mask=пул, hidden_mask=скрыт, **общ)
+    стало, n2, _, _ = nlindex.select(idx, pool_mask=пул, hidden_mask=скрыт, **общ)
     assert n2 == n1 - 5, "история не подействовала — кэш съел её вместе с подготовкой"
 
 
@@ -371,3 +390,33 @@ def test_obryvki_ne_dozhivayut_do_svezhey_vydachi():
     проба = rng.choice(выжившие, size=min(3000, len(выжившие)), replace=False)
     плохие = [idx.text(int(i)) for i in проба if nlindex.Index._оборвана(idx.text(int(i)))]
     assert not плохие, f"обрывки дожили до выдачи: {плохие[:5]}"
+
+
+# ── ПРОГРЕВ ОБЯЗАН ГРЕТЬ ТО, ЧТО ГЕНЕРАЦИЯ СЧИТАЕТ ─────────────────────────
+#
+# Этот сторож стоит здесь потому, что промах случался ТРИЖДЫ, и каждый раз
+# платил его пользователь, а не тест:
+#   · Раунд 51 — прогрев забыл маску целостности, 9.2 с на первой генерации;
+#   · Раунд 62 — прогрев забыл маску ЧЁРНОГО СПИСКА: 17.4 с на первой
+#     генерации после КАЖДОГО запуска приложения, при уже написанном в логе
+#     «прогрев завершён». Замерено 2026-08-13 на 2 434 632 фрагментах.
+#
+# Ловится это только замером ПОСЛЕ прогрева: проверять «построилось ли поле»
+# бессмысленно — поле построится и от чего-нибудь другого. Поэтому здесь
+# кэш запрета намеренно сбрасывается, и проверяется исход: после `прогреть`
+# ворота обязаны отвечать мгновенно.
+
+@нет_индекса
+def test_progrev_greet_to_chto_nuzhno_generacii():
+    import time
+    nlindex.забыть_запрет()
+    nlindex.прогреть(ИНДЕКС)
+    ворота = nlindex.ворота_банальности(0.83)
+    t = time.perf_counter()
+    ИНДЕКС.gate_mask(ворота, False, False, 0)
+    прошло = time.perf_counter() - t
+    # Порог щедрый нарочно: ловить надо семнадцать секунд, а не сотые доли, и
+    # тест не должен мигать на загруженной машине.
+    assert прошло < 1.0, (
+        f"ворота после прогрева считаются {прошло:.1f} с — значит прогрев греет "
+        f"не то, что зовёт генерация (см. nlindex.прогреть)")

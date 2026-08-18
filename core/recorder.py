@@ -386,7 +386,9 @@ class Session:
 
     Каталог по умолчанию ~/Documents/nakedlunch/записи/<дата время>/ (env
     NAKEDLUNCH_RECORDINGS переопределяет корень — так тесты работают во
-    временной папке, ровно как NAKEDLUNCH_VAULT в core/sheets.py).
+    временной папке. Тем же приёмом живёт корпус (NAKEDLUNCH_DATA в
+    core/nlbridge.py); третьим был NAKEDLUNCH_VAULT у листов, но листы вырезаны
+    2026-08-18 вместе с редактором.
     """
 
     def __init__(self, directory=None):

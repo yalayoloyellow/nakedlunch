@@ -143,14 +143,14 @@ export const fsGlueMethods = {
     var self = this, n = 0;
     this._хроникаT = setInterval(function () {
       if (self.state.tab !== 'fs' || ++n > 20) { clearInterval(self._хроникаT); self._хроникаT = 0; return; }
-      var док = (self.cur ? self.cur() : []) || [];
-      var строк = 0;
-      for (var i = 0; i < док.length; i++) if (док[i] && док[i].type === 'line' && String(док[i].text || '').trim()) строк++;
-      журнал('хроника ' + n + ': лист ' + док.length + ' строк (с текстом ' + строк + ')'
+      // «лист N строк» и «лист открыт: да/нет» ушли 2026-08-18 вместе с
+      // документом; их место заняла лента — то же самое сведение о том, сколько
+      // текста сейчас у человека на руках.
+      var лента = self.state.lenta || [];
+      журнал('хроника ' + n + ': лента ' + лента.length + ' строк'
         + ' · буфер ' + ((self._fsBuf || []).length) + ' · очередь ' + ((self._fsQ || []).length)
         + ' · поход ' + (self._fsFetching ? 'идёт' : 'нет')
-        + ' · на экране ' + (self._lineTxt ? '«' + String(self._lineTxt).slice(0, 24) + '»' : 'ПУСТО')
-        + ' · лист открыт: ' + (self.state.sheetId ? 'да' : 'нет'));
+        + ' · на экране ' + (self._lineTxt ? '«' + String(self._lineTxt).slice(0, 24) + '»' : 'ПУСТО'));
     }, 2000);
   },
 

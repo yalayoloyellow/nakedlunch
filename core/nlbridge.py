@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import json
-import random
 import re
 import sys
 import os
@@ -31,8 +30,9 @@ import пути
 # Каталог CLI больше НЕ нужен для работы: его код внесён в core/nlsrc
 # (2026-08-01). Данные корпуса лежали и лежат отдельно — см. ниже.
 NAKEDLUNCH_PROG_DIR = Path.home() / "Documents" / "nakedlunch"
-# Переопределяется переменной среды — тем же приёмом, что NAKEDLUNCH_VAULT у
-# листов и NAKEDLUNCH_RECORDINGS у записей (Раунд 56). Нужно ровно затем, чтобы
+# Переопределяется переменной среды — тем же приёмом, что NAKEDLUNCH_RECORDINGS
+# у записей (Раунд 56). Третьим таким был NAKEDLUNCH_VAULT у листов, но листы
+# вырезаны 2026-08-18 вместе с редактором. Нужно ровно затем, чтобы
 # проверять заливку книг на ВРЕМЕННОМ корпусе, а не на настоящем: боевой
 # state.json весит 549 МБ и содержит книги пользователя.
 # Через `пути.хранилище` (Раунд 61): своя переменная → NAKEDLUNCH_HOME → умолчание.
@@ -58,14 +58,19 @@ def _tokens(s: str) -> set[str]:
 
 @lru_cache(maxsize=1)
 def _nl_modules():
-    """Резка и хранилище корпуса. Раньше читались по пути из ~/nakedlunch —
-    теперь лежат внутри приложения (core/nlsrc, внесены 2026-08-01): каталог
-    CLI был скрытой рантайм-зависимостью, и его переименование убивало корпус,
-    хотя данные лежат совсем в другом месте. Никогда не None: код свой."""
-    from nlsrc.generator import _weighted_sample  # noqa: E402
+    """Хранилище корпуса. Раньше читалось по пути из ~/nakedlunch — теперь
+    лежит внутри приложения (core/nlsrc, внесено 2026-08-01): каталог CLI был
+    скрытой рантайм-зависимостью, и его переименование убивало корпус, хотя
+    данные лежат совсем в другом месте. Никогда не None: код свой.
+
+    Отдаёт ОДИН класс, а не пару (2026-08-14). Вторым элементом ехал
+    `_weighted_sample`, и брал его единственный вызывающий — `generate_filtered`,
+    вырезанный тем же днём (см. ниже). Пара из одного значащего элемента
+    заставляла каждого зовущего писать `X, _ = _nl_modules()` — форму, по
+    которой не видно, что второго уже нет."""
     from nlsrc.store import NakedLunchStore  # noqa: E402
 
-    return NakedLunchStore, _weighted_sample
+    return NakedLunchStore
 
 
 # ХРАНИЛИЩЕ ГРУЗИТСЯ ФОНОМ (Раунд 54). state.json пользователя — 550 МБ, и его
@@ -74,9 +79,10 @@ def _nl_modules():
 # при потолке ожидания 40 с — и однажды не дождалось («сервер не поднялся за
 # отведённое время»).
 #
-# Тот же приём, что у nlindex.warm_background: тяжёлая подготовка уходит в
-# поток, порт открывается сразу, а первый запрос, которому корпус реально
-# нужен, ждёт на замке. Статус в шапке при этом честно говорит «загружается» —
+# Приём тот же, что у карт индекса: тяжёлая подготовка уходит в поток (с
+# Раунда 57 это общий `_прогрев` в api/server.py, корпус в нём первый этап),
+# порт открывается сразу, а первый запрос, которому корпус реально нужен, ждёт
+# на замке. Статус в шапке при этом честно говорит «загружается» —
 # он спрашивает `store_if_ready`, который НЕ ждёт: опрос статуса, повисший на
 # 16 секунд, превратил бы индикатор фоновой работы в индикатор её отсутствия.
 _STORE = None
@@ -93,8 +99,7 @@ def open_store():
     global _STORE
     with _STORE_LOCK:
         if _STORE is None:
-            NakedLunchStore, _ = _nl_modules()
-            _STORE = NakedLunchStore(NAKEDLUNCH_DATA)
+            _STORE = _nl_modules()(NAKEDLUNCH_DATA)
         return _STORE
 
 
@@ -106,16 +111,13 @@ def store_if_ready():
     return _STORE
 
 
-def warm_background() -> None:
-    """Начать загрузку корпуса фоном (зовётся со старта сервера)."""
-    def работа():
-        try:
-            open_store()
-        except Exception as e:                                   # noqa: BLE001
-            # Молчать нельзя: без корпуса не работает ни генерация, ни статус,
-            # и пользователь должен увидеть причину в логе, а не пустую выдачу.
-            print(f"nakedlunch: корпус не загрузился ({e})", flush=True)
-    threading.Thread(target=работа, name="nl-store-warm", daemon=True).start()
+# `warm_background` ВЫРЕЗАН (2026-08-14). Свой поток на корпус завёл Раунд 54
+# (порт открывался раньше разбора 550 МБ), а Раунд 57 собрал прогрев в ОДИН
+# упорядоченный поток — `_прогрев` в api/server.py, где корпус идёт первым
+# этапом, а карты индекса вторым: параллельно они дрались за процессор и
+# растягивали друг друга втрое. С тех пор эту функцию не звал никто, и второй
+# способ греть корпус был приглашением снова развести два потока.
+# Неблокирующий старт и честный `store_if_ready` сторожит tests/test_boot.py.
 
 
 # ---------------------------------------------------------------------------
@@ -160,89 +162,15 @@ def clear_used_for_period(store, mode: str) -> int:
     return store.clear_used(time.time() - seconds)
 
 
-# ---------------------------------------------------------------------------
-# filtered generation (extendo-style banality + λ-novelty on top of
-# nakedlunch's own neutral/biased sampling) — the "фильтрация" half of the
-# two-mode split. Applied BEFORE nakedlunch's own sampling, on the pool it
-# would draw from, not after: filtering 4 already-chosen lines can't back-fill
-# ones that got rejected, filtering the pool first can.
-# ---------------------------------------------------------------------------
-
-_STOPWORDS = {"и", "в", "на", "не", "с", "что", "как", "но", "а", "о", "к", "у",
-              "же", "за", "из", "то", "это", "я", "он", "она", "они", "мы", "вы"}
-
-
-def _pool_banality(text: str) -> float:
-    """Fast banality proxy for filtering the FULL active pool (100k+ fragments):
-    zipf on raw word TOKENS directly, no pymorphy3 lemmatization. Measured
-    ~0.75s over a 147k-fragment pool this way vs ~15s lemmatizing every one
-    (`filters._nl_scored`'s own lemma-based banality check, which is fine at
-    the few-thousand-fragment scale nl_mix scores per request, but unusable
-    over the whole pool). wordfreq scores inflected surface forms directly
-    (e.g. 'городом' 4.35 vs lemma 'город' 5.35) — a bit lower than the lemma
-    score but just as informative for a relative ceiling. A fragment with no
-    real content tokens is treated as maximally banal (excluded by any real
-    ceiling) rather than as maximally fresh."""
-    from wordfreq import zipf_frequency
-    toks = [t for t in _tokens(text) if t not in _STOPWORDS and len(t) > 2]
-    if not toks:
-        return 9.0
-    return min(zipf_frequency(t, "ru") for t in toks)
-
-
-def generate_filtered(store, bias: str, banal_ceiling: float | None,
-                      novelty_gate: float | None, recent_tokensets: list, rng=None):
-    """nakedlunch's own generate(), but drawn from a pool pre-filtered by
-    banality and/or novelty (word-TOKEN Jaccard vs recently shown lines — not
-    lemma-based: recent_tokensets should be built via _tokens, not
-    corpus.lemmatize, so both sides compare on the same basis) when those
-    sliders are on. Both None (both sliders at 0) => nakedlunch's own
-    generate(), completely unfiltered."""
-    if banal_ceiling is None and novelty_gate is None:
-        return store.generate(bias, for_chat=True)
-
-    pool = store.get_chat_pool()
-    if banal_ceiling is not None:
-        pool = [f for f in pool if _pool_banality(f) <= banal_ceiling]
-    if novelty_gate is not None and recent_tokensets:
-        kept = []
-        for f in pool:
-            fl = _tokens(f)
-            sim = max((len(fl & r) / len(fl | r) if (fl or r) else 0.0 for r in recent_tokensets), default=0.0)
-            if sim <= novelty_gate:
-                kept.append(f)
-        pool = kept
-
-    if not pool:
-        return store.generate(bias, for_chat=True)   # nothing survived — fall back rather than show nothing
-
-    _, weighted_sample = _nl_modules()
-    if rng is None:
-        rng = random.Random()
-    bias = (bias or "").strip()
-    if not bias:
-        if len(pool) <= 4:
-            lines = (pool * ((4 // max(1, len(pool))) + 1))[:4]
-            rng.shuffle(lines)
-            return lines
-        return rng.sample(pool, 4)
-
-    bt = _tokens(bias)
-    scored = [(f, len(bt & _tokens(f))) for f in pool]
-    scored.sort(key=lambda x: x[1], reverse=True)
-    top = scored[: min(100, len(scored))]
-    items = [f for f, _s in top]
-    scores = [float(s) for _f, s in top]
-    wild = rng.choice(pool)
-    sem3 = weighted_sample(items, scores, min(3, len(items)), rng)
-    four = list(sem3) + [wild]
-    seen = set(four)
-    while len(four) < 4 and pool:
-        extra = rng.choice(pool)
-        if extra not in seen:
-            four.append(extra); seen.add(extra)
-    rng.shuffle(four)
-    return four[:4]
+# ФИЛЬТРОВАННАЯ ГЕНЕРАЦИЯ ВЫРЕЗАНА (2026-08-14). `generate_filtered` вместе с
+# её быстрым замером банальности `_pool_banality` (zipf по словоформам, чтобы
+# просеять весь активный пул за 0.75 с вместо 15 с с лемматизацией) была
+# «фильтрующей» половиной двухрежимного расклада и умерла вместе с ним: пул
+# фрагментов давно просеивают крутилки в core/filters.py, по своим замерам и
+# своей банальности. Вызывающих не осталось ни одного — ни в роутах, ни в
+# тестах. Токенизатор `_tokens` при этом ЖИВОЙ и остаётся выше: на него стоят
+# core/filters.py и tools/build_nl_rhyme.py — им нужен ровно этот разбор на
+# слова, чтобы сравнивать с корпусом на одном основании.
 
 
 # ---------------------------------------------------------------------------

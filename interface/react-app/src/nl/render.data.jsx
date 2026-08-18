@@ -5,6 +5,11 @@
 // «вставить» и «минус», от истории — только «вставить», а поиск, копирование,
 // правка, выгрузка и возврат в пул потерялись вместе со старым App.jsx.
 //
+// «ВСТАВИТЬ В ДОКУМЕНТ» УБРАНО 2026-08-18. Сама строка была кнопкой, и клик по
+// ней клал текст в лист. Листа нет — вставлять некуда, а кнопка, которая ничего
+// не делает, хуже её отсутствия: она обещает. Строка стала строкой; копирование
+// (⧉) и звезда на месте — через них текст и забирают.
+//
 // И два решения решение о том, ГДЕ чему жить: настройка истории уезжает в саму историю.:
 //     срок хранения и очистка живут в самой истории, а не в настройках;
 //   • «статистика в настройках находиться не должна, она должна находиться в
@@ -50,7 +55,12 @@ export function renderFavPanel(c) {
       <div style={s('display: flex; align-items: center; gap: 8px; margin-bottom: 8px;')}>
         <input type="text" value={st.favQ || ''} placeholder="поиск" spellCheck={false}
           onChange={function (e) { c.setState({ favQ: e.target.value }); }} style={s(ПОИСК)} />
-        <button onClick={function () { c.addFavManual(); }} title="Добавить строку руками" style={s(ССЫЛКА)} className={hov('color: var(--ink)')}>＋</button>
+        {/* ЗДЕСЬ БЫЛА КНОПКА ＋ (убрана 2026-08-18). Она звала addFavManual,
+            а тот брал «строку под курсором ленты». Курсора по строкам не стало
+            вместе с выделением — владелец: «там сейчас можно бессмысленно
+            выделить строку одну, и с этим ни хуя не делается». Кнопка осталась
+            бы контролом, который на любое нажатие отвечает «встань на строку»,
+            то есть просит невозможного. Строка кладётся звездой слева от неё. */}
       </div>
 
       <div className="nl-list">
@@ -67,7 +77,7 @@ export function renderFavPanel(c) {
                   }}
                   onBlur={function (e) { c.editFav(f.t, e.target.value); }} />
               ) : (
-                <button className="nl-name" title="Вставить в документ" onClick={function () { c.insertText(f.t); }}>{f.t}</button>
+                <span className="nl-name" style={{ cursor: 'default' }} title={f.t}>{f.t}</span>
               )}
               <span className="nl-acts">
                 <button title="Скопировать" onClick={function () { c.copyText(f.t); }}>⧉</button>
@@ -77,7 +87,7 @@ export function renderFavPanel(c) {
             </div>
           );
         })}
-        {строки.length ? null : (<div style={s('font-size: 9px; color: var(--muted-soft); padding: 6px 5px;')}>{все.length ? 'ничего не нашлось' : 'пусто — цифрой на строке или ★'}</div>)}
+        {строки.length ? null : (<div style={s('font-size: 9px; color: var(--muted-soft); padding: 6px 5px;')}>{все.length ? 'ничего не нашлось' : 'пусто — звезда слева от строки'}</div>)}
       </div>
 
       <div style={s('display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border-subtle); margin-top: 9px; padding-top: 9px;')}>
@@ -141,7 +151,7 @@ export function renderHistPanel(c) {
           return (
             <div key={i} className="nl-row">
               <span className="nl-when" title={h.full || ''}>{h.time}</span>
-              <button className="nl-name" title="Вставить в документ" onClick={function () { c.insertText(h.t); }}>{h.t}</button>
+              <span className="nl-name" style={{ cursor: 'default' }} title={h.t}>{h.t}</span>
               <span className="nl-acts">
                 <button title="Скопировать" onClick={function () { c.copyText(h.t); }}>⧉</button>
                 <button title="В избранное" onClick={function () { c.addFavText(h.t); }}>★</button>
@@ -201,9 +211,7 @@ export function renderStatsPanel(c) {
   var работы = c.jobRows ? c.jobRows() : [];
   var s0 = d.stats || {};
   var g = s0.generate || {}, f = s0.favorites || {}, sh = s0.shown || {}, nl = st.nl || {};
-  var doc = c.cur();
-  var lines = doc.filter(function (r) { return r.type === 'line' && r.text; });
-  var мои = lines.filter(function (r) { return r.src === 'я'; }).length;
+  var лента = st.lenta || [];
 
   // КАРТА ВОРОНКИ (Раунд 57). Сколько фрагментов и книг доживает до каждой
   // ступени отсева — чтобы цена каждой ручки была видна числом, а не на словах.
@@ -315,10 +323,11 @@ export function renderStatsPanel(c) {
         ['в истории', фмт((st.hist || []).length)],
       ], 'corp')}
 
-      {блок('этот лист', [
-        ['строк', фмт(lines.length)],
-        ['из них моих', фмт(мои)],
-      ], 'sheet')}
+      {/* Блок назывался «этот лист» и считал строки документа. Листов нет с
+          2026-08-18; считаем то, что на экране. */}
+      {блок('лента', [
+        ['строк', фмт(лента.length)],
+      ], 'lenta')}
 
       {ключи.length ? (
         <div style={s('margin-bottom: 12px;')}>

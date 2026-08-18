@@ -284,6 +284,11 @@ _PCTL_SCALE = 0.8
 # it's too loose or too strict.
 _ANCHOR_SIM_CEILING = 0.92
 
+# «Ещё не считали» — отдельно от `None`, потому что `None` здесь законный ОТВЕТ
+# («у модели нет мнения об этих леммах»), и путать их значило бы пересчитывать
+# самые дорогие случаи по кругу.
+_НЕ_СЧИТАН = object()
+
 # Потолок шкалы «связность соседних строк» (Раунд 44). Замер трёх референсных
 # текстов пользователя: 0.35 / 0.18 / 0.17 по косинусу центроидов лемм соседних
 # строк. То есть даже у самого связного его текста соседство держится втрое
@@ -307,19 +312,30 @@ _FLOW_EDGE = 0.75
 
 
 def _cos(a, b) -> float | None:
-    """Косинус двух центроидов; None, если любой из них пуст."""
+    """Косинус двух центроидов; None, если любой из них пуст.
+
+    БЕЗ НОРМ, И ЭТО НЕ СРЕЗАННЫЙ УГОЛ (волна A, 2026-08-14). Оба аргумента
+    приходят из `embeddings.lemma_centroid` — единственного производителя, — а
+    он делит на длину сам и либо отдаёт единичный вектор, либо None. Значит обе
+    нормы здесь всегда 1.0, и косинус двух единичных векторов — это их
+    скалярное произведение.
+
+    Проверено фактом, а не рассуждением: на трёх прогонах с разными темами
+    124 015 вызовов, максимальное отклонение длины от единицы — **1.19e-07**
+    (округление float32). Цена лишнего: `np.linalg.norm` на 300-мерном векторе
+    это ~2.4 мкс питоновских накладных, а звали её ДВАЖДЫ на вызов — 0.63 с из
+    0.92 с всего косинуса в профиле.
+
+    Если у `_cos` появится второй производитель, он обязан отдавать единичные
+    векторы — или считать косинус сам."""
     if a is None or b is None:
         return None
-    na = float(np.linalg.norm(a))
-    nb = float(np.linalg.norm(b))
-    if not na or not nb:
-        return None
-    return float(a @ b / (na * nb))
+    return float(a @ b)
 
 
 def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
                theme_sims=None, literal_cap=None, forced=None, cohesion=0.5,
-               no_mat=False, only_mat=False, clausula=0):
+               no_mat=False, only_mat=False, clausula=0, гсч=random):
     """Score raw nakedlunch fragments (real cut-up text, no Word/stress
     structure) for the SAME shortlist grammar-candidates land in: banality,
     blacklist/cliché, tautology apply, same as generated lines — the user
@@ -551,24 +567,25 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
             if cached_row is None:
                 continue   # unknown banal/taut, or failed cliché/banal/taut gate — skip honestly
             row = dict(cached_row)   # copy — run() mutates rows (pops "_lem", etc); never touch the cache's own dict
-            bias = _PCTL_SCALE * (0.5 - abs(row["_pctl"] - cohesion))
+            # Без темы связности не на чем работать, и уровень оценки не должен
+            # от неё зависеть даже одинаково для всех: иначе неработающая ручка
+            # молча меняла бы соотношение сил между фрагментами и строками
+            # грамматики. С темой — ПОЛОСА, внутри которой все равны. Оба
+            # правила зеркалят nlindex._таблица, там же замеры: разойтись этим
+            # двум нельзя, иначе режим зависел бы от того, испечён индекс.
+            if not tags:
+                bias = 0.0
+            else:
+                d = abs(row["_pctl"] - cohesion)
+                bias = 0.0 if d <= nlindex.ПОЛОСА_ТЕМЫ else -_PCTL_SCALE * (d - nlindex.ПОЛОСА_ТЕМЫ)
             row["score"] = round(0.6 + bias, 4)
             out.append(row)
             for w in row["_forced_hits"]:
                 forced_candidates[w].append(row)
-    if literal_cap is not None and tags:
-        # Форсед-фрагменты ИСКЛЮЧЕНЫ из шапки — у них отдельная, жёсткая
-        # гарантия ниже (run()), обычный cap про них не должен решать.
-        literal_items = [r for r in out if r["_literal"] and not r["_forced"]]
-        if len(literal_items) > literal_cap:
-            # Литеральный bias теперь ФИКСИРОВАН (см. выше) — почти все
-            # literal_items имеют одинаковый score, так что сортировка по
-            # score без перемешивания детерминированно оставляла бы одни и
-            # те же фрагменты (порядок из пула), а не случайную выборку.
-            random.shuffle(literal_items)
-            literal_items.sort(key=lambda r: r["score"], reverse=True)
-            drop = set(map(id, literal_items[literal_cap:]))
-            out = [r for r in out if id(r) not in drop]
+    # СРЕЗ БУКВАЛЬНЫХ УБРАН И ЗДЕСЬ (волна B, 2026-08-14) — по той же причине,
+    # что и в колоночном пути: он выбрасывал строки ИЗ ПУЛА, обещая при этом
+    # «не больше одной на строфу». Предел на строфу теперь стоит при сборке
+    # (`_select_with_rhyme`), где строфа и есть, и считает по лемме.
     for r in out:
         del r["_literal"]
         del r["_forced"]
@@ -747,12 +764,19 @@ def _score_strict_table(tags: set, theme_sims, forced: set, ворота,
     # минус ~2s на 2.6M вызовов ключа при промахе без темы).
     if tags:
         ranked = sorted(table.values(), key=itemgetter("_sem"))
+        n = len(ranked)
+        for idx, row in enumerate(ranked):
+            row["_pctl"] = idx / (n - 1) if n > 1 else 0.5
+            del row["_sem"]
     else:
-        ranked = list(table.values())
-    n = len(ranked)
-    for idx, row in enumerate(ranked):
-        row["_pctl"] = idx / (n - 1) if n > 1 else 0.5
-        del row["_sem"]
+        # БЕЗ ТЕМЫ ПЕРЦЕНТИЛЯ НЕТ (Раунд 62) — зеркало nlindex._таблица, там же
+        # и замер. Здесь стояло `idx / (n-1)` по insertion order, то есть номер
+        # фрагмента в корпусе, выданный за «релевантность». Оценка из него
+        # выбирала кусок корпуса: вся выдача из одной книги, перекос 25.8×.
+        # Ранжировать нечем — перцентиль нейтральный у всех.
+        for row in table.values():
+            row["_pctl"] = 0.5
+            del row["_sem"]
 
     _strict_score_cache[key] = table
     _strict_score_cache_order.append(key)
@@ -952,26 +976,27 @@ def _syllable_reserve(pool: list, syllable_spec: list | None, per_bucket: int = 
     return out
 
 
-def _classic_pool(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clausula, cap):
+def _classic_pool(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clausula, cap,
+                  гсч=random, семя=None):
     """Пул «классики»: активный пул минус история, с воротами мата и клаузулы.
     Колоночный путь и старый обязаны давать ОДНО И ТО ЖЕ — иначе режим зависел
     бы от того, испечён индекс или нет."""
     _idx = _index_for_current_cache() if nl_fragments else None
     if _idx is not None:
-        pool, survived = nlindex.select_light(
+        pool, survived, ступени = nlindex.select_light(
             _idx, pool_mask=nlindex.pool_mask(_idx, nl_fragments),
             hidden_mask=nlindex.mask_of(_idx, hidden),
-            no_mat=no_mat, only_mat=only_mat, clausula=clausula, cap=cap)
-        return pool, survived
+            no_mat=no_mat, only_mat=only_mat, clausula=clausula, cap=cap, seed=семя)
+        return pool, survived, ступени
     pool, _ = _nl_scored(nl_fragments or [], corpus, hidden, 9.0, light=True,
-                         no_mat=no_mat, only_mat=only_mat, clausula=clausula)
+                         no_mat=no_mat, only_mat=only_mat, clausula=clausula, гсч=гсч)
     survived = len(pool)
-    random.shuffle(pool)                # оценка у всех одна — верхушки не существует
-    return pool[:cap], survived
+    гсч.shuffle(pool)                   # оценка у всех одна — верхушки не существует
+    return pool[:cap], survived, {}     # старый путь ступеней не считает — и не выдумывает
 
 
 def _run_classic(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clausula,
-                 mat_share, forced, cap) -> dict:
+                 mat_share, forced, cap, гсч=random, семя=None) -> dict:
     """«Классика» — ОТДЕЛЬНЫЙ путь, а не квота внутри общего (Раунд 50).
 
     Требование (2026-08-03): бинарный переключатель «алгоритм — классика»; в классике
@@ -993,9 +1018,9 @@ def _run_classic(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, claus
     книги в активном пуле, история показов, мат и клаузула. Это ВОРОТА — про
     то, что содержится, а не про то, насколько хорошо."""
     size = int(knobs["shortlist"])
-    pool, survived = _classic_pool(knobs, corpus, nl_fragments, hidden=hidden,
-                                   no_mat=no_mat, only_mat=only_mat,
-                                   clausula=clausula, cap=cap)
+    pool, survived, ступени = _classic_pool(knobs, corpus, nl_fragments, hidden=hidden,
+                                            no_mat=no_mat, only_mat=only_mat,
+                                            clausula=clausula, cap=cap, гсч=гсч, семя=семя)
 
     # Доля мата — единственное, что здесь ещё надо разложить. Без рифмо-схемы
     # раскладывать по позициям нечего (пары не существует), поэтому просто
@@ -1011,7 +1036,7 @@ def _run_classic(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, claus
         if len(shortlist) < min(size, len(pool)):
             есть = {id(r) for r in shortlist}
             shortlist += [r for r in pool if id(r) not in есть][:size - len(shortlist)]
-        random.shuffle(shortlist)
+        гсч.shuffle(shortlist)
     else:
         shortlist = pool[:size]
 
@@ -1032,15 +1057,77 @@ def _run_classic(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, claus
                    "shortlist": len(shortlist),
                    "nl_fetched": len(nl_fragments or []), "nl_survived": 0,
                    "nl_used": len(shortlist),
-                   "nl_classic_survived": survived, "nl_classic_used": len(shortlist)},
+                   "nl_classic_survived": survived, "nl_classic_used": len(shortlist),
+                   # Классика грамматический генератор не запускает по определению
+                   # режима — так и сказано, а не нулями в чужих счётчиках.
+                   "gen_ran": False, "ступени": ступени},
         "forced_notice": forced_notice,
+        "seed": _штамп_прогона(семя, пул=len(nl_fragments or []),
+                               скрыто=len(hidden or ())),
     }
+
+
+# ---------------------------------------------------------------------------
+# СЕМЯ — ОДНО НА ПРОГОН (Раунд 62). Требование: «раз уж я выбираю настройку, я
+# должен выбирать конкретный результат, и он должен воспроизводиться в
+# точности».
+#
+# ЗАМЕР ДО ПРАВКИ (2026-08-13, полный индекс 2 434 632, схема абаб, 8 строк):
+# два одинаковых вызова подряд совпадали на 0.0% по местам и на 0.0% по
+# составу. Не «почти повторяется» — НЕ ПОВТОРЯЕТСЯ ВОВСЕ.
+#
+# ПУТЕЙ ГСЧ ОКАЗАЛОСЬ ЧЕТЫРЕ, А НЕ ТРИ, как я записала в план. Четвёртый —
+# грамматический генератор (`generate.generate(..., seed=None)`), и его зовёт
+# не этот файл, а вызывающий (api/server.py). Поэтому семя
+# ВЫБИРАЕТСЯ СНАРУЖИ и передаётся в оба места: закрепи только здесь — половина
+# смешанного режима продолжала бы плавать. Замерено по ступеням:
+#   · закрепить только `закрепить_разброс`      → 0.0% совпадения;
+#   · плюс глобальный `random.seed`             → 0.0% по местам, 12.5% состава;
+#   · плюс колоночный `nlindex.select(seed=)`   → 100% и по местам, и по составу.
+# Проверено и МЕЖДУ процессами (PYTHONHASHSEED рандомизирован, подтверждено
+# разными hash()): 8 из 8 строк совпали — порядок обхода множеств на выдачу не
+# влияет, потому что колоночный путь работает номерами, а не множествами.
+#
+# ЧЕГО СЕМЯ НЕ ОБЕЩАЕТ. Оно воспроизводит выбор, а не материал: другой активный
+# пул, другая история показов или пересобранный индекс — и та же цифра даст
+# другой текст. Поэтому рядом кладётся штамп (nlindex.штамп + размеры пула и
+# скрытого), чтобы приложение могло сказать это прямо, а не выдать чужое за то
+# же самое.
+#
+# `гсч=random` по умолчанию у внутренних помощников — это МОДУЛЬ random, у
+# которого те же `.shuffle`/`.random`, что у экземпляра. Значит любой прежний
+# вызывающий (тесты зовут помощников напрямую) получает ровно старое поведение,
+# а прогон целиком — свой поток.
+def семя_прогона(семя) -> int:
+    """Семя этого прогона: явное от вызывающего → закреплённое тестами → новое.
+
+    Порядок именно такой. Явное сильнее закреплённого, иначе `закрепить_разброс`
+    в conftest молча съедал бы семя, которое проверка передала нарочно.
+
+    Публичная НАРОЧНО: грамматический генератор зовут снаружи (api/server.py,
+    и раньше `filters.run`, поэтому число обязано выбираться
+    ОДИН раз и до обоих — иначе ответ назвал бы семенем то, по которому
+    грамматическая половина не собиралась."""
+    if семя is not None:
+        return int(семя) % (1 << 30)
+    if _РАЗБРОС_СЕМЯ is not None:
+        return int(_РАЗБРОС_СЕМЯ)
+    return random.randrange(1 << 30)
+
+
+def _штамп_прогона(семя: int | None, *, пул: int, скрыто: int) -> dict:
+    """Что нужно знать, чтобы честно повторить прогон по номеру.
+
+    `семя=None` значит «этот прогон шёл не по семени» — так отвечают прямые
+    вызовы помощников из тестов. Подставлять сюда свежее число нельзя: штамп
+    называл бы семенем прогона то, что прогоном не управляло."""
+    return {"seed": семя, "index": nlindex.штамп(), "pool": пул, "hidden": скрыто}
 
 
 def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str = "none",
         tags: list[str] | None = None, forced: set[str] | None = None,
-        stanza: list[dict] | None = None, стоп=None) -> dict:
-    """The cascade. Returns {shortlist, funnel, forced_notice} — funnel is the
+        stanza: list[dict] | None = None, семя: int | None = None) -> dict:
+    """The cascade. Returns {shortlist, funnel, forced_notice, seed} — funnel is the
     per-stage survivor count so the user can SEE the filter working (and
     where yield is lost); forced_notice reports on `!слово` guarantees (see
     _ensure_forced). `rhyme` enforces a rhyme scheme (абаб, абав, etc.) in
@@ -1059,8 +1146,14 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
     validation/derivation step in clean.py, PRINCIPLES §6). `None` for
     every caller that only ever sends a plain scheme string — the syllable
     constraint layer is purely additive, see _select_with_rhyme's own
-    `syllable_spec` docstring for exactly how soft it is."""
+    `syllable_spec` docstring for exactly how soft it is.
+
+    `семя` (Раунд 62) закрепляет ВЕСЬ случайный выбор прогона — см. блок
+    «СЕМЯ — ОДНО НА ПРОГОН» выше. None означает «сними новое»; какое именно
+    снялось, ответ говорит в `seed`, чтобы прогон можно было повторить."""
     n0 = len(lines)
+    семя = семя_прогона(семя)
+    гсч = random.Random(семя)
     meter_gate = 0.2 + 0.6 * knobs["meter"]         # slider 0..1 → threshold 0.2..0.8
     # РУЧКА «БАНАЛЬНОСТЬ» — ДВУСТОРОННЯЯ (Раунд 58, требование: на минимуме язык максимально затёртый, на максимуме нетронутый, в середине
     # ручка не влияет.).
@@ -1068,6 +1161,13 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
     # быстрый путь по индексу, и запасной по словарю, и карта воронки.
     ворота = nlindex.ворота_банальности(knobs["banal"])
     hidden = corpus.hidden_set()                    # history (not yet restored/expired) + favorites
+    # СОБСТВЕННЫЙ СЛЕД ПРОГОНА НЕ ПРЯЧЕТСЯ ОТ НЕГО САМОГО (Раунд 62) — см.
+    # corpus.тексты_прогона, там весь разбор. `getattr` с запасным вариантом
+    # нарочно: `hidden_set` реализуют и заглушки в тестах, и менять их подпись
+    # ради этого значило бы тянуть правку туда, где она ничего не значит.
+    свой_след = getattr(corpus, "тексты_прогона", None)
+    if свой_след is not None:
+        hidden = hidden - свой_след(семя)
     # «Без мата» (2026-07-31, PLAN.md) — .get, а не knobs["no_mat"]: часть
     # тестов и старых вызовов собирает knobs-словарь руками, без clean.knobs;
     # для них флаг честно отсутствует = False, а не KeyError.
@@ -1097,7 +1197,8 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
                             clausula=clausula,
                             mat_share=float(knobs.get("mat_share", -1.0)),
                             forced=forced,
-                            cap=max(300, int(knobs["shortlist"]) * 8))
+                            cap=max(300, int(knobs["shortlist"]) * 8),
+                            гсч=гсч, семя=семя)
 
     # Тема без запихивания (2026-07-17, PLAN.md 0.2 — see _nl_scored for the
     # full story). `stanza_size` MIRRORS interface/react-app/src/App.jsx's
@@ -1211,9 +1312,13 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
     # оценке, резерв по перцентилю, резерв по слоговой вилке), и они же
     # собираются ниже старым путём. Индекса нет или он испечён по другим
     # правилам — молча работаем по-старому, поведение то же.
+    # Ступени, как они происходят. Заполняются только на колоночном пути: на
+    # старом их просто нет, и выдумывать числа, которых никто не считал, —
+    # ровно та ложь, ради устранения которой воронка и переписана.
+    ступени: dict = {}
     _idx = _index_for_current_cache() if nl_fragments else None
     if _idx is not None:
-        nl_survivors, n_nl_survived, forced_candidates = nlindex.select(
+        nl_survivors, n_nl_survived, forced_candidates, ступени = nlindex.select(
             _idx,
             pool_mask=nlindex.pool_mask(_idx, nl_fragments),
             hidden_mask=nlindex.mask_of(_idx, hidden),
@@ -1223,15 +1328,15 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
             pctl_scale=_PCTL_SCALE, literal_cap=literal_cap,
             cap=NL_SELECT_CAP, reserve_n=min(1_000_000, max(30, n_blocks * 5)),
             use_theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
-            per_bucket=1, sims=theme_sims)
+            per_bucket=1, sims=theme_sims, seed=семя)
         nl_survivors_full = nl_survivors      # резервы уже внутри; ниже они не досчитываются
     else:
-        nl_survivors, forced_candidates = _nl_scored(nl_fragments or [], corpus, hidden, ворота,
+        nl_survivors, forced_candidates = _nl_scored(nl_fragments or [], corpus, hidden, ворота, гсч=гсч,
                                                      tags=tags, theme_sims=theme_sims,
                                                      literal_cap=literal_cap, forced=forced,
                                                      cohesion=cohesion, no_mat=no_mat, only_mat=only_mat,
                                                      clausula=clausula)
-        random.shuffle(nl_survivors)                   # break ties (mostly bias=0) before a stable sort
+        гсч.shuffle(nl_survivors)                      # break ties (mostly bias=0) before a stable sort
         nl_survivors.sort(key=lambda r: r["score"], reverse=True)
         n_nl_survived = len(nl_survivors)               # TRUE count, captured before the selection cap below
         nl_survivors_full = nl_survivors                # pre-cap reference — the reserves below search THIS
@@ -1281,7 +1386,7 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
     # Shuffle before the stable sort: meter ties identically across MANY
     # candidates (many lines hit the same regularity score), and a stable sort
     # on a tied score would otherwise keep insertion order every time.
-    random.shuffle(scored)
+    гсч.shuffle(scored)
     scored.sort(key=lambda r: r["score"], reverse=True)
     size = min(knobs["shortlist"], len(scored) + len(nl_survivors))
     div = 0.3 + 0.5 * knobs["explore"]              # explore knob = how hard to spread neighbours
@@ -1300,7 +1405,8 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
                                             mat_share=knobs.get("mat_share", 0.0), flow=flow,
                                             repeat_ok=repeat_ok,
                                             theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
-                                            стоп=стоп)
+                                            гсч=гсч,
+                                            тема=set(tags or ()), обязательные=set(forced or ()))
         else:
             shortlist = _diversify(nl_survivors, size, div)
     elif knobs["nl_mix"] <= 0.0:
@@ -1315,7 +1421,8 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
             shortlist = _select_with_rhyme(scored, rhyme, size, precision=knobs["rhyme_precision"],
                                             mat_share=knobs.get("mat_share", 0.0), flow=flow,
                                             repeat_ok=repeat_ok,
-                                            syllable_spec=syllable_spec, стоп=стоп)
+                                            syllable_spec=syllable_spec, гсч=гсч,
+                                            тема=set(tags or ()), обязательные=set(forced or ()))
         else:
             shortlist = _diversify(scored[: max(300, size * 8)], size, div)
     else:
@@ -1332,7 +1439,8 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
                                             mat_share=knobs.get("mat_share", 0.0), flow=flow,
                                             repeat_ok=repeat_ok,
                                             theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
-                                            стоп=стоп)
+                                            гсч=гсч,
+                                            тема=set(tags or ()), обязательные=set(forced or ()))
         else:
             grammar_size = size - nl_quota
             pool = scored[: max(300, grammar_size * 8)]     # diversify among the best candidates
@@ -1368,6 +1476,27 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
                                    knobs["rhyme_precision"], hidden)
 
     nl_in_shortlist = sum(1 for r in shortlist if r["template"] == "nakedlunch")
+    # СКОЛЬКО КАНДИДАТОВ ВООБЩЕ МОГУТ ВСТАТЬ В ПАРУ (Раунд 62).
+    #
+    # На ПУЛЕ это число мёртвое — 95.5–99.6% при любой ручке, потому что на
+    # полутора миллионах у каждой строки есть однокорзинник. Нехватка пар
+    # возникает ПОСЛЕ жребия: замер 21.6 нашёл, что 300 кандидатов ложатся в
+    # ~198 рифмо-корзин, из которых с двумя и более членами только 54, и в них
+    # 154 кандидата из 300 — то есть половина буфера физически не может занять
+    # рифмующую позицию, и воронка об этом молчала.
+    #
+    # Считаем по ТОМУ ЖЕ правилу корзины, что и отбор (префикс по точности),
+    # иначе число описывало бы не то, что происходит.
+    if ступени and rhyme != "none":
+        plen = _rhyme_prefix_len(knobs["rhyme_precision"])
+        корзины: dict = {}
+        for r in nl_survivors:
+            k = r.get("rhyme") or ""
+            if k:
+                b = k if plen is None else k[:plen]
+                корзины[b] = корзины.get(b, 0) + 1
+        ступени["в_парах"] = sum(v for v in корзины.values() if v >= 2)
+        ступени["корзин"] = len(корзины)
     for r in shortlist:
         r["lemmas"] = sorted(r.pop("_lem"))          # echoed back on accept — see corpus.accept
         # Раунд 50: сюда доходит только алгоритм — классика ушла развилкой в
@@ -1382,8 +1511,21 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
         "funnel": {"generated": n0, "formal": n1, "redundancy": n2,
                    "banality": n3, "shortlist": len(shortlist),
                    "nl_fetched": n_nl, "nl_survived": n_nl_survived, "nl_used": nl_in_shortlist,
-                   "nl_classic_survived": 0, "nl_classic_used": 0},
+                   "nl_classic_survived": 0, "nl_classic_used": 0,
+                   # ЧЕСТНЫЕ СТУПЕНИ (Раунд 62). Прежние счётчики остаются —
+                   # их читают статистика и «почему пусто», и ломать их ради
+                   # красоты нельзя. Но сами по себе они врали дважды:
+                   #   · четыре из них (generated/formal/redundancy/banality)
+                   #     описывают грамматическую ветку, которая при «Источники
+                   #     = корпус» НЕ ЗАПУСКАЕТСЯ вовсе — нули читались как
+                   #     «отфильтровано подчистую», хотя ступеней не было;
+                   #   · между `nl_survived` и `shortlist` пропадала крупнейшая
+                   #     ступень каскада — жребий из 1.5 млн в 300.
+                   # `gen_ran` отвечает на первое, `ступени` — на второе.
+                   "gen_ran": bool(n0),
+                   "ступени": ступени},
         "forced_notice": forced_notice,
+        "seed": _штамп_прогона(семя, пул=n_nl, скрыто=len(hidden or ())),
     }
 
 
@@ -1525,10 +1667,7 @@ def _mat_slot_plan(share: float, L: int, groups=None) -> dict:
     return план
 
 
-class _Остановлено(Exception):
-    """Прерывание набора по просьбе пользователя. Своё, а не из pipeline: домен
-    фильтров ничего не знает о прогоне серии, и импорт ради одного класса
-    сделал бы зависимость наоборот. pipeline ловит его и превращает в свой."""
+# НАДГРОБИЕ 2026-08-18: снят провод остановки набора — параметр `стоп` у `run` и `_select_with_rhyme`, класс `_Остановлено` и проверка в цикле отбора; передавала и ловила его только цепь (`core/pipeline.py`), вырезанная в тот же день, так что `стоп` был всегда None, а `raise` — недостижим.
 
 
 # Ширина полосы разброса при раннем выходе: из скольких лучших кандидатов
@@ -1538,7 +1677,50 @@ class _Остановлено(Exception):
 # стоят рядом по рангу).
 ПОЛОСА = 12
 
+# БАРЬЕР ПОВТОРА ЛЕММ: СТОП-СПИСОК ПРОВЕРЕН И ОТКЛОНЁН (волна B4, 2026-08-14).
+#
+# План требовал не считать восемнадцать служебных лемм («весь этот тот который
+# быть мочь…») — они и правда составляют 10.1% всех вхождений в колонке лемм
+# (934 779 из 9.26 млн), то есть десятую часть запретительной силы барьера.
+# Основанием было «плоский стоп-список даёт ~6% слышимых повторов».
+#
+# ЗАМЕР ЭТОГО НЕ ПОДТВЕРДИЛ, и цифра 6% оказалась артефактом метрики. На 30
+# прогонах по 40 строк (1 170 соседних пар), считая ТОЛЬКО знаменательные
+# слова, слышимых повторов **4 штуки = 0.3%**. Считая все слова подряд —
+# 8.5%, но их дают «и», «в», «с», которых барьер не видит и видеть не должен:
+# в `_lem` попадают только знаменательные.
+#
+# Правка со стоп-списком и оговоркой «кроме соседних строк с той же
+# словоформой» была написана и замерена А/Б на одних семенах:
+#   • 25 прогонов из 30 совпали побитово;
+#   • слышимых повторов 4 → 3 (убрался один: «не успел ЕГО выхватить» /
+#     «Я ЕГО угостил стаканчиком»);
+#   • разных строк 1 020 → **1 011**, то есть разнообразие УПАЛО.
+# Один повтор ценой девяти строк — по правилу 10 («функция принимается, только
+# если замер показывает, что она лучше») не проходит. Откачено.
+#
+# И второе, ради чего пункт затевался: квота мата ломалась НЕ здесь. См.
+# `_mat_slot_plan` — там раскладка идёт рифмо-группами, и на схеме «абба»
+# достижимы ровно три доли: 0.00, 0.50, 1.00.
+
+
 _РАЗБРОС_СЕМЯ: int | None = None
+# ОБЪЯВЛЕНИЕ ЗДЕСЬ ОБЯЗАТЕЛЬНО, И ВОТ ПОЧЕМУ (2026-08-18).
+#
+# Откат правки B4 снёс эту строку вместе с двумя функциями ниже. Функции я
+# вернула, строку — нет. Весь набор тестов остался ЗЕЛЁНЫМ, а живое приложение
+# отдавало 500 на каждую генерацию: `NameError: name '_РАЗБРОС_СЕМЯ' is not
+# defined`.
+#
+# Тесты этого увидеть не могли по построению: `conftest.py` автоматическим
+# приспособлением зовёт `закрепить_разброс(...)` перед КАЖДЫМ тестом, а та
+# делает `global _РАЗБРОС_СЕМЯ` и тем самым СОЗДАЁТ имя. В прогоне тестов оно
+# существует всегда; в приложении его не создаёт никто.
+#
+# Ровно тот случай, про который правило 12: зелёные тесты не проверка, потому
+# что замер держит мир неподвижным, а приложение — нет. Сторож на это —
+# `tests/test_семя.py::test_modul_gruzitsya_bez_pomoshchi_testov`, он импортирует
+# модуль отдельным процессом, без приспособлений.
 
 
 def _разброс_семя():
@@ -1556,7 +1738,9 @@ def закрепить_разброс(семя: int | None) -> None:
 def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: set | None = None,
                         precision: float = 0.0, theme_anchor: bool = False,
                         syllable_spec: list | None = None, mat_share: float = 0.0,
-                        flow: float = -1.0, repeat_ok: bool = False, стоп=None) -> list:
+                        flow: float = -1.0, repeat_ok: bool = False,
+                        гсч=None, тема: set | None = None,
+                        обязательные: set | None = None) -> list:
     """Select `size` lines from candidates while respecting a rhyme scheme,
     applied per STANZA (a repeating block of len(scheme) lines) rather than
     once for the whole shortlist — a 40-line shortlist with "абаб" is 10
@@ -1707,9 +1891,13 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     # true/false per query as the old scan (same j≠i / unused-by-index /
     # unused-by-text / same-bucket / no-shared-lemma conditions) — this is a
     # complexity fix, not a behavior or quality change.
+    # `bucket_lemma_index` УБРАН (волна A, 2026-08-14). Он существовал ради
+    # одного вопроса — «есть ли у кандидата непересекающийся сосед по корзине»,
+    # — а тот вопрос теперь отвечается обходом самой корзины с выходом на
+    # первом же подошедшем. Строился он на КАЖДЫЙ прогон по всем кандидатам и
+    # всем их леммам, и был чистой платой за ответ, который больше не нужен.
     key_count: dict = {}
     bucket_members: dict = {}
-    bucket_lemma_index: dict = {}
     # Корзина кандидата — срез его рифмо-ключа, величина неизменная. Считалась
     # заново в каждом скане на якорной позиции, то есть десятки тысяч срезов
     # строк на позицию; здесь она считается один раз и живёт списком.
@@ -1720,9 +1908,6 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
         if b:
             key_count[b] = key_count.get(b, 0) + 1
             bucket_members.setdefault(b, set()).add(idx)
-            li = bucket_lemma_index.setdefault(b, {})
-            for lemma in c["_lem"]:
-                li.setdefault(lemma, set()).add(idx)
 
     # ПОРЯДОК ПО РАНГУ — то, что превращает полный перебор в ранний выход
     # (Раунд 56).
@@ -1765,23 +1950,66 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     # Случайность идёт ТОЛЬКО между равными: у кого балл выше, тот и выше.
     # Качество отбора не меняется ни на шаг — меняется, кого из одинаково
     # хороших мы возьмём сегодня.
-    _мешок = random.Random(_разброс_семя())
+    # `гсч` — общий поток прогона (см. «СЕМЯ — ОДНО НА ПРОГОН»). Его нет только
+    # у прямых вызовов из тестов: там остаётся прежнее поведение, своё семя на
+    # вызов через `закрепить_разброс`.
+    _мешок = гсч if гсч is not None else random.Random(_разброс_семя())
     порядок_score = sorted(range(len(candidates)),
                            key=lambda i: (-candidates[i]["score"], _мешок.random()))
+    _леммы_темы = {л for t in (тема or ()) for л in lemmatize(t)}
+    _леммы_обяз = {л for t in (обязательные or ()) for л in lemmatize(t)}
+    _леммы_темы -= _леммы_обяз      # у `!слова` своя гарантия, предел его не касается
+
+    def буквальная(cand: dict) -> bool:
+        return bool(_леммы_темы) and bool(cand.get("_lem") and (cand["_lem"] & _леммы_темы))
+
+    def блок_уже_с_темой(block_start: int) -> bool:
+        return any(буквальная(r) for r in selected[block_start:])
+
+    # ЯКОРЬ ИЩЕТ СНАЧАЛА СРЕДИ БУКВАЛЬНЫХ (волна B, 2026-08-14).
+    #
+    # Обещание якоря — «строка точно в тему», и для человека это значит, что
+    # слово в строке ВИДНО. Ранжир по релевантности это не даёт: релевантность
+    # — среднее косинуса по леммам фрагмента, то есть она РАЗБАВЛЯЕТСЯ длиной.
+    # Замерено: у темы «деньги» среди 27 119 кандидатов 45 буквальных, и лучший
+    # из них стоит по перцентилю на 34-м месте — в полосу из двенадцати он не
+    # попадает никогда. Отсюда «„деньги“ не появились ни разу в 25 прогонах».
+    #
+    # Раньше так делать было НЕЛЬЗЯ: предпочтение буквальных и дало ту самую
+    # жалобу 2026-07-17 — слово в 19 строках из 20. Теперь можно, потому что
+    # предел «одна буквальная на строфу» стоит ниже и держится по лемме.
     порядок_pctl = sorted((i for i in range(len(candidates)) if "_pctl" in candidates[i]),
-                          key=lambda i: (-candidates[i]["_pctl"], _мешок.random()))
+                          key=lambda i: (not буквальная(candidates[i]),
+                                         -candidates[i]["_pctl"], _мешок.random()))
 
     def has_distinct_bucket_partner(i: int, cand: dict, b: str) -> bool:
-        """Is there a still-unused member of bucket `b`, other than `cand`
-        itself, sharing NONE of `cand`'s lemmas? See the perf note above —
-        O(bucket size), touching only postings for `cand`'s own lemmas,
-        not a scan of every candidate."""
-        overlapping = {i}
-        li = bucket_lemma_index.get(b) or {}
-        for lemma in cand["_lem"]:
-            overlapping |= li.get(lemma, ())
-        for j in bucket_members.get(b, ()) - overlapping:
-            if candidates[j]["text"] not in used_texts:
+        """Есть ли в корзине `b` ещё не занятый сосед, не делящий с `cand` ни
+        одной леммы.
+
+        ОТВЕЧАЕМ, НЕ СТРОЯ ОТВЕТ ЦЕЛИКОМ (волна A, 2026-08-14). Здесь сначала
+        собиралось множество ВСЕХ пересекающихся (объединение постингов по
+        каждой лемме кандидата), потом из корзины вычиталось это множество, и
+        только потом искался первый незанятый. То есть на каждый вопрос
+        «есть ли хоть один» строились два новых множества размером с корзину.
+
+        Замер на реальном пуле (800 000 фрагментов, тема, схема абаб):
+        **233 746 вызовов за ОДИН прогон** и 0.84 с из 2.48 — то есть 42%
+        всего времени генерации уходило сюда, а не в сортировки, на которые
+        указывал план.
+
+        Достаточно идти по корзине и вернуть первого же подошедшего: вопрос
+        задан про существование. Ответ ТОТ ЖЕ по построению — `j` лежит в
+        постингах леммы ровно тогда, когда эта лемма есть у `j`, значит
+        «j в объединении постингов» и «леммы пересекаются» — одно и то же
+        условие, записанное с двух сторон."""
+        лем = cand["_lem"]
+        for j in bucket_members.get(b, ()):
+            if j == i:
+                continue
+            другой = candidates[j]
+            if другой["_lem"] & лем:
+                continue
+            if другой["text"] not in used_texts:
                 return True
         return False
 
@@ -1813,6 +2041,22 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
             return "grammar"
         return "nl"
 
+    # НЕ БОЛЬШЕ ОДНОЙ БУКВАЛЬНОЙ НА СТРОФУ (волна B, 2026-08-14).
+    #
+    # Обещание старое — оно появилось после живой жалобы 2026-07-17: тема
+    # «деньги» дала слово буквально в 19 строках из 20. Держали его срезом по
+    # ВСЕМУ пулу (`literal_cap`), и держал он его плохо в обе стороны:
+    # выбрасывал из пула сотни строк (728 из 730 на «ночи») и при этом ловил
+    # только точную словоформу, пропуская «войны», «войне», «войну».
+    #
+    # Здесь есть то, чего нет в пуле, — САМА СТРОФА. Значит обещание можно
+    # выполнить буквально: в одном блоке не больше одной строки со словом темы.
+    # Считаем по ЛЕММЕ: для человека «ночь» и «ночью» — одно слово, и держать
+    # разное мнение об этом на двух этажах отбора нельзя.
+    #
+    # Исключения ровно два, и оба обязаны быть: тематический якорь (он и есть
+    # та самая одна строка) и `!слово` (у него отдельная жёсткая гарантия).
+
     # Per-candidate meaning vectors for the theme-anchor similarity check —
     # computed ONCE up front (not per scan_for query, which would reintroduce
     # the exact O(candidates²) shape the perf note above just fixed), and
@@ -1822,8 +2066,34 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     # for — `has_anchor_conflict` below treats that as "no opinion", never
     # as "similar" or "distinct" (see embeddings.lemma_centroid's docstring).
     # Центроиды нужны и тематическому якорю, и связности соседних строк.
-    cand_centroids = ([embeddings.lemma_centroid(c["_lem"]) for c in candidates]
-                      if (theme_anchor or flow >= 0.0) else None)
+    #
+    # СЧИТАЕМ ПО ТРЕБОВАНИЮ, А НЕ ВСЕ СРАЗУ (волна A, 2026-08-14). Здесь стоял
+    # список по ВСЕМ кандидатам, и на умолчаниях приложения это 12 608
+    # центроидов за прогон — 0.21 с из 0.48, то есть **44% времени генерации**,
+    # при том что спрашивают у считанных единиц: `has_anchor_conflict` молчит,
+    # пока у строфы нет якоря, а ранний выход досматривает пул лишь до конца
+    # полосы.
+    #
+    # Это НЕ ослабление проверки: у кого спросят, тот и посчитается, значение
+    # то же самое до последнего бита. Память — тот же список, просто заполняется
+    # он по мере надобности.
+    _центроиды: list = [_НЕ_СЧИТАН] * len(candidates) if (theme_anchor or flow >= 0.0) else []
+
+    class _Центроиды:
+        """Список наизнанку: индексируется как список, считает при первом
+        обращении. Отдельный класс, а не `dict.setdefault` в двух местах, —
+        чтобы обращений `cand_centroids[i]` в каскаде не пришлось трогать
+        вовсе, и чтобы `cand_centroids is None` осталось тем же признаком
+        «центроиды в этом прогоне не нужны»."""
+        __slots__ = ()
+
+        def __getitem__(self, i):
+            v = _центроиды[i]
+            if v is _НЕ_СЧИТАН:
+                v = _центроиды[i] = embeddings.lemma_centroid(candidates[i]["_lem"])
+            return v
+
+    cand_centroids = _Центроиды() if _центроиды else None
     stanza_anchor_centroid: dict = {}   # block_start -> centroid vector | None
     # Ответ «похож ли кандидат на якорь ЭТОЙ строфы» зависит только от пары
     # (кандидат, блок), а спрашивается он у одного и того же кандидата много
@@ -1847,19 +2117,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
         return ответ
 
     for pos in range(size):
-        # ОСТАНОВКА СЕРИИ СПРАШИВАЕТСЯ ЗДЕСЬ (Раунд 55). Замер: один текст на
-        # цепочке пользователя — 777 секунд, и 776 из них уходило на набор пулов,
-        # то есть на этот цикл. Проверки в pipeline (перед пулом и на уровне
-        # перебора) давали granularity в сотни секунд, и замечание: остановка «после текущей генерации» на зависшем прогоне не сработает
-        # вовсе.. Здесь — доли секунды.
-        #
-        # Раунд 56 срезал текст до 28 секунд (см. `порядок_score` выше), но
-        # проверка остаётся здесь, а не поднимается обратно: цена пула зависит
-        # от формы строфы и ширины пула, то есть от того, что пользователь волен
-        # выкрутить в любой момент, — а обещание «стоп работает» от его
-        # настроек зависеть не должно.
-        if стоп is not None and стоп():
-            raise _Остановлено()
+        # НАДГРОБИЕ 2026-08-18: здесь стояла проверка остановки серии (Раунд 55) — единственная в горячем цикле; ушла вместе с проводом `стоп`, см. надгробие у `ПОЛОСА`.
         block_start = (pos // L) * L
         local_pos = pos % L
         target_group = next((g for g in groups if local_pos in g), None)
@@ -1984,7 +2242,13 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
                 if not allow_repeat and (cand["_lem"] & recent_union):
                     continue
                 valid = True
-                if not is_theme_anchor and has_anchor_conflict(i, block_start):
+                # Предел «одна буквальная на строфу» — см. `буквальная` выше.
+                # Якорь темы и `!слово` не считаются: якорь и есть эта одна, а
+                # у принудительного слова своя гарантия.
+                if (not theme_anchor_mode and _леммы_темы
+                        and буквальная(cand) and блок_уже_с_темой(block_start)):
+                    valid = False
+                if valid and not is_theme_anchor and has_anchor_conflict(i, block_start):
                     # "too similar to this stanza's anchor line" — see the
                     # function's own docstring; independent of rhyme/slot/
                     # repeat checks below, applies to grammar lines too.
@@ -2046,8 +2310,55 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
                 # лучший по перцентилю, а не случайный из полосы лучших. Полоса
                 # нужна обычным слотам, где «лучший» определён с точностью до
                 # четвёртого знака и потому произволен.
+                # ЯКОРЬ ТЕМЫ — ТОЖЕ С РАЗБРОСОМ (волна B, 2026-08-14).
+                #
+                # Здесь стояло `return i` с объяснением: «обещание „строка
+                # точно в тему“ должно выполняться буквально — лучший по
+                # перцентилю, а не случайный из полосы». Объяснение звучит
+                # верно, а следствие оказалось таким:
+                #
+                #   тема «ночь», 25 прогонов с РАЗНЫМИ семенами → 25 строк с
+                #   темой, и все двадцать пять — ОДНА И ТА ЖЕ строка. То же на
+                #   «войне». В корпусе при этом 2 989 и 1 059 подходящих.
+                #
+                # Причина: перцентиль — ранг, значения РАЗНЫЕ по построению,
+                # ничьих нет. Значит случайный тай-брейк в `порядок_pctl` не
+                # срабатывает никогда, и «лучший» — всегда один и тот же
+                # фрагмент корпуса, сколько семян ни меняй.
+                #
+                # ПОЛОСА МЕРИТСЯ БЛИЗОСТЬЮ, А НЕ ЧИСЛОМ. Первая версия брала
+                # двенадцать лучших, как у обычных слотов, — и тест на
+                # синтетическом пуле поймал её правым: там кандидатов всего
+                # десяток, двенадцать лучших это ВЕСЬ пул, и якорь становился
+                # случайной строкой вместо тематической. Число кандидатов —
+                # свойство пула, а обещание «точно в тему» свойством пула быть
+                # не должно.
+                #
+                # Поэтому полоса — те, кто не дальше `ПОЛОСА_ТЕМЫ` от лучшего
+                # по перцентилю: та же величина, которой уже определено
+                # «внутри полосы все равны по теме» (nlindex). На реальном пуле
+                # в 27 тысяч кандидатов это полсотни строк, на десятке
+                # синтетических — ровно одна, лучшая. Сверху предел ПОЛОСА:
+                # он про цену обхода, а не про качество.
                 if ранний and theme_anchor_mode:
-                    return i
+                    свой = буквальная(cand)
+                    if not полоса:
+                        _полоса_букв, _верх_pctl = свой, cand["_pctl"]
+                    elif _полоса_букв:
+                        # Полоса набрана из буквальных — кончились буквальные,
+                        # кончилась и полоса. Ширина здесь не число и не ранг,
+                        # а само обещание: «точно в тему» — это те, у кого
+                        # слово темы есть.
+                        if not свой:
+                            return _мешок.choice(полоса)
+                    elif cand["_pctl"] < _верх_pctl - nlindex.ПОЛОСА_ТЕМЫ:
+                        # Буквальных нет вовсе (бывает: слово темы редкое) —
+                        # тогда полоса по близости, как у пула.
+                        return _мешок.choice(полоса)
+                    полоса.append(i)
+                    if len(полоса) >= ПОЛОСА:
+                        return _мешок.choice(полоса)
+                    continue
                 if ранний:
                     полоса.append(i)
                     if len(полоса) >= ПОЛОСА:

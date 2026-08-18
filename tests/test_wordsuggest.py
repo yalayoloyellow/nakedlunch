@@ -88,13 +88,24 @@ def _mini_index5():
     return {"words": words, "keys": keys}
 
 
-def _подмена(data):
+def _подмена(data, книги=None):
+    """Мини-словарь рифм + мини-корпус на время теста.
+
+    Корпус подменяется ВСЕГДА, даже пустым, и это не перестраховка: без
+    подмены мини-фикстура молча брала бы частоты из НАСТОЯЩИХ 40 книг
+    (волна С2 сшила рифмы с корпусом), и тесты логики ярусов стали бы
+    зависеть от того, что лежит в ~/Documents. Пустой корпус = честная
+    деградация: подписи возвращаются к частоте языка, порядок прежний."""
     saved = (wordsuggest._WORDS, wordsuggest._KEYS, wordsuggest._SKEL,
-             wordsuggest._SKEL_BUCKET, wordsuggest._YO)
+             wordsuggest._SKEL_BUCKET, wordsuggest._YO,
+             wordsuggest._КНИГИ, wordsuggest._книги_пробовали)
     wordsuggest._activate(data)
+    wordsuggest._КНИГИ = dict(книги or {})
+    wordsuggest._книги_пробовали = True
     yield
     (wordsuggest._WORDS, wordsuggest._KEYS, wordsuggest._SKEL,
-     wordsuggest._SKEL_BUCKET, wordsuggest._YO) = saved
+     wordsuggest._SKEL_BUCKET, wordsuggest._YO,
+     wordsuggest._КНИГИ, wordsuggest._книги_пробовали) = saved
 
 
 @pytest.fixture
@@ -300,8 +311,54 @@ def test_rhymes_freq_label_format(mini_index):
     items = wordsuggest.suggest("тревога", "рифмы")
     assert items, "фикстура обязана дать рифмы"
     for it in items:
-        assert set(it) == {"w", "n", "t"}
+        # Раунд 62: к {w,n,t} добавилось «всего» — сколько нашлось до
+        # обрезки. Проверяем НАБОРОМ, а не «⊇»: лишний ключ в ответе это
+        # тихое расширение контракта, и пусть тест ломается, когда он
+        # появляется без спроса.
+        assert set(it) == {"w", "n", "t", "всего"}
         assert it["n"].replace(" ", "").isdigit()
+
+
+def test_rhymes_report_total_found(mini_index5):
+    """«Всего» говорит, сколько рифм нашлось ДО обрезки по квотам (Раунд 62).
+
+    Без этого поля ответ молчал о том, что список урезан: «мороз» с 6447
+    находками выглядел так же, как «жертвы» с тремя. Число одинаково во
+    всех строках — фронту всё равно, из какой его брать."""
+    старый_топ, старая_квота = wordsuggest.TOP_RHYMES, wordsuggest._КВОТА
+    try:
+        # режем точный ярус до одной строки: «всего» обязано не заметить
+        wordsuggest.TOP_RHYMES = 1
+        wordsuggest._КВОТА = dict(старая_квота, богатая=1, точная=1)
+        мало = wordsuggest.suggest("рука", "рифмы")
+    finally:
+        wordsuggest.TOP_RHYMES, wordsuggest._КВОТА = старый_топ, старая_квота
+    много = wordsuggest.suggest("рука", "рифмы")
+    assert len(мало) < len(много), "обрезка должна была сработать"
+    assert len({i["всего"] for i in мало}) == 1        # одно число на весь ответ
+    assert мало[0]["всего"] == много[0]["всего"]       # и от квоты не зависит
+    assert много[0]["всего"] >= len(много)
+
+
+def test_rhymes_total_shows_the_cut_on_real_index():
+    """На живом индексе обрезка обязана быть ВИДНА: у частого слова находок
+    заведомо больше, чем строк в ответе. Мини-фикстура этого не покажет —
+    в ней самих слов меньше, чем квота."""
+    if not REAL_INDEX.exists():
+        pytest.skip("rhyme_index.json не собран")
+    wordsuggest.warm_caches()
+    items = wordsuggest.suggest("мороз", "рифмы")
+    assert items
+    assert items[0]["всего"] > len(items)
+
+
+def test_other_tabs_do_not_fake_a_total(mini_index):
+    """Поле ставит только та вкладка, которая честно знает свой полный
+    размер. У «по звуку» его нет — и это не забывчивость: len(items) там
+    соврал бы, что список целый, а 0 — что не нашлось ничего."""
+    items = wordsuggest.suggest("мороз", "по звуку")
+    assert items, "фикстура обязана дать созвучия"
+    assert all("всего" not in it for it in items)
 
 
 # ---------------------------------------------------------------------------
@@ -497,21 +554,25 @@ def client():
     импорта — роут попапа их не требует, а тестовый прогон не должен
     съедать 5.5GB RSS. wordsuggest.warm_caches остаётся настоящим:
     rhyme_index.json маленький, и роут проверяется на живом индексе."""
+    # `nlbridge.open_store` БОЛЬШЕ НЕ ГЛУШИТСЯ (2026-08-18). Глушилка стояла
+    # против ПЕРВОГО ЭТАПА фонового прогрева, а тот стартовал на уровне модуля.
+    # Прогрев уехал в `main()` (см. `_поднять_прогрев` в api/server.py), и с тех
+    # пор голый импорт корпус не трогает вовсе — глушилка защищала от того,
+    # чего больше не происходит. Оставить её значило бы уверять следующего
+    # читателя, что `open_store` зовётся на импорте; сторож этого обратного
+    # утверждения — `test_boot.py::test_korpus_ne_gruzitsya_na_urovne_modulya`.
     import embeddings
     import generate
-    import nlbridge
-    saved = (filters.warm_caches, generate.warm_caches,
-             embeddings.warm_caches, nlbridge.open_store)
+    saved = (filters.warm_caches, generate.warm_caches, embeddings.warm_caches)
     filters.warm_caches = lambda: None
     generate.warm_caches = lambda: None
     embeddings.warm_caches = lambda: None
-    nlbridge.open_store = lambda: None
     sys.path.insert(0, str(ROOT / "api"))
     try:
         import server
     finally:
         (filters.warm_caches, generate.warm_caches,
-         embeddings.warm_caches, nlbridge.open_store) = saved
+         embeddings.warm_caches) = saved
     return server.app.test_client()
 
 
@@ -520,8 +581,13 @@ def test_route_200_with_items(client):
     r = client.post("/api/word/suggest", json={"word": "вода", "tab": "рифмы", "line": ""})
     assert r.status_code == 200
     items = r.get_json()["items"]
-    assert items and all(set(i) == {"w", "n", "t"} for i in items)
+    # Раунд 62: роут отдаёт строку как есть, включая новое поле «всего» —
+    # число доезжает до фронта без правок в api/server.py
+    assert items and all(set(i) == {"w", "n", "t", "всего"} for i in items)
     assert len(items) <= wordsuggest.TOP_RHYMES
+    # «вода» — мужское открытое окончание: ярус ровно один (точная), поэтому
+    # длина упирается именно в TOP_RHYMES, а находок за обрезкой больше
+    assert items[0]["всего"] > len(items)
 
 
 def test_route_400_without_word(client):
@@ -650,3 +716,191 @@ def test_lines_substring_tier_finds_word_forms(real_index):
         pytest.skip("колоночный индекс не испечён")
     формы = [t for t in idx.tokens if "деньг" in t]
     assert {"деньгами", "деньгах"} <= set(формы)
+
+
+# ---------------------------------------------------------------------------
+# СШИВКА С ЕГО КНИГАМИ (волна С2, 2026-08-18) — core/wordsuggest.py,
+# _частота_в_книгах / _книги_label / порядок ярусов в _rhymes_tab.
+#
+# Тесты сторожат ИСХОД, а не устройство: рифма, живущая в его корпусе,
+# помечена числом строк; не живущая — прочерком; очередь внутри яруса идёт
+# по книгам, а типы, состав и «всего» от этого не меняются.
+# ---------------------------------------------------------------------------
+
+# Мини-корпус к _mini_index(): «дорога» живёт в книгах, «порога» — нет.
+# Числа взяты не с потолка, а так, чтобы проверять ПОРЯДОК: у «порога»
+# частота языка выше (4.2 против 3.0 у «тревогая»), а строк в книгах ноль.
+МИНИ_КОРПУС = {"дорога": 12, "тревогая": 3}
+
+
+@pytest.fixture
+def mini_index_с_книгами():
+    yield from _подмена(_mini_index(), МИНИ_КОРПУС)
+
+
+def test_рифма_из_его_книг_помечена_числом_строк(mini_index_с_книгами):
+    """Главный исход волны С2: подпись справа — сколько строк ЕГО корпуса
+    содержат это слово, а не частота слова в языке.
+
+    Раньше «дорога» и «порога» подписывались одинаково — обе из общего
+    словаря. Теперь список знает то, чего не знает ни один рифмующий сайт."""
+    по_слову = {i["w"]: i["n"] for i in wordsuggest.suggest("тревога", "рифмы")}
+    assert по_слову["дорога"] == "12"        # живёт в книгах → число строк
+    assert по_слову["порога"] == "—"         # в книгах нет → честный прочерк
+    # и это ИМЕННО корпус, а не язык: у «порога» частота языка выше нуля
+    assert wordsuggest._WORDS["порога"][1] > 0
+
+
+def test_очередь_яруса_идёт_по_книгам_а_не_по_языку(mini_index_с_книгами):
+    """«Дорога» (язык 4.71) и «порога» (язык 4.2) обе точные рифмы к
+    «тревога». По языку выше «дорога» — и по книгам тоже, поэтому проверяем
+    на паре, где языковой порядок ПРОТИВОПОЛОЖЕН корпусному."""
+    книги = {"порога": 99}       # в книгах живёт только менее частая в языке
+    for _ in _подмена(_mini_index(), книги):
+        точные = [i["w"] for i in wordsuggest.suggest("тревога", "рифмы")
+                  if i["t"] == "точная"]
+        assert точные[0] == "порога", точные
+        assert точные.index("порога") < точные.index("дорога")
+        break
+
+
+def test_книги_не_трогают_ни_типы_ни_состав_ни_всего(mini_index5):
+    """Сшивка обязана менять ТОЛЬКО очередь и подпись. Если она начнёт
+    менять, какие слова показаны или какого они типа, — это уже другая
+    вкладка, а не та же с новым порядком."""
+    без = wordsuggest.suggest("рука", "рифмы")
+    # числа подобраны ПРОТИВ языкового порядка (река 4.23 > строка 3.90 >
+    # рока 3.80): иначе тест прошёл бы и при выключенной сортировке
+    книги = {"строка": 500, "рока": 20, "река": 1}
+    for _ in _подмена(_mini_index5(), книги):
+        с = wordsuggest.suggest("рука", "рифмы")
+        assert {i["w"] for i in с} == {i["w"] for i in без}
+        assert {i["w"]: i["t"] for i in с} == {i["w"]: i["t"] for i in без}
+        assert с[0]["всего"] == без[0]["всего"]
+        assert [i["w"] for i in с] != [i["w"] for i in без], "порядок обязан измениться"
+        break
+
+
+def test_без_корпуса_подписи_остаются_частотой_языка(mini_index):
+    """Честная деградация: корпус не испечён → вкладка работает как до
+    волны С2. Прочерк на ВСЮ вкладку был бы враньём — «этих слов у тебя
+    нет» не то же самое, что «я не знаю, какие у тебя книги»."""
+    items = wordsuggest.suggest("тревога", "рифмы")
+    assert items
+    for it in items:
+        assert set(it) == {"w", "n", "t", "всего"}
+        assert it["n"].replace(wordsuggest._THIN, "").isdigit(), it
+
+
+def test_ё_сливается_только_когда_это_одно_слово(mini_index):
+    """Корпус пишет ё, словарь рифм пришёл из wordfreq и почти всегда без
+    неё. «Произнёс» обязано досчитаться к «произнес» (один рифмо-ключ), а
+    «всё» к «все» — НЕТ: у них разные ключи, это разные слова.
+
+    Проверяем настоящий путь построения карты, подменяя только источник —
+    nlindex.load(): правило слияния живёт в _частота_в_книгах, и тест,
+    который бы его обошёл, ничего не сторожил бы."""
+    import nlindex
+
+    словарь = {
+        "произнес": ["ос", 4.0, "н", ["произнести"], 0],
+        "произнёс": ["ос", 3.0, "н", ["произнести"], 0],
+        "все":      ["е",  6.0, "с", ["все"], 0],
+        "всё":      ["о",  5.0, "с", ["всё"], 0],
+        "лощеный":  ["оный", 2.0, "щ", ["лощёный"], 0],   # ё-формы в словаре НЕТ
+    }
+    keys: dict = {}
+    for w, e in словарь.items():
+        keys.setdefault(e[0], []).append(w)
+
+    class ФейкИндекс:
+        tokens = ["произнес", "произнёс", "все", "всё", "лощёный"]
+        tokoff = np.array([0, 745, 1153, 62091, 70401, 70453])
+
+    saved = (wordsuggest._WORDS, wordsuggest._KEYS, wordsuggest._SKEL,
+             wordsuggest._SKEL_BUCKET, wordsuggest._YO,
+             wordsuggest._КНИГИ, wordsuggest._книги_пробовали, nlindex.load)
+    try:
+        wordsuggest._activate({"words": словарь, "keys": keys})
+        wordsuggest._КНИГИ, wordsuggest._книги_пробовали = None, False
+        nlindex.load = lambda *a, **k: ФейкИндекс()
+        карта = wordsuggest._частота_в_книгах()
+    finally:
+        (wordsuggest._WORDS, wordsuggest._KEYS, wordsuggest._SKEL,
+         wordsuggest._SKEL_BUCKET, wordsuggest._YO,
+         wordsuggest._КНИГИ, wordsuggest._книги_пробовали, nlindex.load) = saved
+
+    assert карта["произнес"] == 745 + 408      # один ключ «ос» → одно слово
+    assert карта["все"] == 62091 - 1153        # ключи «е»/«о» → сливать нельзя
+    assert карта["всё"] == 70401 - 62091
+    assert карта["лощеный"] == 52              # ё-формы в словаре нет → её строки её
+
+
+@pytest.mark.skipif(not REAL_INDEX.exists(), reason="rhyme_index.json не собран")
+def test_цена_сшивки_на_живых_данных(real_index):
+    """Цена названа владельцем: 100 мс на слово. До волны С2 худший полный
+    проход был 52 мс — сшивка не должна это заметно портить.
+
+    Карта строится ОДИН раз на процесс; в замер каждого слова она поэтому
+    не входит, и это не подгонка, а то, как оно работает в сервере."""
+    import time
+    import nlindex
+    if nlindex.load() is None:
+        pytest.skip("колоночный индекс не испечён")
+
+    # Вёдра по гласному скелету ключа сервер греет в warm_caches (см. там же,
+    # почему). Фикстура real_index активирует словарь заново, и без этой
+    # строки в замер первого слова попала бы разовая постройка вёдер — то,
+    # чего живой пользователь не платит никогда.
+    wordsuggest._keys_by_vowels()
+
+    сохр = (wordsuggest._КНИГИ, wordsuggest._книги_пробовали)
+    try:
+        wordsuggest._КНИГИ, wordsuggest._книги_пробовали = None, False
+        t = time.perf_counter()
+        карта = wordsuggest._частота_в_книгах()
+        постройка = (time.perf_counter() - t) * 1000
+        assert карта, "карта «словоформа → строк в книгах» обязана построиться"
+        assert постройка < 1000, f"постройка карты {постройка:.0f} мс"
+
+        t = time.perf_counter()
+        wordsuggest._частота_в_книгах()
+        повтор = (time.perf_counter() - t) * 1000
+        assert повтор < 1.0, f"карта строится не один раз: повтор {повтор:.2f} мс"
+
+        # Самые дорогие ключи (о них шапка _rhymes_tab: раньше максимум 52 мс)
+        худшее = 0.0
+        for w in ("над", "пор", "он", "дом", "мороз", "свет", "дорога"):
+            t = time.perf_counter()
+            items = wordsuggest.suggest(w, "рифмы")
+            мс = (time.perf_counter() - t) * 1000
+            худшее = max(худшее, мс)
+            assert items, w
+        assert худшее < 100, f"худшее слово {худшее:.0f} мс при потолке 100"
+    finally:
+        wordsuggest._КНИГИ, wordsuggest._книги_пробовали = сохр
+
+
+@pytest.mark.skipif(not REAL_INDEX.exists(), reason="rhyme_index.json не собран")
+def test_на_живых_данных_помечено_и_живое_и_мёртвое(real_index):
+    """Исход на настоящих 40 книгах, а не на фикстуре: у частого слова в
+    выдаче обязаны быть И строки с числом (слово живёт в его книгах), И
+    строки с прочерком (в книгах нет). Всё одно — признак того, что сшивка
+    отвалилась в одну из сторон."""
+    import nlindex
+    if nlindex.load() is None:
+        pytest.skip("колоночный индекс не испечён")
+    сохр = (wordsuggest._КНИГИ, wordsuggest._книги_пробовали)
+    try:
+        wordsuggest._КНИГИ, wordsuggest._книги_пробовали = None, False
+        items = wordsuggest.suggest("мороз", "рифмы")
+        подписи = [i["n"] for i in items]
+        assert any(п != "—" for п in подписи), "ни одна рифма не найдена в книгах"
+        assert any(п == "—" for п in подписи), "все рифмы будто бы есть в книгах"
+        # очередь внутри яруса — по убыванию числа строк
+        for ярус in wordsuggest._ЯРУСЫ:
+            числа = [0 if i["n"] == "—" else int(i["n"].replace(wordsuggest._THIN, ""))
+                     for i in items if i["t"] == ярус]
+            assert числа == sorted(числа, reverse=True), ярус
+    finally:
+        wordsuggest._КНИГИ, wordsuggest._книги_пробовали = сохр

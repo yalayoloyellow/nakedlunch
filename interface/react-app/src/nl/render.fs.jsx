@@ -16,7 +16,7 @@
 //     оболочка гасится через visibility/opacity/pointer-events (fsShellStyle
 //     дизайна). Иначе движок и камера перезапускались бы на каждом переключении
 //     вкладки. То есть в <section> идёт renderFsStage(c) И, отдельно,
-//     {isEditor && renderDoc(c)};
+//     {renderLenta(c)};
 //   - строчные слои [data-fsline] React рендерит ПУСТЫМИ: текст в них пишет
 //     c.paintLine() императивно (тот же приём, что у контейнера строк
 //     документа), а плашку [data-fsband] рисует c.paintBand() по фактическим

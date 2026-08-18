@@ -99,7 +99,8 @@ def delete(name: str) -> list[dict]:
 def by_name(name: str) -> dict | None:
     """Профиль по имени: свои ПОВЕРХ встроенных — своя запись с тем же именем
     это сознательный оверрайд пользователя (то же правило, что у форм строф в
-    pipeline.resolve_chain)."""
+    core/stanza_profiles.py; раньше здесь стояла ссылка на
+    `pipeline.resolve_chain` — цепь вырезана 2026-08-18)."""
     if not name:
         return None
     for p in custom() + builtin():

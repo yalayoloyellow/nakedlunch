@@ -4,9 +4,9 @@
 // renderHeader(this) / renderLegend(this) / renderFlash(this); vals считаются
 // здесь же, локально — renderVals целиком не переносится.
 // Отличия от дизайна — решения прожарки (PLAN.md) и граница с бэкендом:
-//   - фристайл-хром шапки (микрофон/трек/строка/сцена/профили/кадр/запись) и
-//     пилюля листов (лист/переименование/папки) приходят слотом
-//     c.renderSheetPill(): его заполняет интегратор (Nakedlunch.jsx);
+//   - фристайл-хром шапки (микрофон/трек/строка/сцена/профили/кадр/запись)
+//     приходит слотом c.renderSheetPill(): его заполняет интегратор
+//     (Nakedlunch.jsx). Пилюля листов оттуда вырезана 2026-08-18;
 //   - пилюли избранного и истории перенесены из подвала в правый блок шапки
 //     (план порта), попапы открываются вниз;
 //   - воронка — РЕАЛЬНЫЕ числа бэка (/api/nl/state + funnel из /api/generate),
@@ -21,7 +21,7 @@
 import { Fragment } from 'react';
 import { s, hov } from './style.js';
 import { icoBtn } from './icons.js';
-import { renderStanzaMenu, renderPipeMenu, renderSeriesMenu } from './render.gen.jsx';
+import { renderStanzaMenu } from './render.gen.jsx';
 import { renderSettings } from './render.settings.jsx';
 import { renderFavPanel, renderHistPanel, renderStatsPanel, renderBlackPanel } from './render.data.jsx';
 
@@ -36,32 +36,41 @@ const ICO_HIST = (<svg viewBox="0 0 24 24" width="12" height="12" fill="none" st
 // клик выбирает, повторный клик открывает нативный спектр
 const UI_TINT_PAL = ['#2436e0', '#d81b74', '#e6620a', '#5b1fd6', '#0a8f82', '#c81f3f'];
 
-// легенда гутера и разметки — renderVals 4022..4029 + решение прожарки 2 (⌥↵).
-// Везде, где ⌘, работает и Ctrl (2026-08-02, просьба пользователя): обработчик
-// всегда считал их равными (onGlobalKey: metaKey || ctrlKey), но легенда об
-// этом молчала. Практическая польза не только в привычке: меню Cocoa у
-// pywebview забирает ⌘A и ⌘C ДО веб-содержимого, поэтому «выделить весь
-// документ» в окне приложения работает именно через Ctrl+A.
+// ЛЕГЕНДА ПЕРЕПИСАНА ПОД НОВЫЙ ЭКРАН (2026-08-18, волна «экран»).
+//
+// В ЭТОЙ ПРОГРАММЕ ИНТЕРФЕЙС ВРАЛ ТРИЖДЫ: легенда обещала «перекатить строку»
+// и «закрепить строку», которых в коде не было НИКОГДА, а подсказка внизу
+// обещала «⌘⌥↵ — серия» уже после того, как серию вырезали. Каждый раз это
+// ловилось только чтением кода — потому что не работающая клавиша молчит.
+//
+// Отсюда порядок, а не пожелание: сперва выписать, что РЕАЛЬНО обрабатывается,
+// потом писать строки. Сегодня обрабатывается ровно это:
+//   ↵ / ⌘↵ / Ctrl+↵ — следующая строфа (methods.lenta.js: lentaКлавиша);
+//   ⌥ к любому из них — обязательное слово темы (lentaСтрофа(жёстко));
+//   Esc — закрыть панель (Nakedlunch.jsx: onGlobalKey);
+//   клик по звезде — строка в избранное (render.lenta.jsx → сохранитьСтроку);
+//   выделение мышью и ⌘C — обычное браузерное, своего кода под ним нет.
+// И больше НИЧЕГО: стрелки, Shift, пробел, R и свой ⌘C вырезаны вместе с
+// выделением строк, клик по слову — вместе с попапом.
 export function legendRowsCalc() {
   return [
-    { k: '01', v: 'номер строки' }, { k: 'а', v: 'буква рифмовки' }, { k: 'nl', v: 'корпус nakedlunch' }, { k: 'я', v: 'написано мной' },
-    { k: 'звезда', v: 'в избранное' }, { k: 'стрелка', v: 'перекатить строку заново' },
-    { k: 'кнопка', v: 'закрепить — строка не меняется генерацией' }, { k: '##', v: 'заголовок секции · ⌘1' },
-    { k: '**', v: 'жирный · ⌘B' }, { k: '*', v: 'курсив · ⌘I' },
-    { k: '· ∘ ≀', v: 'стык: рифмовать / свободно / слом' },
-    { k: '⌘↵', v: 'сгенерировать' }, { k: '⌥↵', v: 'строфа с обязательным ключом' },
-    { k: '⌘Z', v: 'отменить · ⌘⇧Z вернуть' },
-    { k: 'Ctrl', v: 'заменяет ⌘ в любом сочетании' }
+    { k: '↵', v: 'следующая строфа' },
+    { k: '⌘↵', v: 'то же самое — для привычки' },
+    { k: '⌥↵', v: 'строфа с обязательным словом темы' },
+    { k: '★', v: 'в избранное; залитая — уже там, и в выдачу такая строка не вернётся' },
+    { k: 'мышь', v: 'выделить и скопировать текст как обычно' },
+    { k: 'Esc', v: 'закрыть панель' }
   ];
 }
 
-// хоткеи подвала — renderVals 4061..4064 + решение прожарки 2 (⌥↵)
+// ПОДСКАЗКА ВНИЗУ — ТРИ СТРОКИ, И ЭТО ПОТОЛОК. Владелец про прежнюю: «дохуя
+// много лишней информации». Список короче легенды, но не «правдивее наполовину»:
+// каждая строка обязана существовать в обработчиках.
 export function hotRowsCalc() {
   return [
-    { k: '⌘↵', v: 'строфа' }, { k: '⌥↵', v: 'строфа с обязательным ключом' }, { k: '⌘⇧↵', v: 'прогон пайплайна' },
-    { k: '⌘B', v: 'жирный' }, { k: '⌘I', v: 'курсив' },
-    { k: '⌘1–3', v: 'заголовок' }, { k: '⌥↑↓', v: 'двигать строку' }, { k: '⌘Z', v: 'отменить' },
-    { k: 'Ctrl', v: 'вместо ⌘ везде' }
+    { k: '↵', v: 'дальше' },
+    { k: '⌥↵', v: 'с обязательным словом темы' },
+    { k: '★', v: 'в избранное' }
   ];
 }
 
@@ -114,12 +123,7 @@ export function renderHeader(c) {
       : (jobs.state === 'готово' ? 'Фоновая работа закончена'
         : 'Идёт обработка: ' + jobs.pct + '%'));
 
-  var doc = c.cur();
-  var lines = doc.filter(function (r) { return r.type === 'line' && r.text; });
-  var mineN = lines.filter(function (r) { return r.src === 'я'; }).length;
-  var sheets = st.sheets || [];
-  var liveSheets = sheets.filter(function (x) { return !x.trashed; });
-  var trashN = sheets.filter(function (x) { return x.trashed; }).length;
+  var лента = st.lenta || [];
 
   // ---- избранное и история (renderVals 4030..4034) ----
 
@@ -127,21 +131,29 @@ export function renderHeader(c) {
 
   // ---- подпись кнопки генерации (Раунд 50) ----------------------------
   // Раньше здесь считалась «доля сырья» и подпись «алгоритм · 30%»: «Отбор»
-  // был ползунком. Теперь режим бинарный и живёт в профиле настроек звена —
-  // кнопке достаточно знать, что стоит сейчас.
+  // был ползунком. Теперь режим бинарный — кнопке достаточно знать, что стоит
+  // сейчас.
+  // 2026-08-18: хвост «N звеньев» убран вместе с цепочкой. Считать длину
+  // мёртвого `st.chain` значило бы вечно писать «0 звеньев» — подпись, которая
+  // врёт тем убедительнее, чем меньше на неё смотрят. Вместо звеньев — длина
+  // самой строфы, единственное, что тут теперь есть.
+  // 2026-08-18: подпись называет ПРЕСЕТ, а не режим отбора. Режимов было два
+  // на девять ползунков, и «алгоритм» не сообщал ничего — он стоял в 96.4%
+  // прогонов. Пресет называет решение целиком; не совпал ни с одним (старые
+  // положения из settings.json) — так и говорим, а не выдаём ближайший за свой.
   var классика = (st.knobMode || 'алгоритм') === 'классика';
-  var звеньевВсего = (st.chain || []).length;
-  var генTitle = 'Генерация · ' + (классика ? 'классика' : 'алгоритм')
-    + ' · ' + (звеньевВсего === 1 ? 'одна строфа' : звеньевВсего + ' звеньев');
+  var строкВСтрофе = (c.curSpec() || []).length;
+  var генTitle = 'Строфа · ↵ · ' + (c.текущийПресет() || 'свои настройки')
+    + ' · ' + строкВСтрофе + ' стр.';
 
   // ---- статистика (renderVals 4013..4021; источники — реальный /api/nl/state) ----
   var nl = st.nl || {};
   var nlSources = (nl.sources || []).filter(function (x) { return x.active; });
+  // Счётчики листа, папок, корзины и секций вырезаны 2026-08-18 вместе с
+  // документом — считать стало нечего. Осталось то, что есть на экране.
   var statRows = [
-    { k: 'строк в листе', v: String(lines.length) }, { k: 'моих строк', v: String(mineN) },
-    { k: 'листов', v: String(liveSheets.length) }, { k: 'в корзине', v: String(trashN) },
+    { k: 'строк в ленте', v: String(лента.length) },
     { k: 'избранное', v: String((st.favs || []).length) }, { k: 'история', v: String((st.hist || []).length) },
-    { k: 'папок', v: String((st.folders || []).length) }, { k: 'секций', v: String(doc.filter(function (r) { return r.type === 'role'; }).length) },
   ].concat(nlSources.map(function (x) { return { k: x.name, v: fmt(x.fragment_count || 0) }; }))
     .concat([{ k: 'корпус', v: fmt(nl.pool_total || 0) }]);
 
@@ -162,7 +174,12 @@ export function renderHeader(c) {
   var uiTintPickerStyle = 'position: absolute; left: ' + (Math.max(0, UI_TINT_PAL.indexOf(C.uiTint)) * 27 + 44) + 'px; top: 0; width: 20px; height: 20px; padding: 0; border: none; opacity: 0; pointer-events: none; background: none;';
   var uiTintOffStyle = 'appearance: none; border: none; border-radius: 3px; padding: 4px 7px; font-family: inherit; font-size: 8.5px; cursor: pointer; ' + (!C.uiTint || C.uiTint === 'нет' ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--muted);');
 
-  // ---- настройки документа + легенда ----
+  // ---- настройки ленты + легенда ----
+  // Те же три ручки, что управляли строками документа: размер, интерлиньяж и
+  // ширина колонки. Документа нет, а строки остались — в ленте, и ручки
+  // переподключены к ней (render.lenta.jsx читает textSize/lineGap/docFont,
+  // colWidth приходит через --content-max-width из applyTheme). Выбросить их
+  // значило бы отнять единственную ручку размера текста во всём приложении.
   var docCfgItems = c.cfgRowsCalc([
     c.cfgNumItem('textSize', 'размер строки', 11, 40, 1, 15, 'px'),
     c.cfgNumItem('lineGap', 'интерлиньяж', 1.2, 2.4, 0.05, 1.5),
@@ -176,13 +193,19 @@ export function renderHeader(c) {
   return (
     <header ref={c.hdrRef} data-chrome="1" data-float={isFs ? '1' : null} style={s('display: flex; align-items: center; padding: ' + hdrPad + '; gap: ' + hdrGap + 'px; position: relative; z-index: 45; flex-shrink: 0; min-width: 0;')}>
       <div style={s('flex: 1 1 0; min-width: ' + hdrMin + '; display: flex; align-items: center; gap: ' + hdrGap2 + 'px;')}>
-        {/* фристайл-хром (микрофон/трек/строка/сцена/профили/кадр/запись) и
-            пилюля листов + savedLabel + undo/redo — слот интегратора */}
+        {/* фристайл-хром (микрофон/трек/строка/сцена/профили/кадр/запись) —
+            слот интегратора. Пилюля листов, «сохранено 12:44» и отмена-возврат
+            стояли здесь же и вырезаны 2026-08-18 вместе с документом. */}
         {typeof c.renderSheetPill === 'function' ? c.renderSheetPill() : null}
       </div>
       <nav ref={c.tabsRef} style={s('flex: 0 0 auto; display: flex; gap: 4px; padding: 3px; position: relative;')}>
         <div data-tab-ind="1" aria-hidden="true" style={s('position: absolute; top: 3px; bottom: 3px; left: 0; width: 0; border-radius: var(--radius); background: var(--ink); z-index: 0; pointer-events: none;')}></div>
-        <button data-tab="editor" onMouseDown={noFocus} onClick={() => c.setTab('editor')} style={s(tabPill(!isFs))}>nakedlunch</button>
+        {/* ВКЛАДОК ДВЕ (2026-08-18). Третьей была «nakedlunch» — редактор
+            документа; он вырезан целиком, а лента из «отдельной вкладки сбоку»
+            стала единственной поверхностью. Требование владельца дословно:
+            «лента — отдельная вкладка, которая уже не нужна в таком виде. По
+            сути ты наплодил говна, не почистил старое, фактически не убрал». */}
+        <button data-tab="lenta" onMouseDown={noFocus} onClick={() => c.setTab('lenta')} style={s(tabPill(c.state.tab === 'lenta'))}>лента</button>
         <button data-tab="fs" onMouseDown={noFocus} onClick={() => c.setTab('fs')} style={s(tabPill(isFs))}>freestyle</button>
       </nav>
       <div style={s('flex: 1 1 0; min-width: ' + hdrMin + '; display: flex; align-items: center; justify-content: flex-end; gap: ' + hdrGap2 + 'px;')}>
@@ -208,17 +231,13 @@ export function renderHeader(c) {
         <div aria-hidden="true" style={s(edOnly + 'width: 1px; height: 11px; background: var(--border-subtle); flex-shrink: 0;')}></div>
 
         <div style={s(edOnlyFlex + 'align-items: center; gap: ' + hdrGap3 + 'px;')}>
-          {/* ---- генерация: строфа и пайплайн одним попапом (Раунд 39) ----
-              Было три контрола подряд — значок пайплайна, надпись отбора и
-              значок профиля, — и все три вели в одну тему. Требование: кнопки расположены удобно., «чтоб кнопки не плодить». Теперь одна:
-              подпись показывает режим отбора не открывая, внутри две вкладки.
-              Заодно чинится мёртвый клик — надпись отбора звала попап 'gen',
-              которого не рисует никто (Раунд 35, мой недосмотр). */}
-          {/* РАУНД 55: три кнопки, три меню. Раунд 39 свёл три контрола в один
-              («чтоб кнопки не плодить»), и это было верно: тогда все три вели в
-              ОДНУ тему. Теперь они ведут в три разных занятия — мастерская,
-              сборка, конвейер, — и общий попап делал их громоздкими. Требование: серия и пайплайн — отдельными кнопками и меню, во избежание
-              громоздкости..
+          {/* ---- генерация: одна кнопка, одно меню ---- */}
+          {/* ОДНА КНОПКА (2026-08-18). Раунд 55 развёл их на три — мастерская,
+              сборка, конвейер, — и это было верно, пока занятий было три.
+              Значки цепи и серии вырезаны вместе со своими режимами: «pipeline и
+              серия это бесполезные режимы на самом деле… их можно вырезать.
+              Строфа единственным режимом и всё». Замер за десять живых дней:
+              29 прогонов цепи против 587 одиночных строф.
               Режим отбора по-прежнему читается точкой на значке строфы. */}
           <div data-pop="1" style={s('position: relative; z-index: 60;')}>
             <button onClick={() => c.togProfile()} title={генTitle} aria-label="Строфа"
@@ -234,31 +253,8 @@ export function renderHeader(c) {
             </button>
             {st.openPill === 'stanza' && renderStanzaMenu(c)}
           </div>
-
-          {/* пайплайн — звенья, соединённые стыками */}
-          <div data-pop="1" style={s('position: relative; z-index: 60;')}>
-            <button onClick={() => c.tog('pipe')} title="Пайплайн · ⌘⇧↵" aria-label="Пайплайн"
-              style={s(hudBtn(st.openPill === 'pipe'))} className={hov('color: var(--ink)')}>
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-                <rect x="3" y="4.5" width="8.5" height="5" rx="1.4"></rect>
-                <rect x="12.5" y="14.5" width="8.5" height="5" rx="1.4"></rect>
-                <path d="M7.2 9.5v3a2 2 0 0 0 2 2h3.3"></path>
-              </svg>
-            </button>
-            {st.openPill === 'pipe' && renderPipeMenu(c)}
-          </div>
-
-          {/* серия — стопка листов */}
-          <div data-pop="1" style={s('position: relative; z-index: 60;')}>
-            <button onClick={() => c.tog('series')} title="Серия · много прогонов по плану" aria-label="Серия"
-              style={s(hudBtn(st.openPill === 'series'))} className={hov('color: var(--ink)')}>
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="7" y="3.5" width="13" height="13" rx="1.6"></rect>
-                <path d="M16.5 19.5H5.6A1.6 1.6 0 0 1 4 17.9V7.2"></path>
-              </svg>
-            </button>
-            {st.openPill === 'series' && renderSeriesMenu(c)}
-          </div>
+          {/* Здесь стояли ещё два значка — цепь (два прямоугольника со скобой)
+              и серия (стопка листов). Убраны 2026-08-18 вместе с режимами. */}
         </div>
         <div aria-hidden="true" style={s(edOnly + 'width: 1px; height: 11px; background: var(--border-subtle); flex-shrink: 0;')}></div>
 
@@ -325,14 +321,15 @@ export function renderHeader(c) {
 }
 
 // ================================================================
-// Легенда-подвал: хоткеи слева, счётчик документа справа (дизайн 1249..1280;
-// пилюли избранного и истории уехали в шапку — см. renderHeader)
+// Подсказка-подвал: только клавиши (дизайн 1249..1280). Пилюли избранного и
+// истории уехали в шапку (см. renderHeader), счётчик справа вырезан 2026-08-18.
 // ================================================================
 export function renderLegend(c) {
-  var st = c.state;
-  var doc = c.cur();
-  var lines = doc.filter(function (r) { return r.type === 'line' && r.text; });
-  var mineN = lines.filter(function (r) { return r.src === 'я'; }).length;
+  // СЧЁТЧИК СПРАВА УБРАН (2026-08-18). Он считал сперва документ («N строк ·
+  // M моих»), потом накопленную ленту («N строк · M в избранном»). На экране
+  // теперь всегда одна строфа — счётчик писал бы вечное «4 строки», то есть
+  // длину строфы, которую и так видно целиком. Сколько всего в избранном,
+  // говорит пилюля в шапке.
   var hotRows = hotRowsCalc();
   return (
     <div data-chrome="1" style={s('padding: 18px 32px; display: flex; flex-shrink: 0; position: relative; z-index: 45;')}>
@@ -341,9 +338,6 @@ export function renderLegend(c) {
           {hotRows.map((h, i) => (
             <span key={i} style={s('white-space: nowrap;')}><span style={s('color: var(--muted-hard); font-variant-numeric: tabular-nums;')}>{h.k}</span> {h.v}</span>
           ))}
-        </div>
-        <div style={s('display: flex; align-items: center; gap: 16px; flex-shrink: 0;')}>
-          <span style={s('font-size: 10.5px; color: var(--muted-soft); font-variant-numeric: tabular-nums; white-space: nowrap;')}>{lines.length + ' строк · ' + mineN + ' моих'}</span>
         </div>
       </div>
     </div>

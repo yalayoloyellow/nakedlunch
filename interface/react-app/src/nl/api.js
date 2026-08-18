@@ -7,10 +7,8 @@
 
 const TIMEOUT_MS = 30000;
 const GEN_TIMEOUT_MS = 180000;
-// прогон пайплайна — пулы на каждый профиль звена (6–8 внутренних вызовов
-// генерации, каждый может быть «холодным») плюс перебор до 200000 сочетаний:
-// потолок генерации ему мал, поэтому свой
-const PIPE_TIMEOUT_MS = 300000;
+// PIPE_TIMEOUT_MS вырезан 2026-08-18 вместе с прогоном цепи: свой потолок в
+// 300 секунд нужен был только ему.
 
 async function req(url, opts, timeoutMs) {
   const ms = timeoutMs || TIMEOUT_MS;
@@ -57,6 +55,10 @@ export const stats = () => get('/api/stats');
 export const history = (q) => get('/api/history' + (q ? '?q=' + encodeURIComponent(q) : ''));
 // {items:[{text,template}], theme?} — вызывается в момент реального показа
 export const markShown = (payload) => post('/api/history/mark_shown', payload);
+// Форма пула — из чего сейчас будет выбираться (Раунд 62). Дёшево по замеру:
+// 2.3–9.7 мс на полном индексе, то есть укладывается в движение ползунка,
+// в отличие от самого прогона (185 мс без темы, 878 с темой).
+export const poolShape = (payload) => post('/api/pool/shape', payload);
 // {text, lemmas?, rhyme?, template?} — леммы эхом из выдачи /api/generate
 export const favAdd = (payload) => post('/api/favorite', payload);
 export const favRemove = (text) => post('/api/favorite/remove', { text });
@@ -67,47 +69,48 @@ export const settingsSet = (patch) => post('/api/settings', patch);
 export const stanzaProfiles = () => get('/api/stanza/profiles');
 // params — положения крутилок в координатах интерфейса, сохраняются вместе
 // со схемой (профиль = рифмовка + чем она набиралась)
-// Раунд 50: только каркас. Крутилки — своя полка (knobProfileSave ниже).
+// Раунд 50: только каркас. Крутилки жили на своей полке — см. надгробие ниже.
 export const stanzaProfileSave = (name, lines) => post('/api/stanza/profiles', { name, lines });
 export const stanzaProfileDelete = (name) => post('/api/stanza/profiles/delete', { name });
 
-// ---- полка профилей настроек (Раунд 50) -----------------------------------
-// Вторая полка: положения крутилок отдельно от каркаса строфы. Форма ответа
-// та же, что у строф — {builtin, custom}: две полки не должны требовать двух
-// разных привычек.
-export const knobProfiles = () => get('/api/knobs/profiles');
-export const knobProfileSave = (name, mode, params) => post('/api/knobs/profiles', { name, mode, params });
-export const knobProfileDelete = (name) => post('/api/knobs/profiles/delete', { name });
+// ПОЛКА ПРОФИЛЕЙ НАСТРОЕК ВЫРЕЗАНА С ФРОНТА 2026-08-18. Здесь стояли три
+// обёртки: knobProfiles (GET /api/knobs/profiles), knobProfileSave,
+// knobProfileDelete. Полку заменили четыре пресета, зашитые в
+// methods.shelves.js: ПРЕСЕТЫ — своих профилей у пользователя не было ни
+// одного (`data/knob_profiles.json` = `[]`, не менялся с 2026-08-03), а
+// встроенных было два, и оба стали пресетами.
+//
+// РОУТЫ НА БЭКЕ ЖИВЫ и не тронуты (api/server.py, core/knob_profiles.py): их
+// просто больше никто не спрашивает. Это осознанный долг — снести их должен
+// тот, кто работает в бэке, а не эта правка.
 
-// ---- полка цепочек: СЛЕПКИ (Раунд 50) -------------------------------------
-// Цепочка хранит копии каркасов и крутилок, а не имена: правка полки не
-// меняет уже сохранённое решение. Референс — часть слепка, включая пустой.
-export const chains = () => get('/api/chains');
-export const chainSave = (payload) => post('/api/chains', payload);
-export const chainDelete = (name) => post('/api/chains/delete', { name });
-// Полка СЕРИЙ — четвёртый уровень (Раунд 53): серия = список звеньев
-// {альбом, тема, цепочка с полки, сколько}. `run` только ЗАПУСКАЕТ: прогон
-// идёт фоновым потоком сервера, ход виден в /api/status, как у сборки рифм.
-export const series = () => get('/api/series');
-export const seriesSave = (payload) => post('/api/series', payload);
-export const seriesDelete = (name) => post('/api/series/delete', { name });
-export const seriesRun = (name) => post('/api/series/run', { name });
-export const seriesStop = () => post('/api/series/stop', {});
-// прогон пайплайна (фаза 1): {theme, chain, junctions, knobs, runs, best,
-// threshold} → {variants, funnel}; 409 = прогон уже идёт (замок на бэке)
-export const pipelineRun = (payload) => post('/api/pipeline/run', payload, PIPE_TIMEOUT_MS);
-// референс → профиль и готовая цепочка (Раунд 45): ничего не генерирует,
-// только меряет текст и отдаёт то, чем его можно повторить
-export const pipelineProfile = (text, ref) => post('/api/pipeline/profile', { text: text, ref: ref });
-// Настоящее положение дел по серии (Раунд 55): сколько СДЕЛАНО на каждом
-// треке, какой идёт сейчас и где что встало. Читается из файлов, поэтому не
-// требует помнить ни одного прогона.
-export const seriesState = (name) => get('/api/series/state?name=' + encodeURIComponent(name));
-// попап по слову (фаза 2): {word, tab, line} → {items: [{w, n, t}]}; t — тип
-// рифмы (богатая/точная/усечённая/неточная) или пусто; n — готовая
-// подпись справа (частота/«рифма»/«словарь»/«близкое» — решает бэк, фронт не
-// гадает); line — текст текущей строки ('' допустимо): контекст вкладки
-// «строкой» и рифмо-контекст остальных
+// ЦЕПЬ И СЕРИЯ ВЫРЕЗАНЫ 2026-08-18. Здесь стояли двенадцать обёрток:
+// chains/chainSave/chainDelete (полка цепочек), series/seriesSave/seriesDelete/
+// seriesRun/seriesStop/seriesState (полка серий и её прогон),
+// pipelineRun/pipelineStop/pipelineProfile (прогон цепи и замер референса).
+//
+// ПОЧЕМУ. Замер журнала за десять живых дней: 29 прогонов цепи против 587
+// одиночных строф, медиана цепи 24.2 с. Решение владельца дословно: «pipeline и
+// серия это бесполезные режимы на самом деле… их можно вырезать. Строфа
+// единственным режимом и всё».
+// ПОПАП СЛОВА ВЫРЕЗАН, ОБЁРТКА ОСТАВЛЕНА НАРОЧНО (2026-08-18).
+//
+// Единственным вызывающим был methods.слово.js — клик по слову в ленте
+// открывал рифмы, синонимы и антонимы и ничего ими не делал (строки ленты не
+// редактируются, заменять нечего). Владелец: «попап с кликом по тексту не
+// нужен». Файл удалён целиком; фристайл этот роут не звал никогда — проверено
+// grep'ом по всему src.
+//
+// Почему обёртка жива, хотя её никто не зовёт: сам роут /api/word/suggest и
+// core/wordsuggest.py на бэке НЕ ТРОНУТЫ (у них свой сторож —
+// tests/test_wordsuggest.py), и это единственная вещь во фронте, которая
+// помнит форму их контракта. Удалить её значило бы оставить работающий роут
+// без единого следа на стороне окна.
+//
+// {word, tab, line} → {items: [{w, n, t}]}; t — тип рифмы (богатая/точная/
+// усечённая/неточная) или пусто; n — готовая подпись справа (частота/«рифма»/
+// «словарь»/«близкое» — решает бэк, фронт не гадает); line — текст текущей
+// строки ('' допустимо).
 export const wordSuggest = (word, tab, line) => post('/api/word/suggest', { word, tab, line });
 // {items} — фоновые задачи для индикатора в шапке
 export const status = () => get('/api/status');
@@ -156,10 +159,10 @@ export const historyRetentionSet = (days) => post('/api/history/retention', { da
 export const historyClear = () => post('/api/history/clear', {});
 export const historyRestore = (texts) => post('/api/history/restore', { texts });
 export const historyRestoreTheme = (theme) => post('/api/history/restore_theme', { theme });
-// «показанное» самого nakedlunch (его собственный учёт, не наша история)
-export const nlRetentionGet = () => get('/api/nl/retention');
-export const nlRetentionSet = (value) => post('/api/nl/retention', { value });
-export const nlClearUsed = (mode) => post('/api/nl/clear-used', { mode });
+// «показанное» самого nakedlunch (его собственный учёт, не наша история):
+// обёртки nlRetentionGet/nlRetentionSet/nlClearUsed убраны в Раунде 63 вместе с
+// их единственными вызывающими — экрана у этих ручек не было никогда. Сами
+// ручки на бэке (/api/nl/retention, /api/nl/clear-used) остались нетронутыми.
 
 // ---- выгрузка данных -------------------------------------------------------
 // Сырой текст, не JSON: это файлы на диск, а не ответы для разбора.
@@ -192,23 +195,14 @@ export async function saveFile(filename, content, mime) {
   return filename;
 }
 
-// ---- листы: контракт /api/sheets (фаза 0) ---------------------------------
-// id листа = путь относительно vault ('Папка/Название.md'); id папки = имя каталога
-
-export const sheetsList = () => get('/api/sheets');                              // {sheets, folders}
-export const sheetsRead = (id) => post('/api/sheets/read', { id });              // {id,title,rows}
-export const sheetsWrite = (id, rows) => post('/api/sheets/write', { id, rows }); // {ok,at}
-export const sheetsCreate = (opts) => post('/api/sheets/create', opts || {});    // {title?,folder?} → {id,title}
-export const sheetsRename = (id, title) => post('/api/sheets/rename', { id, title }); // id может смениться
-export const sheetsDuplicate = (id) => post('/api/sheets/duplicate', { id });
-export const sheetsTrash = (id) => post('/api/sheets/trash', { id });
-export const sheetsRestore = (id) => post('/api/sheets/restore', { id });
-export const sheetsPurge = (id) => post('/api/sheets/purge', { id });
-export const sheetsPurgeAll = () => post('/api/sheets/purge-all', {});
-export const sheetsMove = (id, folder) => post('/api/sheets/move', { id, folder }); // folder=''=корень
-export const sheetsFolderCreate = (name) => post('/api/sheets/folder/create', { name });
-export const sheetsFolderDelete = (id) => post('/api/sheets/folder/delete', { id });
-export const sheetsOpenDir = () => post('/api/sheets/open-dir', {});
+// ---------------------------------------------------------------------------
+// ЗДЕСЬ БЫЛ КЛИЕНТ ЛИСТОВ — /api/sheets (вырезано 2026-08-18, 16 функций):
+// sheetsList / Read / Write / Create / Rename / Duplicate / Trash / Restore /
+// Purge / PurgeAll / Move / FolderCreate / FolderDelete / OpenDir.
+// Листы и папки жили под редактором документа; редактор вырезан целиком, и
+// звать эти роуты стало некому. Держать обёртки без вызывающих значило бы
+// оставить второй, немой контракт с бэком.
+// ---------------------------------------------------------------------------
 
 // ОТЧЁТ О СЕССИИ (Раунд 59) — один текст со средой, состоянием артефактов и
 // журналом. Собирается сервером: считать состояние на фронте значило бы завести

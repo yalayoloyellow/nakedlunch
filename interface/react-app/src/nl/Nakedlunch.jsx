@@ -9,22 +9,24 @@
 import { Component, Fragment } from 'react';
 import { s, hov, injectBase } from './style.js';
 import * as api from './api.js';
-import { docMethods } from './methods.doc.js';
-import { sheetsMethods } from './methods.sheets.js';
+// ЗДЕСЬ ИМПОРТИРОВАЛСЯ ПОПАП СЛОВА — methods.слово.js (файл удалён
+// 2026-08-18). Клик по слову открывал рифмы, синонимы и антонимы и ничего
+// ими не делал: строки ленты не редактируются, заменять нечего. Владелец:
+// «попап с кликом по тексту не нужен». Бэк не тронут — /api/word/suggest на
+// месте, см. надгробие в api.js.
 import { panelMethods, genProfileMethods, PARAM_DEFAULTS, DEFAULT_SPEC } from './methods.panels.js';
 import { genMethods } from './methods.gen.js';
-import { shelfMethods } from './methods.shelves.js';
-import { seriesMethods } from './methods.series.js';
+import { shelfMethods, ПРЕСЕТЫ } from './methods.shelves.js';
 import { corpusMethods } from './methods.corpus.js';
 import { fsMethods } from './methods.fs.js';
 import { fsProfileMethods } from './methods.fsprofiles.js';
 import { fsGlueMethods, журнал } from './methods.fsglue.js';
 import { fsRecMethods } from './methods.fsrec.js';
-import { renderDoc, renderDocStatus } from './render.doc.jsx';
-import { renderSheets } from './render.sheets.jsx';
+import { lentaMethods } from './methods.lenta.js';
 import { renderHeader, renderLegend, renderFlash } from './render.panels.jsx';
 import { renderFsStage } from './render.fs.jsx';
 import { renderFsBar } from './render.fspanels.jsx';
+import { renderLenta } from './render.lenta.jsx';
 
 // корневой div — стили дословно из дизайна (строка 156 шаблона)
 const ROOT_STYLE = "height: 100vh; position: relative; --canvas:#131313; --ink:#ededed; --muted-hard:#cfcfcf; --muted:#949494; --muted-soft:#5c5c5c; --border-soft:#3d3d3d; --border-subtle:#242424; --menu-bg:color-mix(in srgb, var(--canvas) 82%, transparent); --content-max-width: min(clamp(620px, 34vw, 780px), calc(100% - 120px)); --radius:6px; --ease:cubic-bezier(0.4,0,0.2,1); --ease-spring:cubic-bezier(0.32,0.72,0,1); font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; background: var(--canvas); color: var(--ink); font-size: 13px; line-height: 1.5; display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased;";
@@ -120,33 +122,25 @@ const SVG_FILTERS = (
 );
 
 // ---------------------------------------------------------------------------
-// ПОСЛЕ ПАДЕНИЯ — ОДИН ВОПРОС, ОДНА КНОПКА (Раунд 59).
+// ЗДЕСЬ БЫЛА КРАСНАЯ ПЛАШКА «ПРОШЛЫЙ ЗАПУСК ЗАКРЫЛСЯ САМ» — renderАвария
+// (вырезана 2026-08-18). Полоса поверх шапки с кнопками «сохранить отчёт» и
+// «позже» вылезала на каждый запуск после падения.
 //
-// Прошлый запуск закончился аварийно: об этом знает журнал, и это единственный
-// момент, когда человека уместно потревожить — он всё равно уже столкнулся с
-// тем, что программа закрылась сама.
+// ПОЧЕМУ УШЛА. Владелец дословно: «навязчивая вот эта плашка о том, что
+// что-то не так, отправить отчёт — пусть будет без неё, пусть просто фоново
+// ведётся лог». Она требовала решения там, где решать нечего: падение уже
+// случилось, и человек в этот момент занят строкой, а не отчётом.
 //
-// Полоса, а не окно: работать она не мешает и закрывается одним нажатием. И
-// закрывается НАСОВСЕМ для этого случая: спрашивать дважды об одном падении
-// значит превратить заботу в назойливость.
-function renderАвария(c) {
-  return (
-    <div style={s('position: fixed; left: 0; right: 0; top: 0; z-index: 998; display: flex; '
-      + 'align-items: center; justify-content: center; gap: 10px; padding: 8px 14px; '
-      + 'background: #e05252; color: #fff; font-size: 11px;')}>
-      <span>Прошлый запуск закрылся сам. Причина записана — отправь отчёт, и это починят.</span>
-      <button onClick={function () { c.сохранитьЛог(); c.setState({ логАвария: false }); }}
-        style={s('appearance: none; border: 1px solid rgba(255,255,255,.6); border-radius: 999px; '
-          + 'padding: 4px 12px; font-family: inherit; font-size: 11px; cursor: pointer; '
-          + 'background: none; color: #fff;')}>сохранить отчёт</button>
-      <button onClick={function () { c.setState({ логАвария: false }); }}
-        style={s('appearance: none; border: none; background: none; color: rgba(255,255,255,.75); '
-          + 'font-family: inherit; font-size: 11px; cursor: pointer;')}>позже</button>
-    </div>
-  );
-}
-
-
+// ЧТО НЕ ПОТЕРЯНО. Журнал ведётся как вёлся (methods.corpus.js: statusTick →
+// логОшибок / логАвария), метка ошибок на шестерёнке осталась
+// (render.panels.jsx), а сам отчёт лежит в настройках, во вкладке «Лог», и
+// прямо там же написано «прошлый запуск завершился аварийно»
+// (render.settings.jsx: renderЛог). То есть правда никуда не делась —
+// перестала догонять.
+//
+// renderЯдроМолчит НИЖЕ ОСТАВЛЕН НАРОЧНО. Это не «что-то пошло не так», а
+// «программы нет»: ядро умерло, окно живо и выглядит рабочим. Без панели
+// экран был бы просто пустым и молчащим.
 // ---------------------------------------------------------------------------
 // ЯДРО МОЛЧИТ (Раунд 59).
 //
@@ -199,73 +193,118 @@ function renderЯдроМолчит(c) {
 
 export default class Nakedlunch extends Component {
   // state — дословно из дизайна; fs-ключи (micOn/bcOn/camOn/fsv/...) — фаза 3.
-  // Отличия интегратора: doc стартует одной пустой строкой (иначе в contenteditable
-  // нет поля [data-idx] и печатать некуда — тот же фолбэк, что в readDom);
   // params — PARAM_DEFAULTS из methods.panels.js: пять крутилок, «Метр» удалён,
-  // дефолты производны от бэка (решение прожарки 5), моковые числа макета не переносятся
-  state = { doc: [{ type: 'line', text: '', letter: 'а', src: 'я' }], mode: 'gen', tab: 'editor', micOn: false, trackOn: false, synthWanted: true, synthOn: true /* синтетика водит картинку, пока нет ни микрофона, ни трека — см. freestyle/audio.js */, bcOn: true, bcEpoch: 0 /* счётчик перезапусков движка — пересоздаёт канвас, см. methods.fsglue.fsRestartEngine */, autoOn: false, bcAutoOn: false, bcAutoSec: 30, recOn: false, recLock: false /* фаза 4: замок хрома на время записи — панели не проявляются даже по наведению */, textAber: false, postAber: false, aspect: '', profiles: [], profId: '', profEdit: '', uiProfiles: [], uiProfId: '', srcMode: 'генератор', srcText: '', srcChunk: 'строки', camOn: false, fitFrame: false, grainBlend: 'overlay', grainFps: 24, posX: 'по центру', posY: 'по центру', camId: '', camList: [], camBlend: 'normal', camFit: 'заполнить', camMirror: false, glowColor: '', glowWarp: 'чисто', selMode: 'нет', fsv: {}, /* СВОИ НАСТРОЙКИ ФРИСТАЙЛА (Раунд 57). До этого он падал на панель редактора: linkKnobs(0)/linkSpec(0) последней ступенью читают state.knobMode/params/curSpec(), а тема бралась из _lastKey — ключа последней генерации В РЕДАКТОРЕ. Крутил строфу — менял сцену. null = ещё не отделялся, значит наследуем текущее редакторское один раз. */ fsTheme: '', fsKnobMode: null, fsParams: null, fsSpec: null, acMode: 'выкл', grainMode: 'плёнка', fonts: [], fontNow: '', fontQ: '', pal: null, palSel: { panel: 0, ink: 0 }, fsSetOpen: false, fsLineOpen: false, fsTab: 'cam', live: {}, presetTab: 'all', presetQ: '', presetTick: 0, defProf: '', uiDefProf: '', uiProfEdit: '', pop: null, popTab: 'рифмы', popItems: [], popLoading: false /* фаза 2: список попапа и его скелет */, thesaurus: { syn: false, ant: false } /* словарные слои — придут из /api/state в boot; до тех пор «антонимы» честно спрятаны */, undoN: 0, redoN: 0, savedAt: '', caret: -1, dirty: false, selAll: false, flashMsg: '', sheets: [], sheetId: '', srcBusy: {} /* какие источники сейчас переключаются — Раунд 56 */, importing: [] /* книги, которые заливаются прямо сейчас */, renaming: '', trashView: false, confirm: '', folders: [], folderId: '', folderDraft: '', moveOpen: '', marks: {}, markAnchor: -1, titleEdit: false, openPill: '', algo: 'Алгоритм', seed: '', theme: 'dark', cfg: {}, favs: [], hist: [], /* Цепочка из ОДНОГО звена — это и есть одиночная строфа (Раунд 50). Раньше по умолчанию стояли шесть ролей, а форм у них не было ни одной: все шесть звеньев молча падали в одну и ту же строфу настроек. */ chain: [''], junctions: [], chainForms: [null], chainKnobs: [null], chainRepeat: [null],
-    /* Раунд 50: три полки. knobForms/chainList приезжают в boot; knobProfile —
-       выбранный профиль настроек, knobMode — его режим, knobDirty — «правлено,
-       но не сохранено» (молча писать в полку нельзя: тогда выбранное решение
-       менялось бы под руками, а от этого слепки цепочек и защищают). */
-    knobForms: { builtin: [], custom: [] }, chainList: [],
-    /* четвёртая полка (Раунд 53): серия = список звеньев {альбом, тема, цепочка, сколько} */
-    seriesList: [], seriesName: '', seriesLinks: [], seriesDraft: '', seriesSec: 15,
-    /* seriesState (Раунд 55) — сколько СДЕЛАНО по каждому треку, какой идёт
-       и где что встало. Приходит с бэка из ФАЙЛОВ: меню не помнит прогонов
-       и потому не может о них соврать. */
-    seriesState: null,
-    /* искажение — свойство ВСЕЙ серии (Раунд 55): ось кривой это место в
-       серии, и лежать оно может только здесь. seriesCurve — точки по
-       каналам, seriesNoise — сила шума, curveChan — какой канал гнём. */
-    seriesCurve: {}, seriesNoise: 0, noiseKind: 'белый', curveChan: 'все', curveShape: '',
-    knobProfile: 'Обычный', knobMode: 'алгоритм', knobDirty: false,
-    /* profile ПУСТОЙ на старте (Раунд 55). Здесь стояло 'Куплет-припев' —
-       имя пресета из шести звеньев при живой цепочке из одного пустого:
-       boot его не применял, и при каждом первом запуске панель показывала
-       решение, которого нет. */
-    knobDraft: '', chainDraft: '', chipOpen: -1, juncOpen: -1, profile: '', myProfN: 0, savedSnap: '', saveFlash: false, params: Object.assign({}, PARAM_DEFAULTS),
+  // дефолты производны от бэка (решение прожарки 5), моковые числа макета не переносятся.
+  //
+  // ДОКУМЕНТ И ЛИСТЫ ВЫРЕЗАНЫ 2026-08-18. Отсюда ушли: doc / caret / dirty /
+  // savedAt / undoN / redoN / selAll / marks / markAnchor (сам документ и его
+  // правка), sheets / sheetId / folders / folderId / folderDraft / moveOpen /
+  // renaming / trashView / titleEdit (листы, папки и корзина).
+  // Требование владельца дословно: «лента — отдельная вкладка, которая уже не
+  // нужна в таком виде. По сути ты наплодил говна, не почистил старое,
+  // фактически не убрал» — и раньше: «строфа единственным режимом и всё»,
+  // «жмёшь enter — тебе выдаёт», «всё аккумулируется в избранном».
+  // Основание замером, а не вкусом: в сессии на 453 минуты и 181 генерацию в
+  // избранное ушло НОЛЬ строк, потому что все четыре входа в копилку сидели
+  // внутри документа. Лента убирает это условие — строка сохраняется с
+  // клавиатуры, документ для этого не нужен.
+  // Имена НЕ забыты: они лежат запретом в methods.fsprofiles.js
+  // (PROF_SKIP_STATE) — старые профили сцены на диске несут их до сих пор.
+  state = { tab: 'lenta',
+    /* ЛЕНТА — единственная поверхность выдачи. `lenta` держит строки
+       ТЕКУЩЕЙ строфы, а не список показанного: с 2026-08-18 на экране
+       всегда ровно одна, новая заменяет старую («жму интер — оно должно
+       старое убирать»).
+       ОТСЮДА ТОГДА ЖЕ УШЛИ: lentaCur / lentaSel (курсор по строкам и
+       диапазон выделения Shift'ом) — «там сейчас можно бессмысленно
+       выделить строку одну, и с этим ни хуя не делается. Это просто
+       графическое выражение, это бред»; pop / popTab / popItems /
+       popLoading и thesaurus (попап слова и ворота его вкладки
+       «антонимы») — «попап с кликом по тексту не нужен». */
+    lenta: [], micOn: false, trackOn: false, synthWanted: true, synthOn: true /* синтетика водит картинку, пока нет ни микрофона, ни трека — см. freestyle/audio.js */, bcOn: true, bcEpoch: 0 /* счётчик перезапусков движка — пересоздаёт канвас, см. methods.fsglue.fsRestartEngine */, autoOn: false, bcAutoOn: false, bcAutoSec: 30, recOn: false /* замок хрома на время записи в состоянии НЕ живёт (Раунд 63): он и был `data-reclock` на корне документа — см. componentDidUpdate и style.js. Поле recLock писалось при старте и стопе записи, но не читалось ни разу, то есть было второй, немой правдой о замке */, textAber: false, postAber: false, aspect: '', profiles: [], profId: '', profEdit: '', uiProfiles: [], uiProfId: '', srcMode: 'генератор', srcText: '', srcChunk: 'строки', camOn: false, fitFrame: false, grainBlend: 'overlay', grainFps: 24, posX: 'по центру', posY: 'по центру', camId: '', camList: [], camBlend: 'normal', camFit: 'заполнить', camMirror: false, glowColor: '', glowWarp: 'чисто', selMode: 'нет', fsv: {}, /* СВОИ НАСТРОЙКИ ФРИСТАЙЛА (Раунд 57). До этого он падал на панель редактора: linkKnobs(0)/linkSpec(0) последней ступенью читают state.knobMode/params/curSpec(), а тема бралась из _lastKey — ключа последней генерации В РЕДАКТОРЕ. Крутил строфу — менял сцену. null = ещё не отделялся, значит наследуем текущее редакторское один раз. */ fsTheme: '', fsKnobMode: null, fsParams: null, fsSpec: null, acMode: 'выкл', grainMode: 'плёнка', fonts: [], fontNow: '', fontQ: '', pal: null, palSel: { panel: 0, ink: 0 }, fsSetOpen: false, fsLineOpen: false, fsTab: 'cam', live: {}, presetTab: 'all', presetQ: '', presetTick: 0, defProf: '', uiDefProf: '', uiProfEdit: '', flashMsg: '', srcBusy: {} /* какие источники сейчас переключаются — Раунд 56 */, importing: [] /* книги, которые заливаются прямо сейчас */, confirm: '', openPill: '', algo: 'Алгоритм', theme: 'dark', cfg: {}, favs: [], hist: [],
+    /* ЦЕПЬ И СЕРИЯ ВЫРЕЗАНЫ 2026-08-18. Отсюда ушли: chain / junctions /
+       chainForms / chainKnobs / chainRepeat / chainList / chainMine /
+       chainDraft / profile / savedSnap (цепочка и её полка),
+       seriesList / seriesName / seriesLinks / seriesDraft / seriesSec /
+       seriesState / seriesCurve / seriesNoise / noiseKind / curveChan (серия и
+       её искажение), refText / refPct / refChain / refProfile / refBusy /
+       refOpen (референс как вход пайплайна), lastPipeFunnel.
+       Решение владельца дословно: «pipeline и серия это бесполезные режимы на
+       самом деле… с практической точки зрения бесполезны, их можно вырезать.
+       Строфа единственным режимом и всё». Замер журнала за десять живых дней:
+       29 прогонов цепи против 587 одиночных строф, медиана цепи 24.2 с.
+       Имена НЕ забыты: они остались запретом в methods.shelves.js
+       (КЛЮЧИ_МОДЕЛИ) — старые профили сцены на диске несут их до сих пор. */
+    /* ПОЛКА ПРОФИЛЕЙ НАСТРОЕК ВЫРЕЗАНА 2026-08-18 (замер «девять крутилок →
+       четыре пресета»). Отсюда ушли knobForms (список записей с бэка),
+       knobProfile (выбранное имя), knobDirty («правлено, но не сохранено») и
+       knobDraft (поле имени). Своих профилей у пользователя не было ни одного,
+       встроенных было два, и оба стали пресетами — methods.shelves.js: ПРЕСЕТЫ.
+       Имена НЕ забыты: они лежат запретом в methods.shelves.js (КЛЮЧИ_МОДЕЛИ) —
+       старые профили СЦЕНЫ на диске несут их до сих пор.
+       knobMode остался: режим отбора ставит пресет, и он же уезжает на бэк. */
+    /* chipOpen/juncOpen/myProfN/saveFlash вырезаны (Раунд 63) — писались, но не
+       читались ни одним рендером: горизонтальные чипы цепочки и их меню ушли
+       ещё в Раунде 41/50, а галочку сохранения показывает profSaveFlash. */
+    /* СТАРТОВЫЙ ПРЕСЕТ — П1 «Как всегда» (57.2% его живых прогонов), а не голые
+       PARAM_DEFAULTS: их Банальность 0.83 стоит в МЁРТВОЙ правой половине
+       шкалы (от 0.5 до 0.75 ворота меняют меньше процента корпуса), и открывать
+       чистую установку там значило бы сажать человека ровно туда, где ручка год
+       не работала. Разница пулов 83.1% против 85.4%, жаккар 0.973 — на слух
+       неотличимо [Э]. Сохранённые настройки этот выбор перекрывают (см. boot). */
+    knobMode: ПРЕСЕТЫ[0].mode,
+    params: Object.assign({}, PARAM_DEFAULTS, ПРЕСЕТЫ[0].params),
     // профиль генерации: схема строфы + её имя (boot поднимает из /api/settings),
-    // stanzaPick — открыт ли список форм внутри попапа, profNameDraft — поле имени
-    // stanzaSection (Раунд 55) — заголовок, который одиночная генерация кладёт
-    // над строфой. Раньше он брался у первого звена ЦЕПОЧКИ — чужого этажа.
-    stanzaSpec: null, stanzaProfile: '', stanzaPick: false, stanzaSection: '', themeKeys: '', profNameDraft: '', profSaveFlash: false,
+    // profNameDraft — поле имени.
+    // stanzaPick («открыт ли список форм внутри попапа») вырезан в Раунде 63:
+    // список форм давно рисуется всегда, флаг только гасили в трёх местах.
+    // stanzaSection (заголовок над строфой) вырезан 2026-08-18 вместе с
+    // документом: заголовок был строкой ЛИСТА, а листа больше нет.
+    stanzaSpec: null, stanzaProfile: '', themeKeys: '', profNameDraft: '', profSaveFlash: false,
+    // НОМЕР ПРОГОНА (Раунд 62). seedDraft — что вписано в поле: пусто значит
+    // «новый прогон», число значит «повторить тот». seedLast — номер, которым
+    // собралась последняя выдача, seedStamp — на чём он снят (версия индекса,
+    // размер пула и скрытого): семя воспроизводит ВЫБОР, а не материал, и когда
+    // материал сменился, это надо сказать, а не выдать чужое за то же самое.
+    seedDraft: '', seedLast: null, seedStamp: null,
+    // Воронка последнего прогона — ступени так, как они происходят. Раньше её
+    // не показывал никто (инфографику вырезали в Раунде 50), и крупнейшая
+    // ступень каскада была невидима.
+    funnelLast: null,
+    // Форма пула: из чего сейчас будет выбираться. Спрашивается при движении
+    // ручек с дебаунсом — живого предпросмотра выдачи нет (замер 3.7), а это
+    // есть, и стоит единицы миллисекунд.
+    poolShape: null,
     // ярус сжатия шапки, 0..HDR_MAX; считает hdrFit по фактической ширине
     hdrTier: 0,
     // Раунд 39: фоновые работы (/api/status) и всё, что вернулось из потерянных
-    // функций — корпус, сроки хранения, возврат показанного (methods.corpus.js)
-    jobs: [], corpusBusy: '', histRetention: 0, nlRetention: 'never', restoreTheme: '', cfgTab: 'документ',
-    // Раунд 40: полноценные избранное и история — поиск, правка, отмена
-    favQ: '', histQ: '', favEdit: '', favUndo: '', histCfg: false, statsData: null, funnel: null, black: null, blackDraft: '',
-    // poolPer и pipeW вырезаны (Раунд 51, поймано тестом утечки профиля сцены):
-    // размер пула выводится из длины цепочки и решения пользователя не требует, а
-    // веса склейки вернулись константами модуля (core/pipeline.py) — обе ручки
-    // ушли из контракта ещё в Раунде 50, но в состоянии остались висеть.
-    // референс как вход пайплайна (Раунд 45)
-    /* refOpen (Раунд 55) — референс свёрнут в строку меню «Пайплайн»: берутся
-       за него редко, а места он занимает много */
-    refText: '', refPct: 1, refChain: null, refProfile: null, refBusy: false, refOpen: false };
+    // функций — корпус, сроки хранения, возврат показанного (methods.corpus.js).
+    // nlRetention вырезан (Раунд 63): срок жизни «показанного» у самого
+    // nakedlunch никуда не выводился — ни одной строки настроек, только
+    // молчаливый запрос на старте и сеттер без вызывающих.
+    jobs: [], corpusBusy: '', histRetention: 0, restoreTheme: '', cfgTab: 'лента',
+    // Раунд 40: полноценные избранное и история — поиск, правка, отмена.
+    // blackDraft вырезан (Раунд 63): поле-черновик чёрного списка не читал никто.
+    favQ: '', histQ: '', favEdit: '', favUndo: '', histCfg: false, statsData: null, funnel: null, black: null };
 
   DARK = { '--canvas': '#131313', '--ink': '#ededed', '--muted-hard': '#cfcfcf', '--muted': '#949494', '--muted-soft': '#5c5c5c', '--border-soft': '#3d3d3d', '--border-subtle': '#242424' };
   LIGHT = { '--canvas': '#ffffff', '--ink': '#101010', '--muted-hard': '#222222', '--muted': '#555555', '--muted-soft': '#999999', '--border-soft': '#c8c8c8', '--border-subtle': '#e0e0e0' };
-  // Заголовки секций — ТОЛЬКО подписи в документе (Раунд 50). До этого раунда
-  // роль тайно выбирала форму строфы и двигала крутилки на бэке.
-  ROLES = ['Куплет', 'Припев', 'Хук', 'Бридж', 'Строфа'];
-  JMARK = { 'рифмовать стык': '·', 'свободно': '∘', 'слом ритма': '≀' };
-  // Пресеты цепочек: пары «заголовок секции + форма строфы». Раньше это были
-  // списки одних ролей, и выбор пресета СНОСИЛ все формы звеньев — цепочка
-  // собиралась из слов, за которыми не стояло ничего. Формы взяты с полки
-  // строф: куплет повествовательным перекрёстным, припев — плотным парным
-  // покороче, хук — двустишием, бридж — кольцевым (кольцо ломает инерцию абаб).
-  LETTERS = 'абвгдежзиклмноп';
-  TABS = ['рифмы', 'по звуку', 'синонимы', 'антонимы', 'строкой'];
+  // ROLES (заголовки секций) и LETTERS вырезаны 2026-08-18 вместе с документом:
+  // заголовок секции был строкой, которую генерация клала НАД строфой в лист, а
+  // класть больше некуда. JMARK (значки стыков) ушёл раньше, вместе со стыками.
+  // TABS (вкладки попапа слова: рифмы, по звуку, синонимы, антонимы,
+  // строкой) вырезаны 2026-08-18 вместе с самим попапом.
 
   // ---- refs ----
   rootRef = (el) => { this._root = el; this.applyTheme(); };
   sectionRef = (el) => { this._sec = el; };
   bgRef = (el) => { this._bg = el; };
-  docRef = (el) => { this._doc = el; };
   inputRef = (el) => { this._input = el; };
+  // Прокрутка ленты. Строфа на экране одна: короткая стоит по центру и не
+  // листается вовсе, длинная (ода в 14 строк) листается внутри своей области и
+  // обязана начинаться СВЕРХУ. Флаг ставит сама лента (lentaПоложить:
+  // _lentaВверх), снимает componentDidUpdate.
+  lentaRef = (el) => { this._lenta = el; };
 
   // ---- вид: тема, тонирование, свечение, стекло ----
   cfg() { return Object.assign({}, this.props, this.state.cfg || {}); }
@@ -347,7 +386,11 @@ export default class Nakedlunch extends Component {
   moveTabInd() {
     var nav = this._tabs; if (!nav) return;
     var ind = nav.querySelector('[data-tab-ind]');
-    var btn = nav.querySelector('button[data-tab="' + (this.state.tab === 'fs' ? 'fs' : 'editor') + '"]');
+    // Вкладок две: лента и фристайл. Ищем кнопку ПО ИМЕНИ вкладки, а не
+    // тернарником: тернарник на две кнопки уже однажды увёл бегунок под
+    // соседнюю — молча, потому что querySelector находил существующую кнопку
+    // и никакой ошибки не случалось.
+    var btn = nav.querySelector('button[data-tab="' + this.state.tab + '"]');
     if (!ind || !btn || !btn.offsetWidth) return;
     ind.style.transition = this._tabInd ? 'transform 320ms var(--ease-spring), width 320ms var(--ease-spring)' : 'none';
     ind.style.width = btn.offsetWidth + 'px';
@@ -356,7 +399,7 @@ export default class Nakedlunch extends Component {
   }
   setTab(t) {
     if (t === this.state.tab) return;
-    this.openPop({ tab: t, pop: null, marks: {} });
+    this.openPop({ tab: t, marks: {} });
     if (t === 'fs') { this._kicked = false; this._fsSeeded = false; this.enterFs(); }
   }
   // enterFs/loadEngine/syncEngine живут в methods.fsglue.js (связка со сценой,
@@ -408,7 +451,7 @@ export default class Nakedlunch extends Component {
   openPop(patch) {
     clearTimeout(this._popT); this._popT = null;
     clearTimeout(this._subT); this._subT = null;
-    this.setState(Object.assign({ openPill: '', fsSetOpen: false, fsLineOpen: false, chipOpen: -1, juncOpen: -1, closing: '', subPill: '', subClosing: '' }, patch || {}));
+    this.setState(Object.assign({ openPill: '', fsSetOpen: false, fsLineOpen: false, closing: '', subPill: '', subClosing: '' }, patch || {}));
   }
   // Меню внутри панели (профиль, фильтры, воронка, роль звена) живут на своём уровне.
   // Если пустить их через openPill, открытие любого из них закрывает панель-родителя —
@@ -416,20 +459,30 @@ export default class Nakedlunch extends Component {
   togSub(p) {
     if (this.state.subPill === p) { this.closeSub(); return; }
     clearTimeout(this._subT); this._subT = null;
-    this.setState({ subPill: p, subClosing: '', chipOpen: -1, juncOpen: -1 });
+    this.setState({ subPill: p, subClosing: '' });
   }
   openSub(patch) {
     clearTimeout(this._subT); this._subT = null;
     this.setState(Object.assign({ subPill: '', subClosing: '' }, patch || {}));
   }
+  // ФАНТОМНЫЕ КЛЮЧИ ЗАКРЫТИЯ 'chip'/'junc' УБРАНЫ (Раунд 63).
+  //
+  // Здесь и в closePop к ключу подмешивалось `chipOpen >= 0 ? 'chip'` и то же
+  // для `juncOpen`. Меню чипов и стыков, ради которых это писалось, вырезаны в
+  // Раундах 41/50, и рисовать по этим ключам стало нечего. С juncOpen выходил
+  // просто мёртвый код (его нигде не поднимали выше −1), а с chipOpen — хуже:
+  // `moveChip` продолжал класть в него номер переставленного звена, и после
+  // первой же перестановки закрытие ВСЕГДА считало, что открыт некий 'chip',
+  // проходило мимо раннего выхода и заводило 140-мс таймер на каждый клик мимо
+  // панелей. Теперь ключ — только то, что действительно нарисовано.
   closeSub() {
     var st = this.state, self = this;
-    var k = st.subPill || (st.chipOpen >= 0 ? 'chip' : '') || (st.juncOpen >= 0 ? 'junc' : '');
+    var k = st.subPill;
     if (!k || this._subT) return;
     this.setState({ subClosing: k });
     this._subT = setTimeout(function () {
       self._subT = null;
-      self.setState({ subPill: '', subClosing: '', chipOpen: -1, juncOpen: -1 });
+      self.setState({ subPill: '', subClosing: '' });
     }, 140);
   }
   // закрытие: состояние держим ещё кадр анимации, потом гасим по-настоящему
@@ -437,73 +490,51 @@ export default class Nakedlunch extends Component {
     var st = this.state, self = this;
     if (extra) this.setState(extra);
     this.closeSub();
-    var k = st.openPill || (st.fsSetOpen ? 'fsset' : '') || (st.fsLineOpen ? 'fsline' : '')
-      || (st.chipOpen >= 0 ? 'chip' : '') || (st.juncOpen >= 0 ? 'junc' : '');
+    var k = st.openPill || (st.fsSetOpen ? 'fsset' : '') || (st.fsLineOpen ? 'fsline' : '');
     if (!k || this._popT) return;
     this.setState({ closing: k });
     this._popT = setTimeout(function () {
       self._popT = null;
-      self.setState({ openPill: '', fsSetOpen: false, fsLineOpen: false, chipOpen: -1, juncOpen: -1, closing: '', subPill: '', subClosing: '' });
+      self.setState({ openPill: '', fsSetOpen: false, fsLineOpen: false, closing: '', subPill: '', subClosing: '' });
     }, 140);
   }
 
-  // ---- документ: текст и копирование ----
-  // текущий документ; рабочий буфер _doc$ появится с миксином редактора
-  cur() { return this._doc$ || this.state.doc; }
-  // текст документа: полноценный markdown
-  docText() {
-    var out = [];
-    this.cur().forEach(function (r, i) {
-      if (r.type === 'role') { if (i) out.push(''); out.push('#'.repeat(r.level || 2) + ' ' + r.text); }
-      else out.push(r.text);
-    });
-    return out.join('\n');
-  }
-  inDoc(node) { return !!(this._doc && node && this._doc.contains(node.nodeType === 1 ? node : node.parentNode)); }
-  copyAll() {
-    var txt = this.docText(), self = this, n = this.cur().filter(function (r) { return r.type === 'line'; }).length;
-    var done = function (ok) { self.setState({ savedAt: self.state.savedAt, dirty: false }); self.flash(ok ? ('скопировано · ' + n + ' строк') : 'не удалось скопировать'); };
-    try {
-      var p = navigator.clipboard && navigator.clipboard.writeText(txt);
-      if (p && p.then) { p.then(function () { done(true); }, function () { done(self.fallbackCopy(txt)); }); return; }
-    } catch (e) {}
-    done(this.fallbackCopy(txt));
-  }
-  fallbackCopy(txt) {
-    try {
-      var ta = document.createElement('textarea');
-      ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
-      document.body.appendChild(ta); ta.select();
-      var ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      return ok;
-    } catch (e) { return false; }
-  }
+  // ---------------------------------------------------------------------------
+  // ЗДЕСЬ БЫЛ ДОКУМЕНТ: cur() / docText() / inDoc() / copyAll() / fallbackCopy()
+  // (вырезано 2026-08-18 вместе с редактором).
+  //
+  // cur() отдавал рабочий буфер листа, docText() собирал из него markdown,
+  // copyAll() клал этот markdown в буфер обмена по ⌘C, inDoc() отвечал, стоит
+  // ли каретка внутри контейнера строк. Всё это существовало ради одного —
+  // редактируемого документа, которого больше нет.
+  //
+  // Копирование НЕ потеряно: в ленте оно своё и работает с выделением строк
+  // (methods.lenta.js: lentaКопировать → copyText из methods.corpus.js, где и
+  // живёт честный запасной путь через скрытое поле).
+  // ---------------------------------------------------------------------------
+
   flash(msg) {
     var self = this;
     clearTimeout(this._flashMsgT);
     this.setState({ flashMsg: msg });
     this._flashMsgT = setTimeout(function () { self.setState({ flashMsg: '' }); }, 2000);
   }
+  // ВСЕ КЛАВИШИ ЛЕНТЫ ЖИВУТ В methods.lenta.js, И ЭТО ПОЧИНКА (2026-08-18).
+  //
+  // Здесь стояло `var mod = e.metaKey || e.ctrlKey;`, а ниже — `if (!mod)
+  // return;` РАНЬШЕ проверки Enter. Из-за этого строфу давал только ⌘↵:
+  // «я сказал нажатие на интер даёт строфу, а у тебя строфа на комманд интер».
+  // Правда о клавише лежала в двух файлах, и, читая любой из них по
+  // отдельности, ошибку увидеть было нельзя. Теперь окно только раздаёт
+  // событие, а решает лента — она же проверяет вкладку и поле ввода.
+  //
+  // ЗДЕСЬ ЖЕ РАНЬШЕ БЫЛИ ВЫРЕЗАНЫ (2026-08-18) КЛАВИШИ ДОКУМЕНТА: ⌘A —
+  // выделить лист, ⌘B / ⌘I — начертание, ⌘1–3 — заголовок секции, ⌘C —
+  // копирование листа из модели, ⌘Z / ⌘⇧Z — отмена и возврат. Все шесть
+  // работали только внутри contenteditable-строк, которых больше нет.
   onGlobalKey(e) {
-    var mod = e.metaKey || e.ctrlKey;
-    if (e.key === 'Escape') { this.closePop({ pop: null, selAll: false, marks: {} }); return; }
-    // ⌥↵ без ⌘ — строфа с обязательным ключом (решение прожарки, вопрос 2.1)
-    if (!mod && e.altKey && e.key === 'Enter') { e.preventDefault(); this.genStanza({ forced: true }); return; }
-    if (!mod) return;
-    var k = e.key.toLowerCase(), sel = getSelection();
-    var inside = this.inDoc(document.activeElement) || (sel && sel.focusNode && this.inDoc(sel.focusNode));
-    if (k === 'a' && inside) { e.preventDefault(); this.setState({ selAll: true }); return; }
-    if (inside && (k === 'b' || k === 'i')) { e.preventDefault(); this.wrapSel(k === 'b' ? '**' : '*'); return; }
-    if (inside && (k === '1' || k === '2' || k === '3')) { e.preventDefault(); this.toggleHeading(parseInt(k, 10) + 1); return; }
-    if (k === 'c') {
-      var native = sel && String(sel).length > 0;
-      if (this.state.selAll || (inside && !native)) { e.preventDefault(); this.copyAll(); this.setState({ selAll: false }); }
-      return;
-    }
-    if (k === 'z') { e.preventDefault(); if (e.shiftKey) this.redo(); else this.undo(); }
-    // ⌘↵ строфа в каретку, ⌘⇧↵ прогон пайплайна, ⌥ — принудительный показ ключа (решения прожарки 1–2)
-    else if (e.key === 'Enter') { e.preventDefault(); if (e.shiftKey) this.runPipe(); else this.genStanza({ forced: e.altKey }); }
+    if (this.lentaКлавиша && this.lentaКлавиша(e)) return;
+    if (e.key === 'Escape') { this.closePop(); return; }
   }
 
   // ---- первичная загрузка ----
@@ -511,46 +542,44 @@ export default class Nakedlunch extends Component {
   async boot() {
     var errs = [];
     var grab = function (p) { return p.catch(function (e) { errs.push(e && e.message ? e.message : String(e)); return null; }); };
-    const [st, nl, settings, forms, hist, sh, knobs, chains, ser] = await Promise.all([
+    // Полки цепочек и серий (api.chains / api.series) больше не спрашиваются —
+    // 2026-08-18, вырезаны вместе со своими меню.
+    // Список листов (api.sheetsList) — тоже: листов нет с 2026-08-18.
+    // Полка профилей настроек (api.knobProfiles) не спрашивается с 2026-08-18:
+    // её заменили четыре пресета, зашитые в methods.shelves.js — ПРЕСЕТЫ.
+    const [st, nl, settings, forms, hist] = await Promise.all([
       grab(api.state()),
       grab(api.nlState()),
       grab(api.settingsGet()),
       grab(api.stanzaProfiles()),
       grab(api.history('')),
-      grab(api.sheetsList()),
-      // Раунд 50: полка профилей настроек и полка цепочек-слепков
-      grab(api.knobProfiles()),
-      grab(api.chains()),
-      grab(api.series()),
     ]);
+    // Сохранённых положений нет (чистая установка) — открываемся на П1, а не на
+    // голых дефолтах: их Банальность 0.83 лежит в мёртвой правой половине
+    // шкалы. Есть сохранённые — берём их КАК ЕСТЬ и ничего не подтягиваем:
+    // подсветка пресета считается по положениям (methods.shelves.js:
+    // имяПресета), и если они не совпали ни с одним, панель говорит об этом
+    // прямо. Молча подменить чужие настройки ближайшим пресетом значило бы
+    // соврать о том, что уедет на бэк (§9.4 отчёта: «молча не подменять»).
+    var сохр = (settings && settings.nl_params) || null;
+    var своиПоложения = (сохр && сохр.params && Object.keys(сохр.params).length) ? сохр.params : null;
     this.setState({
       // /api/state отдаёт accepted — плоский список строк избранного, новые сверху;
-      // внутри приложения избранное живёт объектами {t} (методы документа сравнивают f.t)
+      // внутри приложения избранное живёт объектами {t} (лента и панели сравнивают f.t)
       favs: (st && st.accepted ? st.accepted : []).map(function (t) { return typeof t === 'string' ? { t: t } : t; }),
       // история: показанное построчно, {time, t} — как ждёт панель истории дизайна
       // подпись времени — одним местом (histRow миксина корпуса): сегодняшнее
       // часами, прежнее датой
       hist: hist && hist.items ? hist.items.map((h) => this.histRow(h)) : [],
-      sheets: sh && sh.sheets ? sh.sheets : [],
-      folders: sh && sh.folders ? sh.folders : [],
-      // решение прожарки 9: наличие словарных слоёв тезауруса — попап прячет
-      // вкладку «антонимы» при ant=false (скрыть честнее, чем фейкать); дефолт
-      // «слоёв нет» покрывает и старый бэк без поля thesaurus
-      thesaurus: st && st.thesaurus ? st.thesaurus : { syn: false, ant: false },
+      // ЗДЕСЬ ПОДНИМАЛИСЬ СЛОВАРНЫЕ СЛОИ ТЕЗАУРУСА — thesaurus (вырезано
+      // 2026-08-18). Их читала ровно одна вкладка «антонимы» в попапе слова;
+      // попапа нет, и флаг стал бы состоянием без читателя. Само поле бэк
+      // в /api/state по-прежнему отдаёт — его просто перестали спрашивать.
       // сырые ответы бэка — их разложат миксины панелей (воронка, крутилки, конструктор строф)
       corpus: st ? st.corpus : null,
       nl: nl,
       settings: settings,
       stanzaForms: forms,
-      // Раунд 50: две новые полки. Форма ответа у обеих такая же, как у
-      // строф, — {builtin, custom} и {custom}: три полки, одна привычка.
-      knobForms: knobs || { builtin: [], custom: [] },
-      // встроенные цепочки — такие же записи полки (Раунд 55): три «пресета»
-      // жили константой во фронте, серия их не видела, и «три готовых пайплайна на экране, пустой список в серии»
-      chainList: ((chains && chains.builtin) || []).concat((chains && chains.custom) || []),
-      chainMine: ((chains && chains.custom) || []).map(function (c) { return c.name; }),
-      seriesList: (ser && ser.custom) || [],
-      seriesSec: (ser && ser.seconds_per_text) || 15,
       // профиль генерации поднимаем из настроек (2026-08-02). Раньше схема
       // читалась из settings.stanza только в момент генерации, а показать или
       // сменить её было нечем; крутилки не восстанавливались вовсе.
@@ -561,18 +590,11 @@ export default class Nakedlunch extends Component {
       // Раунд 50: сюда же поднимается РЕЖИМ (алгоритм/классика) — раньше он не
       // сохранялся вовсе (белый список _PROFILE_PARAMS его не пропускал), и
       // переключатель сбрасывался при каждом запуске.
-      params: Object.assign({}, PARAM_DEFAULTS,
-        (settings && settings.nl_params && settings.nl_params.params) || {}),
-      knobMode: (settings && settings.nl_params && settings.nl_params.mode) || 'алгоритм',
-      // живая цепочка меню «Пайплайн» — где закрыл, там открыл (Раунд 55)
-      ...(function (ц) {
-        if (!ц || !Array.isArray(ц.chain) || !ц.chain.length) return {};
-        var n = ц.chain.length;
-        var добить = (a) => { a = Array.isArray(a) ? a.slice(0, n) : []; while (a.length < n) a.push(null); return a; };
-        return { chain: ц.chain, chainForms: добить(ц.forms), chainKnobs: добить(ц.knobs),
-                 chainRepeat: добить(ц.repeat), junctions: Array.isArray(ц.junctions) ? ц.junctions : [],
-                 profile: ц.profile || '' };
-      })(settings && settings.nl_chain),
+      params: Object.assign({}, PARAM_DEFAULTS, своиПоложения || ПРЕСЕТЫ[0].params),
+      knobMode: (сохр && сохр.mode) || ПРЕСЕТЫ[0].mode,
+      // Восстановление живой цепочки из settings.nl_chain убрано 2026-08-18:
+      // цепочки нет, и поднимать нечего. Сам ключ на диске у пользователя
+      // остаётся — читать его просто перестали, поэтому откат ничего не теряет.
     }, () => {
       // профили сцены и вида, палитра и текущий вид (nl_fs_profiles /
       // nl_ui_profiles / nl_palette / nl_view) лежат в тех же /api/settings —
@@ -584,34 +606,19 @@ export default class Nakedlunch extends Component {
     // загрузку всего остального
     this.loadRetention();
     if (errs.length) this.flash(errs[0]);
-    // первый живой лист — в редактор; метод openSheet придёт миксином.
-    // Пустое хранилище → лист создаётся сразу: иначе работа до первого «＋»
-    // живёт без sheetId, автосейв молчит, и первая же смена листа теряет
-    // текст (поймано живой проверкой фазы 0 — сгенерированная строфа пропала).
-    var alive = (sh && sh.sheets ? sh.sheets : []).filter(function (x) { return !x.trashed; });
-    if (alive.length) {
-      if (this.openSheet) this.openSheet(alive[0].id);
-    } else {
-      try {
-        var made = await api.sheetsCreate({});
-        var again = await api.sheetsList();
-        this.setState({ sheets: again.sheets || [], folders: again.folders || [] });
-        if (this.openSheet) this.openSheet(made.id);
-      } catch (e) { /* нет бэка листов — честный in-memory режим, флеш уже был */ }
-    }
+    // ЗДЕСЬ ОТКРЫВАЛСЯ ПЕРВЫЙ ЛИСТ и создавался лист на пустом хранилище
+    // (вырезано 2026-08-18). Листов нет: выдача копится в ленте, а сохраняется
+    // не она, а избранное — «всё аккумулируется в избранном».
   }
 
-  // слот шапки (renderHeader): пилюля листов + статус сохранения + undo/redo —
-  // левый блок шапки дизайна (строки 809..891 шаблона)
-  // фристайл-хром (микрофон, трек, строка, сцена, профили, кадр, запись) стоит
-  // первым — как в дизайне (шаблон 164..807): он гасит себя сам вне вкладки,
-  // а пилюля листов гасит себя вне редактора
+  // Слот левого блока шапки (renderHeader). Раньше в нём стояли ещё пилюля
+  // листов и статус сохранения с отменой-возвратом — вырезаны 2026-08-18
+  // вместе с документом. Остался фристайл-хром (микрофон, трек, строка, сцена,
+  // профили, кадр, запись): он гасит себя сам вне своей вкладки.
   renderSheetPill() {
     return (
       <Fragment>
         {renderFsBar(this)}
-        {renderSheets(this)}
-        {renderDocStatus(this)}
       </Fragment>
     );
   }
@@ -637,22 +644,19 @@ export default class Nakedlunch extends Component {
     window.addEventListener('keydown', this._keys);
     this._resize = () => this.moveTabInd();
     window.addEventListener('resize', this._resize);
-    // копирование: текст выделения собираем из модели (selectionText) —
-    // подписи кнопок в буфер не попадают (дизайн, строки 1461..1469)
-    this._copy = (e) => {
-      var txt = this.state.selAll ? this.docText() : this.selectionText();
-      if (txt == null) return;
-      e.preventDefault();
-      try { e.clipboardData.setData('text/plain', txt); } catch (err) {}
-      if (this.state.selAll) this.setState({ selAll: false });
-      this.flash('скопировано');
-    };
-    window.addEventListener('copy', this._copy);
-    // клик мимо попапов закрывает их (дизайн, строки 1470..1476)
+    // ПЕРЕХВАТ СОБЫТИЯ `copy` УБРАН 2026-08-18. Он собирал текст выделения из
+    // МОДЕЛИ документа (docText/selectionText), чтобы в буфер не попадали
+    // подписи кнопок строки — номер, буква рифмовки, звезда. Строк документа
+    // нет, кнопок на них нет, и подменять браузеру обычное копирование стало
+    // не только незачем, но и вредно: в ленте и панелях мышью копируют как
+    // везде. Копирование выделения ленты — своё, по ⌘C (methods.lenta.js).
+    //
+    // клик мимо попапов закрывает их (дизайн, строки 1470..1476).
+    // Ветка `[data-слово]` ушла 2026-08-18 вместе с попапом слова: она
+    // существовала ради одного — чтобы повторный клик по тому же слову
+    // ЗАКРЫВАЛ попап, а не гасил его pointerdown'ом и тут же открывал заново.
     this._away = (e) => {
       var t = e.target;
-      if (this.state.selAll) this.setState({ selAll: false });
-      if (this.state.pop && !(t.closest && (t.closest('[data-pop]') || t.closest('[data-idx]')))) this.setState({ pop: null });
       if (!(t.closest && t.closest('[data-pop]'))) { this.closeSub(); this.closePop(); }
     };
     window.addEventListener('pointerdown', this._away, true);
@@ -662,8 +666,6 @@ export default class Nakedlunch extends Component {
     // опрос фоновых работ: кружок в шапке (Раунд 39). До этого /api/status не
     // звал никто — прогресс сборки рифм и заливки книг был не виден вовсе
     this.statusStart();
-    // первый прогон строк — как в дизайне (mount не проходит через componentDidUpdate)
-    setTimeout(function () { self.renderRows(); }, 0);
     this.boot();
   }
   componentDidUpdate() {
@@ -672,9 +674,24 @@ export default class Nakedlunch extends Component {
     // его на каждое обновление можно и нужно — иначе крутилки отзывались бы
     // только на следующей строке.
     if (this.state.tab === 'fs' && this.fsВарп) this.fsВарп(this._lineTxt || '');
-    // Каретка после перестройки строк редактора: вставка блока убивает старые
-    // узлы вместе с выделением, и без этого она остаётся в контейнере.
-    if (this.state.tab === 'editor' && this.caretСпасти) this.caretСпасти();
+    // ПРОКРУТКА ВВЕРХ, А НЕ ВНИЗ (2026-08-18). Пока лента копилась, свежая
+    // строфа падала В КОНЕЦ, и её приходилось догонять прокруткой вниз.
+    // Теперь на экране одна: короткая стоит по центру и не листается вовсе,
+    // длинная обязана начинаться СВЕРХУ, а не с того места, до которого
+    // домотали предыдущую. Флаг ставит сама лента (lentaПоложить).
+    if (this._lentaВверх && this._lenta) {
+      this._lentaВверх = false;
+      this._lenta.scrollTop = 0;
+    }
+    // ИСТОРИЯ — ПО ФАКТУ ПОКАЗА, А НЕ ПО ФАКТУ ВЫДАЧИ ИЗ БУФЕРА. Владелец:
+    // «мы показываем то, что показываем, добавляется в историю, а то, чего нет
+    // на экране, не добавляется». Раньше отметка стояла в lentaПоложить, и это
+    // было верно, пока положенное оставалось на экране навсегда. При замене
+    // два нажатия в одном круге событий берут из буфера ДВЕ строфы, а
+    // перерисовка случается одна — первой на экране не будет ни кадра.
+    // Отметка после отрисовки и по номеру блока это закрывает
+    // (methods.lenta.js: lentaОтметитьПоказ).
+    if (this.lentaОтметитьПоказ) this.lentaОтметитьПоказ();
     // ЗАМОК ЗАПИСИ САМ СЕБЯ ОТПУСКАЕТ (Раунд 56).
     //
     // `data-reclock="1"` живёт на КОРНЕ ДОКУМЕНТА, а не в состоянии — и это
@@ -700,43 +717,28 @@ export default class Nakedlunch extends Component {
         else document.documentElement.removeAttribute('data-reclock');
       }
     }
-    // ЦЕПОЧКА ПЕРЕЖИВАЕТ ПЕРЕЗАПУСК (Раунд 55). Крутилки и каркас
-    // восстанавливались с самого Раунда 26, а цепочка — нет: собрал шесть
-    // звеньев, закрыл окно, и всё пропало, если не положил её на полку
-    // руками. Сторожим ОДНИМ местом, а не двадцатью вызовами по обработчикам:
-    // ключей у цепочки шесть, и забыть один из них — вопрос времени.
-    this.saveChainSoon();
+    // Здесь стоял saveChainSoon() — запись живой цепочки на диск на каждом
+    // обновлении (Раунд 55, «где закрыл, там открыл»). Убран 2026-08-18 вместе
+    // с цепочкой; каркас строфы и крутилки пишет saveGenProfileSoon со своих
+    // обработчиков, и лишнего прохода по componentDidUpdate им не нужно.
     // страховку enterFs из дизайна вернёт фаза 3 — заглушка здесь зациклила бы flash
     this.moveTabInd();
     // Ярус шапки пересчитываем и после обычной перерисовки: подписи меняются от
-    // содержимого (длинное имя листа, «сохранение…», статус генерации), а не
-    // только от размера окна. Цикла не будет: hdrFit трогает состояние, лишь
-    // когда порог реально перейдён, а вверх идти некуда после HDR_MAX.
+    // содержимого (статус генерации), а не только от размера окна. Цикла не
+    // будет: hdrFit трогает состояние, лишь когда порог реально перейдён, а
+    // вверх идти некуда после HDR_MAX.
     this.hdrFit();
     this.applyTheme();
-    // хуки миксинов — как в дизайне (строки 1502..1504); syncEngine придёт в фазе 3
+    // хуки миксинов — как в дизайне (строки 1502..1504)
     if (this.syncEngine) this.syncEngine();
-    this.renderRows();
-    this.restoreCaret();
-    // фокус-проходы дизайна (строки 1505..1516): свежесозданные поля
-    // переименования и строки документа
-    if (this._focusRename && this._root) {
-      var inp = this._root.querySelector(this._focusRename === 'folder' ? '[data-folder-input]' : '[data-title-input]');
-      if (inp) { inp.focus(); inp.select(); this._focusRename = null; }
-    }
-    if (this._focus != null && this._doc) {
-      var el = this._doc.querySelector('[data-idx="' + this._focus + '"]');
-      if (el) {
-        el.focus();
-        if (this._focusAt != null) this.setCaret(el, this._focusAt); else this.caretEnd(el);
-      }
-      this._focus = null; this._focusAt = null;
-    }
+    // Отсюда 2026-08-18 ушли renderRows() и restoreCaret() (императивная
+    // отрисовка строк документа и возврат каретки) и оба фокус-прохода —
+    // на поле переименования листа и на строку документа. Ни строк, ни листов,
+    // ни каретки больше нет.
   }
   componentWillUnmount() {
     window.removeEventListener('keydown', this._keys);
     window.removeEventListener('resize', this._resize);
-    window.removeEventListener('copy', this._copy);
     window.removeEventListener('pointerdown', this._away, true);
     if (this._hdrObs) { this._hdrObs.disconnect(); this._hdrObs = null; }
     if (this._uiRAF) cancelAnimationFrame(this._uiRAF);
@@ -744,9 +746,8 @@ export default class Nakedlunch extends Component {
     clearTimeout(this._flashMsgT);
     clearTimeout(this._popT);
     clearTimeout(this._subT);
-    // таймеры миксинов: автосохранение листа, подтверждение корзины,
-    // галочка профиля, очередь mark_shown
-    clearTimeout(this._saveT);
+    // таймеры миксинов: подтверждение очистки истории, галочка профиля,
+    // очередь mark_shown (автосохранение листа ушло вместе с листами)
     clearTimeout(this._confT);
     clearTimeout(this._flashT);
     clearTimeout(this._shownT);
@@ -773,7 +774,6 @@ export default class Nakedlunch extends Component {
     return (
       <div ref={this.rootRef} style={s(ROOT_STYLE)}>
         {st.ядроМолчит ? renderЯдроМолчит(this) : null}
-        {st.логАвария && !st.ядроМолчит ? renderАвария(this) : null}
         {SVG_FILTERS}
         <canvas aria-hidden="true" ref={this.uiGrainRef} style={s(uiGrainStyle)}></canvas>
         {renderHeader(this)}
@@ -782,9 +782,11 @@ export default class Nakedlunch extends Component {
               движок, камера и аудио-граф пересобирались бы на каждом
               переключении вкладки (контракт render.fs.jsx) */}
           {renderFsStage(this)}
-          {!isFs && renderDoc(this)}
+          {/* Колонка документа (renderDoc) стояла здесь до 2026-08-18.
+              Поверхность одна — лента. */}
+          {renderLenta(this)}
         </section>
-        {/* легенда-подвал — только в редакторе (в дизайне она внутри sc-if isEditor) */}
+        {/* легенда-подвал — вне фристайла (там свой хром и своя строка) */}
         {!isFs && renderLegend(this)}
         {renderFlash(this)}
       </div>
@@ -792,11 +794,13 @@ export default class Nakedlunch extends Component {
   }
 }
 
-// методы редактора, листов, панелей, генерации и фристайла — миксины на
-// прототипе, как в дизайне (один класс), но по модулям; tog у листов и панелей
-// одинаковый. fsGlueMethods идёт последним: связка знает про соседей (сцену,
-// профили) и намеренно доопределяет enterFs/loadEngine/syncEngine/onCardInput
-// fsRecMethods — последним: режим записи (фаза 4) знает про сцену, аудио-граф
-// и связку, и намеренно доопределяет всё, что касается записи
-Object.assign(Nakedlunch.prototype, docMethods, sheetsMethods, panelMethods, genProfileMethods,
-  shelfMethods, seriesMethods, genMethods, corpusMethods, fsMethods, fsProfileMethods, fsGlueMethods, fsRecMethods);
+// методы ленты, панелей, генерации и фристайла — миксины на прототипе, как в
+// дизайне (один класс), но по модулям.
+// docMethods, sheetsMethods и словоMethods убраны 2026-08-18 вместе со своими
+// файлами (редактор, листы, попап слова).
+// fsGlueMethods идёт предпоследним: связка знает про соседей (сцену, профили)
+// и намеренно доопределяет enterFs/loadEngine/syncEngine/onCardInput.
+// fsRecMethods — последним: режим записи знает про сцену, аудио-граф и связку,
+// и намеренно доопределяет всё, что касается записи
+Object.assign(Nakedlunch.prototype, lentaMethods, panelMethods, genProfileMethods,
+  shelfMethods, genMethods, corpusMethods, fsMethods, fsProfileMethods, fsGlueMethods, fsRecMethods);

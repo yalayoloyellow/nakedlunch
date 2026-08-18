@@ -47,6 +47,7 @@
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -91,6 +92,32 @@ STATUS_SECONDS = 30
 _CONTENT_POS = {"NOUN", "ADJF", "VERB", "INFN"}
 
 
+# САЙДКАР ПИШЕТ ТОЛЬКО ПРОГРАММА, А НЕ ИМПОРТ (2026-08-18).
+#
+# `reban()`, `build_потоком()` и `jsonl` выглядят как чистые преобразования, но
+# каждое писало ГЛОБАЛЬНЫЙ файл состояния `core/data/nl_rhyme.status.json`. И
+# это не теория: `tests/test_select_speed.py` зовёт `reban()` напрямую с
+# словарём из ОДНОЙ записи, pytest идёт без `NAKEDLUNCH_HOME`, — и в боевом
+# каталоге пользователя оставался `{"cached": 1, "state": "running", "mode":
+# "reban"}` с номером умершего процесса. Навсегда: строку «done» пишет только
+# `main()`, которую тест не зовёт.
+#
+# Комментарий «Раунд 58» в `api/server.py` описывает ровно этот файл и годами
+# лечил его СИМПТОМ, считая оборванным пересчётом. Пересчёта не было — был
+# прогон тестов.
+#
+# Поэтому запись включается явным флагом, и включает его только `main()`.
+# Импорт, тест, REPL — не пишут ничего.
+_ПИШЕМ_СТАТУС = False
+
+
+def писать_статус(включить: bool) -> None:
+    """Разрешить или запретить запись сайдкара. Зовёт `main()`; тестам нужна,
+    чтобы проверить сам формат записи, не пачкая боевой каталог."""
+    global _ПИШЕМ_СТАТУС
+    _ПИШЕМ_СТАТУС = bool(включить)
+
+
 def _write_status(cached: int, state: str, mode: str, error: str | None = None) -> None:
     """Sidecar file api/server.py's /api/status reads — separate from OUT so
     polling status doesn't mean re-parsing a 20MB+ cache on every request. No
@@ -109,10 +136,19 @@ def _write_status(cached: int, state: str, mode: str, error: str | None = None) 
     # Каталог может не существовать: на новой машине программа ещё ничего не
     # писала. Писатель обязан создать своё место сам — иначе первый же отчёт о
     # прогрессе роняет сборку, и снаружи это выглядит как «ничего не началось».
+    if not _ПИШЕМ_СТАТУС:
+        return
     STATUS.parent.mkdir(parents=True, exist_ok=True)
     STATUS.write_text(json.dumps({
         "cached": cached, "state": state, "mode": mode,
         "error": error, "updated_at": time.time(),
+        # НОМЕР ПРОЦЕССА — чтобы «идёт» можно было ПРОВЕРИТЬ, а не поверить.
+        # Одного сердцебиения мало в обе стороны: уснувший ноутбук делает живую
+        # сборку «вставшей» (и сервер вправе запустить вторую поверх той же
+        # записи), а убитая системой — ещё три минуты выглядит здоровой. Номер
+        # процесса отвечает на это прямо; читатель ходит через
+        # `server._сборка_идёт`, где номер и сердцебиение судят вместе.
+        "pid": os.getpid(),
     }, ensure_ascii=False), encoding="utf-8")
 
 
@@ -360,19 +396,92 @@ def build(existing: dict, mode: str = "incremental") -> dict:
             n_skipped += 1
             continue
 
-        tokens = text.split()
-        idx = _last_content_index(morph, tokens) if tokens else None
-        if idx is None:
-            out[text] = {"key": "", "span": None, **_extra_fields(text)}
-            n_empty += 1
-            continue
-
-        surface = _clean(tokens[idx])
-        key = _word_rhyme_key(acc, surface, tokens[idx])
-        out[text] = {"key": key, "span": _highlight_span(text, idx, surface, key), **_extra_fields(text)}
-        n_new += 1
+        поля, пусто = _поля_фрагмента(morph, acc, text)
+        out[text] = поля
+        n_empty += пусто
+        n_new += (0 if пусто else 1)
 
     return out
+
+
+def _поля_фрагмента(morph, acc, text: str) -> tuple[dict, bool]:
+    """Поля одного фрагмента: (что записать, был ли фрагмент без ключа).
+
+    ОДНА КОПИЯ НА ОБА ПУТИ (Раунд 62). Расчёт стоял прямо в теле `build`, и
+    когда рядом появилась потоковая сборка, второй такой же кусок был бы ровно
+    тем «вторым источником правды», от которого проект уже горел трижды."""
+    tokens = text.split()
+    idx = _last_content_index(morph, tokens) if tokens else None
+    if idx is None:
+        return {"key": "", "span": None, **_extra_fields(text)}, True
+    surface = _clean(tokens[idx])
+    key = _word_rhyme_key(acc, surface, tokens[idx])
+    return ({"key": key, "span": _highlight_span(text, idx, surface, key),
+             **_extra_fields(text)}, False)
+
+
+def build_потоком(mode: str = "incremental") -> int:
+    """Сборка ПОТОКОМ — в тот файл, который читают.
+
+    ПОЧЕМУ ЭТО ПОЯВИЛОСЬ. Раунд 57 перевёл кэш на построчный формат, и читатели
+    ушли на `nl_rhyme.jsonl` (`кэш.поток` предпочитает его). А инкрементальная
+    сборка — та самая, что запускается САМА при добавлении источника
+    (`api/server.py`) — осталась на старом `nl_rhyme.json`: читала его целиком в
+    память и туда же писала. То есть **залитая книга ложилась в файл, который
+    никто не читает**, и в выдачу не попадала.
+
+    На 2026-08-13 файлы ещё совпадали (2 434 632 записи в обоих, книг с 6
+    августа не заливали) — то есть данные не потеряны, но следующая заливка
+    ушла бы в пустоту.
+
+    Заодно снимается вторая беда того же места: старый путь держал в памяти
+    словарь на 2.4 млн записей (около 6 ГБ) — из-за него OOM-киллер уже забирал
+    процесс. Здесь память постоянная: строка вошла, строка вышла.
+
+    `mode="full"` — не читать прежнее вовсе, пересчитать всё."""
+    import кэш
+
+    _write_status(0, "running", mode)
+    morph = pymorphy3.MorphAnalyzer()
+    acc = акцентуатор()
+    store = nlbridge.open_store()
+    fragments = store.get_all_fragments()
+
+    t0 = time.time()
+    известные: set[str] = set()
+    n_new = n_empty = n_skipped = 0
+    with кэш.Писатель() as п:
+        if mode != "full":
+            # Переливаем прежние записи как есть и попутно узнаём, что уже
+            # посчитано. Множество текстов — единственное, что держится в
+            # памяти: около 300 МБ против шести гигабайт у старого пути.
+            for текст, поля in кэш.поток():
+                п.запиши(текст, поля)
+                известные.add(текст)
+                if п.записано % 500_000 == 0:
+                    _write_status(п.записано, "running", mode)
+        print(f"{len(fragments)} фрагментов всего, {len(известные)} уже в кэше",
+              flush=True)
+        for i, f in enumerate(fragments):
+            text = f["text"]
+            if text in известные:
+                n_skipped += 1
+                continue
+            известные.add(text)
+            поля, пусто = _поля_фрагмента(morph, acc, text)
+            п.запиши(text, поля)
+            n_empty += пусто
+            n_new += (0 if пусто else 1)
+            if (n_new + n_empty) % 20_000 == 0:
+                дт = time.time() - t0
+                print(f"  {i}/{len(fragments)} ({дт:.0f}с) — новых {n_new}, "
+                      f"без ключа {n_empty}, было {n_skipped}", flush=True)
+                _write_status(п.записано, "running", mode)
+        всего = п.записано
+    print(f"готово: {всего} записей ({n_new} новых, {n_empty} без ключа) за "
+          f"{time.time() - t0:.0f}с → {кэш.СТРОЧНЫЙ}", flush=True)
+    _write_status(всего, "done", mode)
+    return всего
 
 
 def в_строчный() -> int:
@@ -511,6 +620,8 @@ def rekey(existing: dict) -> dict:
 
 
 def main() -> int:
+    # Программа — единственный, кто вправе писать сайдкар. См. `_ПИШЕМ_СТАТУС`.
+    писать_статус(True)
     parser = argparse.ArgumentParser()
     parser.add_argument("--full", action="store_true",
                          help="ignore the existing cache and recompute EVERY "
@@ -578,6 +689,22 @@ def main() -> int:
         _write_status(len(out), "done", "rekey")
         return 0
     mode = "full" if args.full else "incremental"
+
+    # ПОСТРОЧНЫЙ ФОРМАТ — ГЛАВНЫЙ ПУТЬ (Раунд 62). Здесь была развилка только у
+    # `--reban`, а обычная сборка (и та, что запускается сама при заливке книги)
+    # шла старым файлом — то есть писала туда, где её никто не читает. Теперь
+    # развилка одна и стоит первой.
+    import кэш as _кэш
+    if _кэш.есть_строчный():
+        try:
+            build_потоком(mode)
+        except Exception as e:
+            _write_status(0, "error", mode, error=str(e))
+            raise
+        except BaseException:
+            _write_status(0, "error", mode, error="сборка прервана")
+            raise
+        return 0
 
     existing = {} if args.full else (json.loads(OUT.read_text(encoding="utf-8")) if OUT.exists() else {})
     try:

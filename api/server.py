@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import threading
 import subprocess
@@ -23,23 +24,16 @@ sys.path.insert(0, str(ROOT / "core"))
 
 from flask import Flask, Response, request, send_from_directory  # noqa: E402
 
-import chain_profiles  # noqa: E402  (полка цепочек-слепков, Раунд 50 — см. core/chain_profiles.py)
 import blacklist      # noqa: E402  (чёрный список слов, Раунд 57)
 import clean          # noqa: E402  (the single validation layer — all input goes through it)
 import embeddings     # noqa: E402  (navec theme relevance, see core/embeddings.py)
 import filters        # noqa: E402
 import generate       # noqa: E402
 import knob_profiles  # noqa: E402  (полка профилей настроек, Раунд 50 — см. core/knob_profiles.py)
-import series as series_mod  # noqa: E402  (полка серий, Раунд 53 — см. core/series.py)
-import series_run  # noqa: E402  (прогон серии — см. core/series_run.py)
-import curve  # noqa: E402  (кривая как поставщик крутилок звеньев — см. core/curve.py)
 import nlbridge       # noqa: E402  (read-only bridge into ~/nakedlunch, see core/nlbridge.py)
-import pipeline       # noqa: E402  (пулы по звеньям + склейка, см. core/pipeline.py)
-import refprofile     # noqa: E402  (профиль референсного текста, Раунд 45)
 import recorder       # noqa: E402  (каталог записей фристайла, см. core/recorder.py)
 import corpus as corpus_mod  # noqa: E402  (RETENTION_PRESETS)
 import settings as settings_mod  # noqa: E402  (persisted knob positions, see core/settings.py)
-import sheets                    # noqa: E402  (листы — .md-хранилище в ~/Documents/nakedlunch/тексты, см. core/sheets.py)
 import stanza_profiles           # noqa: E402  (builtin + custom stanza forms, see core/stanza_profiles.py)
 import stats as stats_mod    # noqa: E402  (analytics log, see core/stats.py)
 import nlindex               # noqa: E402  (фоновый прогрев карты «текст → номер»)
@@ -111,11 +105,30 @@ def _записать_итог(ответ):
     return ответ
 
 # One authoritative corpus for the single window; the browser is a mirror.
+#
+# ЧТЕНИЕ НА ИМПОРТЕ ОСТАВЛЕНО — ПО ЗАМЕРУ (2026-08-18). Когда с уровня модуля
+# убирали ЗАПИСЬ (см. `_поднять_прогрев`), встал вопрос и про это чтение.
+# Замерено на боевом файле пользователя (789 812 байт, 4 649 записей истории,
+# 57 избранного): **7.1–9.6 мс**. И оно ничего не создаёт — `Corpus.load` на
+# отсутствующем файле возвращает пустой корпус, а каталог заводит только
+# `save`. То есть импорт остаётся чистым читателем.
+#
+# Ленивая загрузка стоила бы правки 34 обращений `CORPUS.` в этом файле —
+# тридцать четыре шанса ошибиться ради десяти миллисекунд, которых никто не
+# заметит. Опасна была запись, а не чтение; её и убрали.
 CORPUS = Corpus.load()
 
 # Load the forms table + wordfreq's frequency data once at startup so every
 # /api/generate request is fast from the first one, not just the second.
-журнал.запись("сервер", "старт сервера")
+#
+# «СТАРТ СЕРВЕРА» ПИШЕТ ТОТ, КТО ЕГО СТАРТУЕТ (2026-08-18). Строка стояла
+# ровно здесь, на уровне модуля, — и в журнал пользователя её дописывал ЛЮБОЙ
+# импорт файла, в том числе прогон тестов. Журнал, заведённый чтобы объяснять
+# причины, утверждал запуск, которого не было: `tests/conftest.py` описывает,
+# как эта смесь уезжала в архив «аварийных сессий». Теперь запись живёт в
+# `main()` — там, где действительно открывается порт. Ровно то же правило, что
+# у сайдкара сборщика: «пишет только программа, а не импорт» (см.
+# tools/build_nl_rhyme.py, `_ПИШЕМ_СТАТУС`).
 generate.warm_caches()
 filters.warm_caches()
 embeddings.warm_caches()   # navec (~0.3s) — see core/embeddings.py
@@ -148,6 +161,39 @@ wordsuggest.warm_caches()  # rhyme_index.json — попап по слову
 _ПРОГРЕВ: dict = {"этап": "корпус", "начат": time.time(), "готов": False, "этапы": []}
 
 
+def _перепривязать_историю() -> None:
+    """Свести историю и избранное с нынешним составом корпуса — РАЗ на штамп.
+
+    ЗАЧЕМ ЗДЕСЬ. Подрезка корпуса меняет сами строки, а история сверяется по
+    тексту — 1 017 записей из 4 571 (22.2%) перестали находиться, и «показанное
+    не возвращается» на них молча перестало действовать (замер 2026-08-18,
+    BACKLOG.md п.3). Разбор, почему опорой стал не номер строки, а подрезанный
+    текст, — в `core/corpus.py`, у самого `перепривязать`.
+
+    ПОЧЕМУ В ПРОГРЕВЕ, А НЕ НА УРОВНЕ МОДУЛЯ. Проходу нужны карта «текст →
+    номер» (9.8 с) и загруженный индекс: на уровне модуля он либо платил бы
+    этим временем за ОТКРЫТИЕ ПОРТА (окно ждёт здоровья сервера 40 с — Раунд 54
+    ровно про то, как в этот потолок однажды не уложились), либо строил бы
+    карту второй раз. Здесь он идёт следом за этапом, который эту карту и
+    греет, — то есть бесплатно.
+
+    Пишет на диск только когда что-то поменялось: `перепривязать` метит записи
+    в памяти, сохранение — здесь."""
+    idx = nlindex.load()
+    if idx is None:
+        return                      # индекса нет — сверять не с чем
+    тексты = nlindex.text_ids(idx)
+    итог = CORPUS.перепривязать(nlindex.штамп(idx), тексты.__contains__,
+                                nlindex.Index.подрезать_хвост)
+    if not итог["нужна"]:
+        return
+    CORPUS.save()
+    журнал.запись("история",
+                  f"перепривязка к корпусу {итог['штамп']}: на месте "
+                  f"{итог['на_месте']}, перепривязано {итог['история']} истории "
+                  f"и {итог['избранное']} избранного, сирот {итог['сироты']}")
+
+
 def _прогрев() -> None:
     def этап(имя, работа):
         _ПРОГРЕВ["этап"] = имя
@@ -163,20 +209,42 @@ def _прогрев() -> None:
         print(f"nakedlunch: прогрев «{имя}» — {сек} с", flush=True)
 
     def карты():
+        # ЧТО ИМЕННО ГРЕТЬ — ЗНАЕТ nlindex, А НЕ РОУТ (Раунд 62). Здесь стоял
+        # свой список из двух строк, и он дважды отставал от того, что
+        # генерация считает на самом деле: сперва забыли маску целостности
+        # (9.2 с), потом маску чёрного списка (**17.4 с** — столько стоила
+        # первая генерация после КАЖДОГО запуска, при уже написанном «прогрев
+        # завершён»). Два списка одного и того же расходятся всегда; список
+        # теперь один, и живёт он там же, где то, что он греет.
         idx = nlindex.load()
         if idx is None:
             return           # индекса нет — генерация идёт старым путём
-        nlindex.text_ids(idx)
-        idx.whole_mask()
+        nlindex.прогреть(idx)
 
     этап("корпус", nlbridge.open_store)
     этап("карты индекса", карты)
+    этап("перепривязка истории", _перепривязать_историю)
     _ПРОГРЕВ["готов"] = True
     print("nakedlunch: прогрев завершён за "
           f"{round(time.time() - _ПРОГРЕВ['начат'], 1)} с", flush=True)
 
 
-threading.Thread(target=_прогрев, name="nl-warm", daemon=True).start()
+# ПРОГРЕВ ПОДНИМАЕТ ТОТ, КТО ПОДНИМАЕТ СЕРВЕР (2026-08-18). Поток стартовал
+# ЗДЕСЬ, на уровне модуля, — то есть его запускал любой `import server`, в том
+# числе из теста. Пока прогрев только грел, это стоило лишь времени; с
+# появлением этапа «перепривязка истории» он начал ПИСАТЬ: `CORPUS.save()`
+# переписывает избранное и историю пользователя. Между голым импортом и
+# перезаписью копилки человека стояла ровно одна проверка совпадения штампа —
+# а в момент перепечи корпуса штампы как раз НЕ совпадают.
+#
+# Это та же болезнь, что «старт сервера» на уровне модуля (см. warm_caches
+# выше), только цена другая: там враньё в журнале, здесь запись в чужие данные.
+# Лечение то же — работа живёт в `main()`, рядом с открытием порта. Фоновым
+# потоком она остаётся: разбор 550 МБ до порта однажды уже не уложился в
+# сорокасекундное ожидание окна (Раунд 54), и сторож этого свойства —
+# `test_boot.py::test_korpus_ne_gruzitsya_na_urovne_modulya`.
+def _поднять_прогрев() -> None:
+    threading.Thread(target=_прогрев, name="nl-warm", daemon=True).start()
 
 
 def _nl():
@@ -207,7 +275,56 @@ def _nl_ready() -> bool:
 _NL_RHYME_STATUS_PATH = пути.артефакт("nl_rhyme.status.json")
 _NL_RHYME_SCRIPT = ROOT / "tools" / "build_nl_rhyme.py"
 _NL_RHYME_STALE_SECONDS = 180   # no checkpoint in 3min → probably not actively running
+# Номер процесса переживает перезагрузку и достаётся другому — значит «живой
+# номер» сам по себе не доказательство. Верхняя граница молчания: живой номер
+# плюс тишина дольше этого читается как чужой процесс, занявший номер.
+_NL_RHYME_ЗАБЫТЬ_СЕКУНД = 6 * _NL_RHYME_STALE_SECONDS
 _NL_RHYME_PROC = None            # this process's own handle — avoids double-spawn
+
+
+def _процесс_жив(pid) -> bool | None:
+    """Существует ли процесс с этим номером. None — номера нет или судить
+    нечем; тогда решает сердцебиение, как решало раньше."""
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return None
+    if pid <= 0:
+        return None
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True                 # чужой, но существует
+    except Exception:
+        return None
+    return True
+
+
+def _сборка_идёт(s: dict) -> bool:
+    """Идёт ли сборка ПРЯМО СЕЙЧАС. Единственный судья на оба вопроса: можно ли
+    запускать новую (иначе две сессии ONNX дерутся за одну запись) и что писать
+    в шапку.
+
+    Раньше судило одно сердцебиение, и оно ошибалось в ОБЕ стороны. Ноутбук
+    уснул на четыре минуты — живая сборка объявлена вставшей, и сервер вправе
+    запустить вторую поверх той же записи. Сборку убила система за память — она
+    ещё три минуты выглядит здоровой, и всё это время «пересчитать» молча
+    отказывает.
+
+    Номер процесса отвечает прямо: нет процесса — нечему идти, и это видно в ту
+    же секунду. Но номер переживает перезагрузку и достаётся другому, поэтому
+    живой номер при долгом молчании доверия не получает."""
+    if s.get("state") != "running":
+        return False
+    молчит = time.time() - float(s.get("updated_at") or 0)
+    жив = _процесс_жив(s.get("pid"))
+    if жив is None:                 # сайдкар от прежней версии — как раньше
+        return молчит < _NL_RHYME_STALE_SECONDS
+    if not жив:
+        return False
+    return молчит < _NL_RHYME_ЗАБЫТЬ_СЕКУНД
 
 
 def _nl_rhyme_ensure_running(full: bool = False, reban: bool = False) -> None:
@@ -244,7 +361,7 @@ def _nl_rhyme_ensure_running(full: bool = False, reban: bool = False) -> None:
     if _NL_RHYME_STATUS_PATH.exists():
         try:
             s = json.loads(_NL_RHYME_STATUS_PATH.read_text(encoding="utf-8"))
-            if s.get("state") == "running" and time.time() - s.get("updated_at", 0) < _NL_RHYME_STALE_SECONDS:
+            if _сборка_идёт(s):
                 # ВЕРНУТЬ False, А НЕ ПРОСТО ВЫЙТИ (Раунд 56). Нажатие «прогнать
                 # всё заново» при уже идущей сборке исчезало БЕЗ СЛЕДА: ни отказа,
                 # ни отметки в интерфейсе. Молчаливый отказ хуже отказа.
@@ -378,7 +495,12 @@ def _nl_index_ensure_running() -> None:
     # Испекли — но процесс держит в памяти СТАРЫЙ индекс и старую карту
     # «текст → номер». Без перезагрузки новые строки появились бы только
     # после перезапуска окна.
-    _после(_NL_INDEX_PROC, lambda: (nlindex.reload(), _forget_pool_mask()))
+    #
+    # Перепривязка идёт СРАЗУ ЗА перезагрузкой, а не ждёт следующего запуска:
+    # именно перепечь и меняет строки, а между ней и перезапуском пользователь
+    # успевает нагенерировать — и получил бы уже показанное (2026-08-18).
+    _после(_NL_INDEX_PROC, lambda: (nlindex.reload(), _forget_pool_mask(),
+                                    _перепривязать_историю()))
 
 
 _NL_TEXTS_CACHE: tuple | None = None      # (сколько фрагментов, множество текстов)
@@ -481,6 +603,9 @@ def _подхватить_свежий_индекс() -> None:
         return
     if на_диске.get("built_at") and на_диске["built_at"] != idx.built_at:
         nlindex.reload()
+        # Индекс испёк кто-то другой — строки могли измениться так же, как при
+        # своей перепечи, значит и историю надо свести заново.
+        _перепривязать_историю()
 
 
 def _nl_index_status() -> dict | None:
@@ -626,7 +751,7 @@ def _nl_rhyme_status() -> dict | None:
         return {**base, "state": "error", "done": 0, "pct": 0, "detail": "статус-файл повреждён"}
 
     state = s.get("state", "running")
-    if state == "running" and time.time() - s.get("updated_at", 0) > _NL_RHYME_STALE_SECONDS:
+    if state == "running" and not _сборка_идёт(s):
         state = "stalled"
     # МЁРТВЫЙ САЙДКАР НЕ ИМЕЕТ ПРАВА ВРАТЬ ВЕЧНО (Раунд 58).
     #
@@ -680,30 +805,18 @@ def _nl_rhyme_status() -> dict | None:
     return {**base, "label": label, "state": state, "done": done, "pct": pct, "detail": detail}
 
 
-# --- пайплайн: замок + прогресс (ФАЗА 1, PLAN.md) --------------------------
-# Один прогон за раз: пайплайн — это 6-8 внутренних генераций плюс beam-
-# перебор, два параллельных прогона дрались бы за CPU и глобальные сторы
-# (Flask threaded=True — второй запрос ПРИДЁТ параллельно). Неблокирующий
-# acquire → честный 409, а не молчаливая очередь, в которой второй клик
-# ждал бы минуту непонятно чего.
-_PIPELINE_LOCK = threading.Lock()
-# Прогресс — модульный dict в памяти процесса (по образцу _nl_rhyme_status,
-# но без файла-сайдкара: прогон живёт и умирает вместе с процессом, чужим
-# процессам этот статус не нужен). Пишет его ТОЛЬКО поток прогона, /api/status
-# только читает — гонок нет.
-_PIPELINE_PROGRESS: dict = {"state": None, "done": 0, "total": 0, "detail": ""}
-
-
-def _pipeline_status() -> dict | None:
-    """Элемент /api/status на время прогона (и после — с state='done', чтобы
-    топбар показал завершение, а не молча исчез). None до самого первого
-    прогона — несуществующая работа не заслуживает строки статуса."""
-    if _PIPELINE_PROGRESS["state"] is None:
-        return None
-    p = _PIPELINE_PROGRESS
-    pct = round(100 * p["done"] / p["total"]) if p["total"] else 0
-    return {"id": "pipeline", "label": "Пайплайн", "state": p["state"],
-            "done": p["done"], "total": p["total"], "pct": pct, "detail": p["detail"]}
+# НАДГРОБИЕ 2026-08-18: ЗАМОК И ПРОГРЕСС ПАЙПЛАЙНА ВЫРЕЗАНЫ ------------------
+# Ушли `_PIPELINE_LOCK`, `_PIPELINE_STOP`, `_PIPELINE_PROGRESS`,
+# `_pipeline_status` — вместе со всей цепью (core/pipeline.py) и серией.
+# Основание — замер журнала событий за 10 живых дней: 29 прогонов цепи против
+# 587 одиночных строф (1 к 20) при медиане цепи 24.2 с и 98.7 с на девяностом
+# процентиле. Серия в журнал не писалась вовсе, числа по ней нет: её убрал
+# сам владелец решением от 2026-08-18 («строфа единственным режимом»), и это
+# решение, а не замер.
+#
+# Отсюда и всё остальное в этом файле: замок был нужен, потому что один прогон
+# цепи ел CPU минутами. Строфа считается за доли секунды и очереди не просит —
+# ни замка, ни события останова, ни строки в /api/status.
 
 
 def _nl_pool_counts() -> tuple[int, int, int]:
@@ -762,7 +875,7 @@ def api_status():
     """Background-job status for the topbar indicator — a plain list so a
     future build step just adds another entry here, no frontend change."""
     items = [x for x in [_nl_store_status(), _import_status(), _nl_rhyme_status(),
-                         _nl_index_status(), _pipeline_status(), _series_status()]
+                         _nl_index_status()]
              if x is not None]
     # СЧЁТЧИК ОШИБОК ЕДЕТ С ОПРОСОМ, А НЕ ОТДЕЛЬНЫМ ЗАПРОСОМ (Раунд 59). Опрос
     # и так идёт постоянно; заводить ради двух чисел вторую петлю значило бы
@@ -933,6 +1046,39 @@ def api_nl_funnel():
     return {"ready": True, **данные}
 
 
+@app.post("/api/pool/shape")
+def api_pool_shape():
+    """ФОРМА ПУЛА — из чего сейчас будет выбираться, ДО нажатия.
+
+    Замер 3.7 закрыл живой предпросмотр выдачи: прогон стоит 185 мс без темы и
+    878 мс с темой, а подвыборка отвергнута (дорогое считается по всему корпусу,
+    пул только маскирует потом). Значит осязание до нажатия несёт форма пула, и
+    вот она дёшева: **2.3–9.7 мс** на полном индексе, замерено на пяти
+    положениях ручки. Это укладывается в движение ползунка, в отличие от прогона.
+
+    Отдаёт только те три формы, что ЖИВЫ по замеру (см. nlindex.форма_пула);
+    мёртвые не отдаются нарочно, чтобы интерфейсу нечем было врать движением."""
+    payload = request.get_json(force=True, silent=True) or {}
+    if isinstance(payload.get("params"), dict) or payload.get("mode"):
+        knobs = clean.knobs(clean.knobs_from_profile(
+            {"name": "запрос", "mode": payload.get("mode"), "params": payload.get("params")}))
+    else:
+        knobs = clean.knobs(payload.get("knobs"))
+    idx = nlindex.load()
+    if idx is None or not _nl_ready():
+        # Честный отказ вместо нулей: нулевой пул и «ещё не готово» — разные
+        # сообщения, и путать их значит врать о причине.
+        return {"готово": False}
+    пул = _nl().get_active_pool()
+    форма = nlindex.форма_пула(
+        idx, pool_mask=nlindex.pool_mask(idx, пул),
+        hidden_mask=nlindex.mask_of(idx, CORPUS.hidden_set()),
+        ворота=nlindex.ворота_банальности(knobs["banal"]),
+        no_mat=bool(knobs.get("no_mat", False)), only_mat=bool(knobs.get("only_mat", False)),
+        clausula=int(knobs.get("clausula", 0)))
+    return {"готово": True, **форма}
+
+
 @app.post("/api/generate")
 def api_generate():
     t0 = time.time()
@@ -965,7 +1111,8 @@ def api_generate():
     # питоновский двойник, объявленный «единственным местом», не вызывался
     # нигде — два независимых списка инверсий, которые уже расходились.
     # Ядерный `knobs` по-прежнему принимается: им ходят тесты и внутренние
-    # вызовы домена (core/pipeline.py собирает пулы уже готовыми кнобами).
+    # вызовы домена (2026-08-18: цепь, которая звала домен готовыми кнобами,
+    # вырезана — остались тесты, и ради них ветка живёт).
     if isinstance(payload.get("params"), dict) or payload.get("mode"):
         knobs = clean.knobs_from_profile({"name": "запрос", "mode": payload.get("mode"),
                                           "params": payload.get("params")})
@@ -990,6 +1137,14 @@ def api_generate():
     gen_active = knobs["nl_mix"] < 1.0
     nl_active = knobs["nl_mix"] > 0 and _nl() is not None
 
+    # СЕМЯ ВЫБИРАЕТСЯ ЗДЕСЬ, ДО ОБОИХ КОНВЕЙЕРОВ (Раунд 62). Их два, и оба
+    # случайны: грамматический генератор ниже и каскад отбора в filters.run.
+    # Выбери число внутри каскада — грамматическая половина осталась бы
+    # неповторимой, и ответ называл бы семенем то, по чему собиралась лишь
+    # часть выдачи. Пришло от клиента — повторяем прежний прогон; не пришло —
+    # снимаем новое и говорим какое (result["seed"]).
+    семя = filters.семя_прогона(clean.семя(payload.get("seed")))
+
     lines = []
     if gen_active:
         # n scales with the SHORTLIST, not the dictionary (see DECISIONS.md
@@ -998,7 +1153,7 @@ def api_generate():
         # 32k-lemma vocab; the old vocab-scaled formula only bought 10-40x
         # slower requests, not better output).
         n = max(2000, int(knobs["shortlist"]) * 50)
-        lines = generate.generate(tags, n=n)
+        lines = generate.generate(tags, n=n, seed=семя)
 
     nl_frags = []
     if nl_active:
@@ -1021,7 +1176,7 @@ def api_generate():
         nl_frags = _nl().get_active_pool()
 
     result = filters.run(lines, knobs, CORPUS, nl_fragments=nl_frags, rhyme=rhyme, tags=tags, forced=forced,
-                         stanza=stanza)
+                         stanza=stanza, семя=семя)
     _подписать_источники(result.get("shortlist") or [])
     # NOT marked into history here (2026-07-14 — was `CORPUS.mark_seen(...)`
     # unconditionally on every generate). History now records what's actually
@@ -1051,8 +1206,30 @@ def api_generate():
     # also carries old-name aliases (explore/meter/banal/nl_mix) for the same
     # values plus non-slider fields (shortlist), which would double-count and
     # add a meaningless average if logged as-is.
+    #
+    # ЧЕТЫРЁХ КРУТИЛОК ЗДЕСЬ НЕ БЫЛО, И ЭТО СТОИЛО ЗАМЕРА (2026-08-18).
+    # Писались пять из девяти. Молчали «Мат», «Клаузула», «Связность» и
+    # «Повтор» — то есть треть настроек, и про них журнал не знал ничего.
+    # Замер девяти крутилок это и обнаружил: по этим четырём он не смог сказать
+    # ни слова, все выводы пришлось пометить «предположение» вместо
+    # «измерено». Ручка, о которой журнал молчит, невидима ровно тогда, когда
+    # решают, жива она или нет.
+    #
+    # ИМЕНА ЯДЕРНЫЕ, А НЕ ЭКРАННЫЕ, и список сверяется с `clean.KNOB_SPEC`
+    # (единственный источник правды об именах крутилок) — сторож
+    # `test_stats_knobs.py` не даёт им разойтись снова: заведут десятую ручку —
+    # тест покраснеет, а не журнал промолчит.
+    #   Мат → mat_share · Клаузула → clausula · Связность → flow ·
+    #   Повтор → repeat · Диссонанс → cohesion (ядро держит консонанс) ·
+    #   Источники → real_text · Точность рифм → rhyme_precision ·
+    #   Мелодичность → melody · Банальность → banality.
+    # `classic` не крутилка, а РЕЖИМ (алгоритм/классика), и пишется он не
+    # вместо девяти, а вдобавок: без него неясно, к какому режиму относятся
+    # остальные числа.
     ui_knobs = {k: knobs[k] for k in ("melody", "cohesion", "banality", "real_text",
-                                       "rhyme_precision", "classic") if k in knobs}
+                                       "rhyme_precision", "classic",
+                                       "mat_share", "clausula", "flow", "repeat")
+                if k in knobs}
     # ПОЧИНКА: воронка ПЛОСКАЯ, как её отдаёт filters.run. Здесь стояли три
     # выражения по ВЛОЖЕННОМУ виду (funnel["gen"]["used"]) — его давал
     # `_rich_funnel`, вырезанный из горячего пути тем же раундом. То есть
@@ -1072,99 +1249,19 @@ def api_generate():
     return result
 
 
-@app.post("/api/pipeline/profile")
-def api_pipeline_profile():
-    """Референс → профиль и готовая цепочка (Раунд 45).
-
-    Требование: по референтному тексту и проценту референтности пайплайн сам
-    назначает себе структуру. Роут
-    ничего не генерирует и ничего не сохраняет — только меряет текст и
-    отдаёт то, чем его можно повторить."""
-    payload = request.get_json(force=True, silent=True) or {}
-    text = payload.get("text") or ""
-    if not text.strip():
-        return {"error": "пустой референс"}, 400
-    try:
-        ref = float(payload.get("ref", 1.0))
-    except (TypeError, ValueError):
-        ref = 1.0
-    try:
-        prof = refprofile.профиль(text)
-    except clean.BadInput as e:
-        return {"error": str(e)}, 400
-    out = refprofile.цепочка(prof, ref)
-    out["profile"] = prof
-    return out
-
-
-@app.post("/api/pipeline/curve")
-def api_pipeline_curve():
-    """Кривая → крутилки на каждое звено (Раунд 53).
-
-    Тот же слот, что у /api/pipeline/profile: фронт кладёт ответ туда же и
-    разбирает тем же резолвером. Разница только в источнике — там замеренный
-    текст, здесь форма."""
-    payload = request.get_json(force=True, silent=True) or {}
-    try:
-        n = int(float(payload.get("n", 0)))
-    except (TypeError, ValueError):
-        n = 0
-    if n <= 0:
-        return {"error": "нечего вести: в цепочке нет звеньев"}, 400
-    try:
-        сила = float(payload.get("сила", payload.get("force", 1.0)))
-    except (TypeError, ValueError):
-        сила = 1.0
-    форма = payload.get("форма") or payload.get("shape") or curve.ФОРМЫ[0]
-    out = curve.цепочка(n, форма, сила)
-    out["плотность"] = curve.плотность(n, форма, сила)
-    return out
-
-
-@app.post("/api/pipeline/run")
-def api_pipeline_run():
-    """Пайплайн (ФАЗА 1): пулы по звеньям + комбинаторная склейка — см.
-    core/pipeline.py. Роут синхронный, как /api/generate (Flask threaded —
-    /api/status опрашивается параллельными запросами и видит прогресс);
-    замок отдаёт 409 второму прогону вместо очереди."""
-    payload = request.get_json(force=True, silent=True) or {}
-    try:
-        spec = clean.pipeline_spec(payload)
-    except clean.BadInput as e:
-        return {"error": str(e)}, 400
-    if not _PIPELINE_LOCK.acquire(blocking=False):
-        return {"error": "прогон уже идёт"}, 409
-    t0 = time.time()
-    try:
-        _PIPELINE_PROGRESS.update(state="running", done=0, total=1, detail="подготовка")
-
-        def _progress(done: int, total: int, detail: str) -> None:
-            _PIPELINE_PROGRESS.update(done=done, total=total, detail=detail)
-
-        nl_frags = _nl().get_active_pool() if _nl() is not None else []
-        try:
-            result = pipeline.run_pipeline(spec, CORPUS, nl_frags, progress=_progress)
-        except clean.BadInput as e:
-            # resolve_chain: пользователь назвал несуществующую форму — это 400
-            # запроса, не 500 сервера; finally ниже честно погасит статус.
-            return {"error": str(e)}, 400
-        _PIPELINE_PROGRESS.update(state="done",
-                                  detail=f"готово · вариантов: {len(result['variants'])}")
-        stats_mod.log(
-            "pipeline",
-            theme=spec["theme"],
-            links=len(spec["chain"]),
-            junctions=spec["junctions"],
-            runs=spec["runs"],
-            evaluated=result["funnel"]["evaluated"],
-            variants=len(result["variants"]),
-            latency_ms=round((time.time() - t0) * 1000, 1),
-        )
-        return result
-    finally:
-        if _PIPELINE_PROGRESS["state"] == "running":   # вышли ошибкой — не врать «running»
-            _PIPELINE_PROGRESS.update(state="done", detail="прервано ошибкой")
-        _PIPELINE_LOCK.release()
+# НАДГРОБИЕ 2026-08-18: РОУТЫ ПАЙПЛАЙНА ВЫРЕЗАНЫ ----------------------------
+# Ушли `/api/pipeline/profile` (референс → профиль и цепочка, core/refprofile.py),
+# `/api/pipeline/run` (пулы по звеньям + склейка, core/pipeline.py) и
+# `/api/pipeline/stop`.
+#
+# Основание — замер журнала событий за 10 живых дней: 29 прогонов цепи против
+# 587 одиночных строф, один к двадцати, при медиане цепи 24.2 с и 98.7 с на
+# девяностом процентиле. Режим, которым пользуются раз на двадцать раз и
+# который стоит минуту, — не режим, а долг: под него держались замок, поток,
+# строка статуса, валидатор на сотню строк и шесть модулей ядра.
+#
+# Одиночная строфа осталась ЕДИНСТВЕННЫМ режимом (решение владельца
+# 2026-08-18) и живёт в /api/generate выше.
 
 
 @app.post("/api/favorite")
@@ -1222,7 +1319,10 @@ def api_history_mark_shown():
         return {"error": "нужен список items"}, 400
     clean_items = [it for it in items if isinstance(it, dict) and (it.get("text") or "").strip()][:400]
     theme = payload.get("theme") or ""
-    CORPUS.mark_shown(clean_items, theme=theme)
+    # Номер прогона, который эти строки породил (Раунд 62) — по нему повтор
+    # отличает свой след от чужого. Не пришёл (фристайл, старый клиент) — None,
+    # и запись ведёт себя ровно как раньше: прячется всегда.
+    CORPUS.mark_shown(clean_items, theme=theme, семя=clean.семя(payload.get("seed")))
     CORPUS.save()
     stats_mod.log("shown", count=len(clean_items), theme=theme)
     return {"stats": CORPUS.stats()}
@@ -1364,7 +1464,10 @@ def api_settings_post():
     payload = request.get_json(force=True, silent=True) or {}
     to_save = {
         k: payload[k]
-        for k in ("stanza_profile", "nl_smart_folders", "nl_chain",
+        # `nl_chain` (живая цепочка меню «Пайплайн») ушёл 2026-08-18 вместе с
+        # самим меню: хранить положение того, чего нет, — второй источник
+        # правды о вырезанном режиме.
+        for k in ("stanza_profile", "nl_smart_folders",
                   "nl_fs_profiles", "nl_ui_profiles", "nl_palette", "nl_view")
         if k in payload
     }
@@ -1470,88 +1573,25 @@ def api_knob_profiles_delete():
     return {"custom": knob_profiles.delete(name)}
 
 
-# ---- цепочки: третья полка, слепками (Раунд 50) --------------------------
-# Раньше жили ключом nl_chain_profiles внутри settings.json, сырьём и без
-# единой проверки на обоих концах. Теперь как две соседние полки: свой файл,
-# валидатор в clean.py, отказ ДО записи — а не через минуту на прогоне.
-
-@app.get("/api/chains")
-def api_chains_get():
-    # builtin рядом с custom — как у форм строф и профилей настроек
-    # (Раунд 55): встроенные цепочки такие же записи полки, и серия
-    # находит их по имени наравне со своими.
-    return {"builtin": chain_profiles.builtin(), "custom": chain_profiles.custom()}
-
-
-@app.post("/api/chains")
-def api_chains_post():
-    try:
-        return {"builtin": chain_profiles.builtin(),
-                "custom": chain_profiles.save(request.get_json(force=True, silent=True) or {})}
-    except clean.BadInput as e:
-        return {"error": str(e)}, 400
-
-
-@app.post("/api/chains/delete")
-def api_chains_delete():
-    payload = request.get_json(force=True, silent=True) or {}
-    name = (payload.get("name") or "").strip()
-    if not name:
-        return {"error": "не указано имя цепочки"}, 400
-    return {"builtin": chain_profiles.builtin(), "custom": chain_profiles.delete(name)}
-
-
-# --- полка СЕРИЙ: четвёртый уровень (Раунд 53) -----------------------------
-# Только хранение. Прогон серии — отдельный механизм со своей очередью и
-# раскладкой; мешать «что хранится» с «как исполняется» значит завести третью
-# сущность, которая ни то ни другое.
-
-def _series_out(items: list[dict]) -> dict:
-    """Полка плюс оценка времени на каждую серию. Оценку считает домен
-    (core/series.py: estimate) — число берётся из замеров прогона, и пользователь
-    обязан видеть его ДО запуска, а не утром."""
-    return {"custom": [{**s, "estimate": series_mod.estimate(s)} for s in items],
-            # Секунды на текст едут ЧИСЛОМ, а не зеркалятся на фронте: пока
-            # серия правится и ещё не сохранена, оценку показывает интерфейс —
-            # и считать её он должен ТЕМ ЖЕ числом, что домен, а не своей
-            # копией, которая однажды разойдётся.
-            "seconds_per_text": series_mod.SECONDS_PER_TEXT}
-
-
-@app.get("/api/series")
-def api_series_get():
-    return _series_out(series_mod.custom())
-
-
-@app.post("/api/series")
-def api_series_post():
-    try:
-        return _series_out(series_mod.save(request.get_json(force=True, silent=True) or {}))
-    except clean.BadInput as e:
-        return {"error": str(e)}, 400
-
-
-@app.post("/api/series/delete")
-def api_series_delete():
-    payload = request.get_json(force=True, silent=True) or {}
-    name = (payload.get("name") or "").strip()
-    if not name:
-        return {"error": "не указано имя серии"}, 400
-    return _series_out(series_mod.delete(name))
-
-
-# --- ПРОГОН серии ----------------------------------------------------------
+# НАДГРОБИЕ 2026-08-18: ПОЛКА ЦЕПОЧЕК, ПОЛКА СЕРИЙ И ПРОГОН СЕРИИ ВЫРЕЗАНЫ --
+# Ушли роуты `/api/chains` (GET/POST), `/api/chains/delete`, `/api/series`
+# (GET/POST), `/api/series/delete`, `/api/series/state`, `/api/series/run`,
+# `/api/series/stop` и всё их хозяйство: `_series_out`, `_SERIES_PROGRESS`,
+# `_SERIES_STOP`, `_SERIES_THREAD`, `_SERIES_SEC`, `_замер`,
+# `_секунд_на_текст`, `_series_status`, `_series_worker` с его `один()`.
+# Вместе с ними ушли модули core/chain_profiles.py, core/series.py и
+# core/series_run.py.
 #
-# Живёт ВНУТРИ окна (решение «можно закрыть окно».
+# Основание. Цепь: 29 прогонов против 587 одиночных строф за 10 живых дней
+# (1 к 20), медиана 24.2 с, девяностый процентиль 98.7 с. Серия в журнал
+# событий не писалась ВОВСЕ, поэтому числа по ней нет — её убрал сам владелец
+# решением от 2026-08-18 («строфа единственным режимом»), и это решение, а не
+# замер. Так и записано, чтобы через месяц никто не искал несуществующую
+# статистику серий.
 #
-# ЗАМОК БЕРЁТСЯ НА ОДИН ТЕКСТ, а не на всю серию: иначе она держала бы его
-# часами и пользователь не смог бы сгенерировать ничего руками. Ручной прогон
-# получит 409 только на те ~15 секунд, пока считается очередной текст серии.
-_SERIES_PROGRESS: dict = {"state": None, "done": 0, "total": 0, "detail": "",
-                          "name": "", "link": None, "beda": {}}
-_SERIES_STOP = threading.Event()
-_SERIES_THREAD = None
-
+# ЛИСТЫ СЕРИЙ НА ДИСКЕ (~/Documents/nakedlunch/тексты/Серии/) ОСТАЮТСЯ. Это
+# работа пользователя; сервер просто перестал туда писать. Их видит и правит
+# обычный редактор листов — папка для него ничем не особенная.
 
 # ЗАЛИВКА КНИГИ ИДЁТ ФОНОМ (Раунд 56).
 #
@@ -1645,141 +1685,6 @@ def _import_worker(payload: list) -> None:
                         "done_at": time.time(), "detail": хвост})
     except Exception as e:                                           # noqa: BLE001
         _IMPORT.update({"state": "error", "detail": str(e)})
-
-
-def _series_status() -> dict | None:
-    if _SERIES_PROGRESS["state"] is None:
-        return None
-    p = _SERIES_PROGRESS
-    pct = int(100 * p["done"] / p["total"]) if p["total"] else 0
-    return {"id": "series", "label": f"Серия · {p['name']}", "state": p["state"],
-            "done": p["done"], "total": p["total"], "pct": pct, "detail": p["detail"]}
-
-
-# СКОЛЬКО НА САМОМ ДЕЛЕ СТОИТ ТЕКСТ (Раунд 55).
-#
-# Константа в 15 секунд была замерена на цепочке из четырёх коротких звеньев.
-# На цепочке пользователя («тест2»: Частушка, Рубаи, Одическая строфа в десять
-# строк, 7200 сочетаний в переборе) один текст идёт СОРОК ОДНУ секунду — и
-# панель обещала ему 22 минуты там, где работы на час.
-#
-# Формулу выдумывать не стал: двух замеров мало, а придуманная формула врёт с
-# тем же лицом, что и константа. Меряем настоящее время и заменяем им оценку
-# после ПЕРВОГО же текста. Скользящее среднее, чтобы одна медленная тема не
-# перекосила остаток.
-_SERIES_SEC: dict = {"n": 0, "avg": 0.0}
-
-
-def _замер(сек: float) -> None:
-    n, avg = _SERIES_SEC["n"], _SERIES_SEC["avg"]
-    _SERIES_SEC.update({"n": n + 1, "avg": (avg * n + сек) / (n + 1)})
-
-
-def _секунд_на_текст() -> float:
-    """Замеренное среднее, пока его нет — константа домена."""
-    return _SERIES_SEC["avg"] if _SERIES_SEC["n"] else series_mod.SECONDS_PER_TEXT
-
-
-def _series_worker(name: str) -> None:
-    def шаг(done, total, detail, link=None):
-        _SERIES_PROGRESS.update({"done": done, "total": total, "detail": detail,
-                                 "link": link})
-
-    def один(spec, corpus, nl_fragments, progress=None):
-        # Замок на ОДИН текст. Ждём его, а не отказываемся: серия идёт ночью,
-        # и бросить весь план из-за одной ручной генерации было бы глупо.
-        #
-        # ПРОГРЕСС ВНУТРИ ТЕКСТА (Раунд 55). Здесь стояло `run_pipeline(...)`
-        # БЕЗ progress — отсюда и «прогресс серии завис»: один текст на длинной
-        # цепочке идёт
-        # сорок-сто секунд, и всё это время строка в шапке не менялась вовсе.
-        # Теперь видно, на каком пуле стоим: «дорога 1 из 10 · пулы 2/3».
-        хвост = _SERIES_PROGRESS.get("detail") or ""
-        def внутри(done, total, detail):
-            _SERIES_PROGRESS["detail"] = f"{хвост} · {detail}"
-        with _PIPELINE_LOCK:
-            t0 = time.time()
-            res = pipeline.run_pipeline(spec, corpus, nl_fragments,
-                                        progress=внутри, стоп=_SERIES_STOP.is_set)
-            _замер(time.time() - t0)
-            return res
-
-    try:
-        итог = series_run.прогнать(
-            name, CORPUS, _nl().get_active_pool() if _nl() else [],
-            стоп=_SERIES_STOP.is_set, шаг=шаг, прогон=один)
-        CORPUS.save()
-        хвост = f"сделано {итог['texts']}"
-        if итог["skipped"]:
-            хвост += f" · было {итог['skipped']}"
-        if итог["errors"]:
-            хвост += " · " + "; ".join(итог["errors"][:3])
-        _SERIES_PROGRESS.update({
-            "state": "error" if итог["errors"] and not итог["texts"] else "done",
-            "detail": хвост, "link": None,
-            # причина под своим треком (Раунд 55): ключи — номера треков, и
-            # меню ставит её под свою строку, а не разбирает общий хвост
-            "beda": {str(k): v for k, v in (итог.get("beda") or {}).items()}})
-    except Exception as e:                                   # noqa: BLE001
-        _SERIES_PROGRESS.update({"state": "error", "detail": str(e), "link": None})
-
-
-@app.get("/api/series/state")
-def api_series_state():
-    """Настоящее положение дел по серии: сколько СДЕЛАНО на каждом треке,
-    какой идёт сейчас и где что встало.
-
-    Читается из файлов (core/series_run.состояние), поэтому не требует помнить
-    ни одного прогона: закрыл окно, вернулся через сутки — цифры те же. До
-    Раунда 55 меню не знало об этом ничего и показывало полный план даже
-    тогда, когда двадцать восемь текстов из тридцати уже лежали в папках."""
-    name = (request.args.get("name") or "").strip()
-    entry = series_mod.by_name(name)
-    if entry is None:
-        return {"error": f"серия «{name}» не найдена"}, 404
-    сост = series_run.состояние(entry)
-    идёт = _SERIES_THREAD is not None and _SERIES_THREAD.is_alive()
-    свой = _SERIES_PROGRESS.get("name") == name
-    return {**сост,
-            "link": _SERIES_PROGRESS.get("link") if (идёт and свой) else None,
-            "beda": _SERIES_PROGRESS.get("beda") if свой else {},
-            # ЗАМЕРЕННОЕ время, если оно уже есть: константа врала втрое на
-            # тяжёлой цепочке (см. _замер)
-            "seconds_per_text": round(_секунд_на_текст(), 1),
-            "measured": _SERIES_SEC["n"] > 0}
-
-
-@app.post("/api/series/run")
-def api_series_run():
-    global _SERIES_THREAD
-    if _SERIES_THREAD is not None and _SERIES_THREAD.is_alive():
-        return {"error": "серия уже идёт — останови её или дождись"}, 409
-    payload = request.get_json(force=True, silent=True) or {}
-    name = (payload.get("name") or "").strip()
-    entry = series_mod.by_name(name)
-    if entry is None:
-        return {"error": f"серия «{name}» не найдена"}, 404
-    # ОЦЕНКА ОСТАТКА, а не плана (Раунд 55): второй запуск той же серии
-    # обещал восемь минут там, где работы на полминуты.
-    сост = series_run.состояние(entry)
-    осталось = max(0, сост["texts"] - сост["done_total"])
-    оценка = {"texts": осталось, "seconds": int(осталось * _секунд_на_текст())}
-    _SERIES_STOP.clear()
-    _SERIES_PROGRESS.update({"state": "running", "done": сост["done_total"],
-                             "name": name, "total": сост["texts"],
-                             "detail": "начинаю…", "link": None, "beda": {}})
-    _SERIES_THREAD = threading.Thread(target=_series_worker, args=(name,),
-                                      name="series", daemon=True)
-    _SERIES_THREAD.start()
-    return {"ok": True, "estimate": оценка}
-
-
-@app.post("/api/series/stop")
-def api_series_stop():
-    """Останов спрашивается МЕЖДУ текстами: бросать посреди — нечего, один
-    текст это пятнадцать секунд."""
-    _SERIES_STOP.set()
-    return {"ok": True}
 
 
 # ============================================================
@@ -1941,102 +1846,20 @@ def api_nl_retention_set():
     return {"value": cfg["session_retention"]}
 
 
-# ============================================================
-# Листы — хранилище .md в ~/Documents/nakedlunch/тексты (PLAN.md, решение
-# прожарки №6: «листы = настоящие .md в настоящих папках»). Вся логика в
-# core/sheets.py; здесь только тонкие роуты + перевод доменной ошибки в
-# честный 400 по-русски. Роуты стоят ДО catch-all раздачи интерфейса.
-# ============================================================
-
-def _sheets_call(fn, *args):
-    try:
-        return fn(*args)
-    except sheets.SheetError as e:
-        return {"error": str(e)}, 400
-
-
-@app.get("/api/sheets")
-def api_sheets_list():
-    return _sheets_call(sheets.overview)
-
-
-@app.post("/api/sheets/read")
-def api_sheets_read():
-    p = request.get_json(force=True, silent=True) or {}
-    return _sheets_call(sheets.read, p.get("id"))
-
-
-@app.post("/api/sheets/write")
-def api_sheets_write():
-    p = request.get_json(force=True, silent=True) or {}
-    return _sheets_call(sheets.write, p.get("id"), p.get("rows"))
-
-
-@app.post("/api/sheets/create")
-def api_sheets_create():
-    p = request.get_json(force=True, silent=True) or {}
-    return _sheets_call(sheets.create, p.get("title"), p.get("folder"))
-
-
-@app.post("/api/sheets/rename")
-def api_sheets_rename():
-    p = request.get_json(force=True, silent=True) or {}
-    return _sheets_call(sheets.rename, p.get("id"), p.get("title"))
-
-
-@app.post("/api/sheets/duplicate")
-def api_sheets_duplicate():
-    p = request.get_json(force=True, silent=True) or {}
-    return _sheets_call(sheets.duplicate, p.get("id"))
-
-
-@app.post("/api/sheets/trash")
-def api_sheets_trash():
-    p = request.get_json(force=True, silent=True) or {}
-    return _sheets_call(sheets.trash, p.get("id"))
-
-
-@app.post("/api/sheets/restore")
-def api_sheets_restore():
-    p = request.get_json(force=True, silent=True) or {}
-    return _sheets_call(sheets.restore, p.get("id"))
-
-
-@app.post("/api/sheets/purge")
-def api_sheets_purge():
-    p = request.get_json(force=True, silent=True) or {}
-    return _sheets_call(sheets.purge, p.get("id"))
-
-
-@app.post("/api/sheets/purge-all")
-def api_sheets_purge_all():
-    return _sheets_call(sheets.purge_all)
-
-
-@app.post("/api/sheets/move")
-def api_sheets_move():
-    p = request.get_json(force=True, silent=True) or {}
-    return _sheets_call(sheets.move, p.get("id"), p.get("folder"))
-
-
-@app.post("/api/sheets/folder/create")
-def api_sheets_folder_create():
-    p = request.get_json(force=True, silent=True) or {}
-    return _sheets_call(sheets.folder_create, p.get("name"))
-
-
-@app.post("/api/sheets/folder/delete")
-def api_sheets_folder_delete():
-    p = request.get_json(force=True, silent=True) or {}
-    return _sheets_call(sheets.folder_delete, p.get("id"))
-
-
-@app.post("/api/sheets/open-dir")
-def api_sheets_open_dir():
-    # по образцу /api/nl/open-dir — открыть хранилище листов в Finder
-    import subprocess
-    subprocess.run(["open", str(sheets.vault_dir())], check=False)
-    return {"ok": True}
+# НАДГРОБИЕ 2026-08-18: ЛИСТЫ И 14 РОУТОВ `/api/sheets/*` УБРАНЫ.
+#
+# Здесь стояли `_sheets_call` и роуты list/read/write/create/rename/duplicate/
+# trash/restore/purge/purge-all/move/folder-create/folder-delete/open-dir —
+# тонкая обёртка над `core/sheets.py` (модуль удалён целиком, 612 строк).
+#
+# ПОЧЕМУ. Документ-редактор с листами и папками вырезан решением владельца:
+# единственная поверхность программы — ЛЕНТА выдачи, и второй поверхности,
+# которая хранит и правит .md-файлы, у неё быть не должно.
+#
+# ХРАНИЛИЩЕ `~/Documents/nakedlunch/тексты` НЕ ТРОНУТО. Программа просто
+# перестала туда ходить; файлы пользователя лежат там, где лежали, и
+# открываются любым редактором .md — на то и был выбран настоящий формат в
+# настоящих папках, а не база.
 
 
 @app.post("/api/ui/log")
@@ -2118,9 +1941,19 @@ def api_rec_open_dir():
     образец, что у корпуса и у листов.
 
     Без параметра открывается КОРЕНЬ: искать последнюю запись глазами по дате
-    честнее, чем помнить, какая сессия была последней."""
+    честнее, чем помнить, какая сессия была последней.
+
+    ОТКРЫВАЕМ ТО, КУДА ПИШЕМ (2026-08-14). Здесь стояло `recorder.DEFAULT_ROOT`
+    — жёсткое ~/Documents/nakedlunch/записи, минуя разбор переменных среды.
+    Сама запись корень считает иначе (core/recorder.py, Session.__init__:
+    `пути.хранилище("NAKEDLUNCH_RECORDINGS", "записи", DEFAULT_ROOT)` — своя
+    переменная → NAKEDLUNCH_HOME → умолчание), и при заданной NAKEDLUNCH_HOME
+    кнопка честно открывала пустую боевую папку, пока запись шла во временную:
+    дверь вела не в ту комнату. Тройку приходится повторять здесь дословно —
+    в recorder нет функции «корень записей», и завести её (чтобы источник был
+    ОДИН) значило бы править файл, отданный в этом раунде не мне."""
     import subprocess
-    d = recorder.DEFAULT_ROOT
+    d = пути.хранилище("NAKEDLUNCH_RECORDINGS", "записи", recorder.DEFAULT_ROOT)
     d.mkdir(parents=True, exist_ok=True)   # ещё не писал ни разу — не отказ, а пустая папка
     subprocess.run(["open", str(d)], check=False)
     return {"ok": True, "dir": str(d)}
@@ -2186,6 +2019,12 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8790)
     ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args()
+    # Здесь, а не на уровне модуля: см. длинные комментарии у warm_caches() и
+    # у `_поднять_прогрев`. Обе строки делают то, что имеет право делать только
+    # НАСТОЯЩИЙ запуск: одна утверждает его в журнале, вторая пускает работу,
+    # которая пишет в данные пользователя.
+    журнал.запись("сервер", "старт сервера")
+    _поднять_прогрев()
     app.run(host=args.host, port=args.port, threaded=True, use_reloader=False)
 
 

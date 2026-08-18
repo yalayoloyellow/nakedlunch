@@ -30,7 +30,8 @@
 //      (инвариант офлайна) — harvestFonts показывает только те семейства,
 //      которые реально есть в системе, плюс загруженные пользователем файлы
 //      (FontFace);
-//   5) запись (recOn/recLock) — ФАЗА 4, живёт в methods.fsrec.js: этот файл
+//   5) запись (recOn плюс замок хрома атрибутом data-reclock) — ФАЗА 4,
+//      живёт в methods.fsrec.js: этот файл
 //      её больше не касается вовсе, кнопка btnRecord зовёт recToggle().
 //
 // Соседние модули фазы 3 (их методы вызываются защищённо, через if):
@@ -547,13 +548,15 @@ export const fsMethods = {
   // в /api/generate — там другая механика, нарезка корпуса на бэке).
   // Мок-корпуса дизайна (STANZAS) нет, поэтому мешок собираем из того, что у
   // клиента честно есть: показанные строки фристайла, история, избранное и
-  // текущий лист.
+  // лента. Четвёртым слагаемым был ТЕКУЩИЙ ЛИСТ — он вырезан 2026-08-18 вместе
+  // с документом, и на его место встала лента: та же роль (то, что сейчас на
+  // экране у человека), тот же вклад в мешок.
   cutupBag() {
     var st = this.state, src = [];
     (this._fsSeen || []).forEach(function (t) { src.push(t); });
     (st.hist || []).forEach(function (h) { src.push(h && h.t); });
     (st.favs || []).forEach(function (f) { src.push(typeof f === 'string' ? f : (f && f.t)); });
-    (this.cur() || []).forEach(function (r) { if (r && r.type === 'line') src.push(r.text); });
+    (st.lenta || []).forEach(function (r) { if (r && r.text) src.push(r.text); });
     // дешёвый ключ кэша: мешок пересобирается, когда источников стало больше
     var key = src.length + ':' + (this._fsSeen || []).length;
     if (this._bagKey === key && this._bag) return this._bag;

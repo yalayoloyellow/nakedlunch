@@ -191,7 +191,9 @@ def test_polki_hodyat_cherez_sklad():
     `write_text` и обходит все три правила разом."""
     from pathlib import Path as _P
     корень = _P(__file__).resolve().parent.parent / "core"
-    for имя in ("knob_profiles.py", "chain_profiles.py", "stanza_profiles.py"):
+    # chain_profiles.py был третьим в этом списке и ушёл 2026-08-18 вместе с
+    # пайплайном — полок осталось две.
+    for имя in ("knob_profiles.py", "stanza_profiles.py"):
         текст = (корень / имя).read_text("utf-8")
         assert "PROFILES_PATH.write_text" not in текст, (
             f"{имя} пишет полку сама, минуя склад — три правила надёжности обойдены")
