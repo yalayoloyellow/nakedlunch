@@ -608,18 +608,13 @@ def test_route_unknown_word_gives_empty_items(client):
     assert r.get_json()["items"] == []
 
 
-def test_state_reports_real_thesaurus_layers(client):
-    r = client.get("/api/state")
-    assert r.status_code == 200
-    th = r.get_json()["thesaurus"]
-    assert set(th) == {"syn", "ant"}
-    # флаги обязаны совпадать с фактическим наличием словаря на диске
-    # (ant дополнительно за воротами качества — см. _ANT_GATE_PASSED в server.py)
-    built = wordsuggest._THES_PATH.exists()
-    assert th["syn"] is built
-    assert isinstance(th["ant"], bool)
-    if not built:
-        assert th["ant"] is False
+# НАДГРОБИЕ 2026-08-18: `test_state_reports_real_thesaurus_layers` УБРАН
+# вместе с полем `thesaurus` в ответе `/api/state`, воротами `_ANT_GATE_PASSED`
+# и `wordsuggest.thesaurus_status()` — надгробие с разбором в `api/server.py`.
+# Он был ЕДИНСТВЕННЫМ читателем этого поля во всём дереве, то есть держал
+# мёртвое неотличимым от живого. Словарный слой при этом жив и проверяется
+# выше по существу: `test_syn_dict_layer_labeled_slovar` и
+# `test_ant_is_dict_only` спрашивают не флаг наличия, а сами ответы.
 
 
 # --- словоформы против лемм (живая проверка 2026-08-01) ---------------------

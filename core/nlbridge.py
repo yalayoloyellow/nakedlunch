@@ -16,12 +16,13 @@
 
 from __future__ import annotations
 
-import json
 import re
-import sys
-import os
 import threading
-import time
+# НАДГРОБИЕ 2026-08-18: `json` и `time` осиротели вместе со сроком хранения
+# сессий (надгробие ниже) — других читателей в файле у них не было. Заодно
+# убраны `sys` и `os`: они не использовались здесь уже до этой правки —
+# `grep -n "sys\.\|os\." core/nlbridge.py` пуст, — то есть их держал не код,
+# а привычка.
 from functools import lru_cache
 from pathlib import Path
 
@@ -40,14 +41,7 @@ NAKEDLUNCH_PROG_DIR = Path.home() / "Documents" / "nakedlunch"
 # переменной была обещанием, которого никто не выполнял.
 NAKEDLUNCH_DATA = пути.хранилище("NAKEDLUNCH_DATA", "корпус",
                                  NAKEDLUNCH_PROG_DIR / "data")
-NAKEDLUNCH_CONFIG = NAKEDLUNCH_PROG_DIR / "config.json"
 
-# Same schema nakedlunch.py itself reads/writes — sharing the one file keeps
-# the CLI and this web tab in sync, without importing nakedlunch.py itself
-# (its module-level Console()/logging setup isn't needed for a headless server,
-# and re-implementing these few lines here avoids any risk of a same-named
-# installed `nakedlunch` pip package shadowing the local repo on sys.path).
-_RETENTION_DAYS = {"never": 0, "month": 30, "3m": 90, "6m": 180, "year": 365}
 
 _TOKEN_RE = re.compile(r"[a-zа-яё0-9]+")
 
@@ -120,29 +114,29 @@ def store_if_ready():
 # Неблокирующий старт и честный `store_if_ready` сторожит tests/test_boot.py.
 
 
-# ---------------------------------------------------------------------------
-# config (session retention) — shared file, own tiny read/write
-# ---------------------------------------------------------------------------
-
-def get_config() -> dict:
-    if NAKEDLUNCH_CONFIG.exists():
-        try:
-            cfg = json.loads(NAKEDLUNCH_CONFIG.read_text("utf-8"))
-            cfg.setdefault("session_retention", "never")
-            return cfg
-        except Exception:
-            pass
-    return {"session_retention": "never", "language": "en"}
-
-
-def set_retention(value: str) -> dict:
-    if value not in _RETENTION_DAYS:
-        raise ValueError("bad retention value")
-    cfg = get_config()
-    cfg["session_retention"] = value
-    NAKEDLUNCH_CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    NAKEDLUNCH_CONFIG.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), "utf-8")
-    return cfg
+# НАДГРОБИЕ 2026-08-18: СРОК ХРАНЕНИЯ СЕССИЙ nakedlunch УБРАН ЦЕЛИКОМ.
+#
+# Ушли `get_config()`, `set_retention(value)`, `clear_used_for_period(store,
+# mode)`, константа `_RETENTION_DAYS` и путь `NAKEDLUNCH_CONFIG`
+# (`~/Documents/nakedlunch/config.json`). Всё это осиротело вместе с роутами
+# `GET/POST /api/nl/retention` и `POST /api/nl/clear-used`, вырезанными в тот
+# же день: экрана у срока хранения на фронте не осталось.
+#
+# ДОКАЗАНО ГРЕПОМ ПО ВСЕМУ ДЕРЕВУ (`core/`, `api/`, `tools/`, `tests/`,
+# `interface/` вместе с собранным бандлом, `main.py`, `launch.py`): ни одного
+# вызывающего. `get_config` звал только `set_retention`, `set_retention` —
+# только вырезанный роут, `_RETENTION_DAYS` — только `set_retention`,
+# `NAKEDLUNCH_CONFIG` — только эти двое. Замкнутый на себя круг: живым он
+# выглядел лишь потому, что его половины ссылались друг на друга.
+#
+# ФАЙЛ `~/Documents/nakedlunch/config.json` НЕ ТРОНУТ. Его пишет и читает сам
+# CLI nakedlunch.py — это его данные, и они остаются как были; мы просто
+# перестали в них лазить.
+#
+# СОБСТВЕННОЙ ИСТОРИИ ПРИЛОЖЕНИЯ ЭТО НЕ КАСАЕТСЯ: `/api/history/retention`
+# (GET/POST) жив, его зовёт `api.historyRetentionGet/Set`, и срок хранения
+# нашей истории по-прежнему настраивается на экране настроек
+# (`corpus.set_retention`, `corpus.RETENTION_PRESETS`).
 
 
 # SessionLog ВЫРЕЗАН (Раунд 54). Раунд 51 снял его единственного писателя
@@ -150,16 +144,6 @@ def set_retention(value: str) -> dict:
 # с тех пор было некому, а экземпляр всё равно заводился на каждый запуск.
 # Теперь нет ни того, ни другого. Файлы сессий, что уже лежат в
 # ~/Documents/nakedlunch/sessions, не трогаем: они писаны CLI, это его данные.
-
-
-def clear_used_for_period(store, mode: str) -> int:
-    """Same period mapping as nakedlunch.py's /c command."""
-    if mode == "all":
-        return store.clear_used(None)
-    seconds = {"hour": 3600, "day": 86400, "week": 7 * 86400, "month": 30 * 86400}.get(mode)
-    if seconds is None:
-        raise ValueError("bad period")
-    return store.clear_used(time.time() - seconds)
 
 
 # ФИЛЬТРОВАННАЯ ГЕНЕРАЦИЯ ВЫРЕЗАНА (2026-08-14). `generate_filtered` вместе с

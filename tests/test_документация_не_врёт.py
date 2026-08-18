@@ -91,7 +91,9 @@ def test_документы_не_называют_удал_нные_файлы_�
     вырезанные = ["methods.doc.js", "methods.sheets.js", "render.doc.jsx",
                   "render.sheets.jsx", "methods.series.js", "methods.слово.js",
                   "core/sheets.py", "core/pipeline.py", "core/series.py",
-                  "core/curve.py", "core/distort.py", "core/chain_profiles.py"]
+                  "core/curve.py", "core/distort.py", "core/chain_profiles.py",
+                  # 2026-08-18: полка профилей крутилок; надгробие в api/server.py
+                  "core/knob_profiles.py"]
     # сперва убедимся, что список не протух: перечисленного и правда нет
     ещё_живы = [f for f in вырезанные if (КОРЕНЬ / f).exists() or (NL / Path(f).name).exists()]
     assert not ещё_живы, (

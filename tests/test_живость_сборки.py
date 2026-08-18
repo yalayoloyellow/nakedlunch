@@ -35,6 +35,9 @@ sys.path.insert(0, str(КОРЕНЬ / "tools"))
 
 import nlindex
 
+# Пропуск по РАЗМЕРУ индекса, а не по его наличию — см. tests/опора.py
+from опора import нужен_большой_индекс  # noqa: E402
+
 
 @pytest.fixture(scope="module")
 def сервер():
@@ -258,7 +261,7 @@ def test_bez_indeksa_shtamp_ne_padaet(monkeypatch):
     assert nlindex.штамп() == "без индекса"
 
 
-@pytest.mark.skipif(nlindex.load() is None, reason="индекс не испечён")
+@нужен_большой_индекс
 def test_na_zhivom_indekse_otpechatok_ustoychiv():
     """Правило 12: замер на заглушках держит мир неподвижным. На настоящем
     индексе отпечаток обязан повторяться между разными объектами Index —

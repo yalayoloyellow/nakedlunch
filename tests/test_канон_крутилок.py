@@ -1,13 +1,18 @@
-# nakedlunch — вторая полка: ПРОФИЛИ НАСТРОЕК (Раунд 50, требование: каркас строфы и профиль настроек ставятся раздельно).
+# nakedlunch — КАНОН КРУТИЛОК: имена, диапазоны, перевод интерфейс → ядро.
 #
-# Тесты на реальных файлах во временном каталоге, без моков — как в
-# test_gen_profile.py.
+# ОТКУДА ЭТОТ ФАЙЛ. Он — выжившая половина `tests/test_knob_profiles.py`,
+# который стерёг сразу две разные вещи: полку профилей крутилок (вырезана
+# 2026-08-18 вместе с `core/knob_profiles.py`, надгробие в `api/server.py`) и
+# сам канон `clean`. Канон ЖИВОЙ: по нему едут четыре пресета фронта и
+# `nl_params` в настройках — `clean.knobs_from_profile` зовут `/api/generate`,
+# `/api/pool/shape` и `/api/settings`. Уносить его вместе с полкой значило бы
+# снять сторожа с работающего.
 #
-# Проверяется РЕЗУЛЬТАТ, а не наличие ключа: «рифмовка работала по наличию ключа, а не по совпадению»), поэтому каждый
-# перевод интерфейсной координаты в ядерную сверяется числом, а каждое
-# «ворота» — тем, что ворота действительно закрылись.
+# Проверяется РЕЗУЛЬТАТ, а не наличие ключа: каждый перевод интерфейсной
+# координаты в ядерную сверяется числом, а каждое «ворота» — тем, что ворота
+# действительно закрылись.
 #
-# Прогон: .venv/bin/python -m pytest tests/test_knob_profiles.py -q
+# Прогон: .venv/bin/python -m pytest tests/test_канон_крутилок.py -q
 
 import sys
 from pathlib import Path
@@ -17,14 +22,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "core"))
 
 import clean
-import knob_profiles
-
-
-@pytest.fixture()
-def свой_каталог(tmp_path, monkeypatch):
-    monkeypatch.setattr(knob_profiles, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(knob_profiles, "PROFILES_PATH", tmp_path / "knob_profiles.json")
-    return tmp_path
 
 
 # ---- канон имён и диапазонов ----------------------------------------------
@@ -134,57 +131,3 @@ def test_дефолт_мата_не_режет_мат():
     assert clean.KNOB_GATES["Мат"][2] == -1.0
     k = clean.knobs_from_profile(None)
     assert k["no_mat"] is False and k["only_mat"] is False
-
-
-# ---- полка на диске --------------------------------------------------------
-
-def test_встроенных_два_и_они_валидны():
-    имена = [p["name"] for p in knob_profiles.builtin()]
-    assert имена == ["Обычный", "Классика"]
-    обычный, классика = knob_profiles.builtin()
-    assert обычный["mode"] == clean.MODE_ALGO
-    assert классика["mode"] == clean.MODE_CLASSIC
-    assert "Банальность" not in классика["params"]
-
-
-def test_сохранение_перезапись_удаление(свой_каталог):
-    knob_profiles.save("Мой", clean.MODE_ALGO, {"Банальность": 0.15})
-    assert [p["name"] for p in knob_profiles.custom()] == ["Мой"]
-    assert knob_profiles.custom()[0]["params"]["Банальность"] == 0.15
-
-    knob_profiles.save("Мой", clean.MODE_ALGO, {"Банальность": 0.8})
-    свои = knob_profiles.custom()
-    assert len(свои) == 1                       # перезапись по имени, не второй «Мой»
-    assert свои[0]["params"]["Банальность"] == 0.8
-
-    knob_profiles.delete("Мой")
-    assert knob_profiles.custom() == []
-
-
-def test_сохранение_без_имени_падает_одной_фразой(свой_каталог):
-    with pytest.raises(clean.BadInput):
-        knob_profiles.save("  ", clean.MODE_ALGO, {})
-
-
-def test_битый_файл_это_пустой_список_а_не_падение(свой_каталог):
-    (свой_каталог / "knob_profiles.json").write_text("{это не список", "utf-8")
-    assert knob_profiles.custom() == []
-
-
-def test_битая_запись_выбрасывается_а_соседние_живут(свой_каталог):
-    (свой_каталог / "knob_profiles.json").write_text(
-        '[{"name": "Живой", "params": {}}, {"нет": "имени"}]', "utf-8")
-    assert [p["name"] for p in knob_profiles.custom()] == ["Живой"]
-
-
-def test_свой_профиль_перекрывает_встроенный(свой_каталог):
-    """То же правило, что у форм строф на их полке: своя запись с тем же именем
-    — сознательный оверрайд пользователя. (Раньше здесь стояла ссылка на
-    `pipeline.resolve_chain`; цепь вырезана 2026-08-18.)"""
-    knob_profiles.save("Обычный", clean.MODE_ALGO, {"Мелодичность": 0.05})
-    assert knob_profiles.by_name("Обычный")["params"]["Мелодичность"] == 0.05
-
-
-def test_by_name_молчит_на_несуществующем(свой_каталог):
-    assert knob_profiles.by_name("нет такого") is None
-    assert knob_profiles.by_name("") is None

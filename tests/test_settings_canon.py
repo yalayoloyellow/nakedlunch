@@ -192,8 +192,11 @@ def test_polki_hodyat_cherez_sklad():
     from pathlib import Path as _P
     корень = _P(__file__).resolve().parent.parent / "core"
     # chain_profiles.py был третьим в этом списке и ушёл 2026-08-18 вместе с
-    # пайплайном — полок осталось две.
-    for имя in ("knob_profiles.py", "stanza_profiles.py"):
+    # пайплайном; knob_profiles.py был вторым и ушёл в тот же день вместе с
+    # полкой профилей крутилок (надгробие в api/server.py) — полка осталась
+    # одна. Список из одного элемента правило не ослабляет: оно про то, как
+    # полка пишет, и заведётся новая — впишется сюда же.
+    for имя in ("stanza_profiles.py",):
         текст = (корень / имя).read_text("utf-8")
         assert "PROFILES_PATH.write_text" not in текст, (
             f"{имя} пишет полку сама, минуя склад — три правила надёжности обойдены")

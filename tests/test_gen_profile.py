@@ -53,20 +53,15 @@ def test_forma_hranit_tolko_karkas(свой_каталог):
     assert "params" not in inspect.signature(stanza_profiles.save).parameters
 
 
-def test_krutilki_zhivut_na_svoey_polke(свой_каталог, monkeypatch):
-    """Вторая половина расщепления: то, что ушло из формы, обязано где-то
-    быть — иначе это не разделение, а потеря."""
-    import knob_profiles
-    monkeypatch.setattr(knob_profiles, "DATA_DIR", свой_каталог)
-    monkeypatch.setattr(knob_profiles, "PROFILES_PATH", свой_каталог / "knob_profiles.json")
-    knob_profiles.save("Мои", "алгоритм", КРУТИЛКИ)
-    п = knob_profiles.by_name("Мои")
-    for имя, v in КРУТИЛКИ.items():
-        assert п["params"][имя] == v
-    # и полки не пересекаются: форма о крутилках не знает, профиль — о каркасе
-    stanza_profiles.save("Мой катрен", КАТРЕН)
-    assert "lines" not in п
-    assert "params" not in stanza_profiles.custom()[0]
+# НАДГРОБИЕ 2026-08-18: `test_krutilki_zhivut_na_svoey_polke` УБРАН вместе с
+# полкой профилей крутилок (`core/knob_profiles.py`, роуты `/api/knobs/profiles`
+# — надгробие в `api/server.py`). Он сторожил ВТОРУЮ половину расщепления
+# Раунда 50: «то, что ушло из формы строфы, обязано где-то быть». Полки больше
+# нет — крутилки едут четырьмя пресетами через `clean.knobs_from_profile`, — и
+# сторожить в этом файле остаётся ровно первая половина: форма строфы держит
+# КАРКАС и ничего кроме (см. `test_forma_eto_tolko_karkas` выше и проверку
+# подписи `stanza_profiles.save` в нём). Канон самих крутилок стережёт
+# `tests/test_канон_крутилок.py`.
 
 
 def test_перезапись_по_имени_и_удаление(свой_каталог):
