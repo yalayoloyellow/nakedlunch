@@ -61,7 +61,7 @@ from wordfreq import zipf_frequency  # noqa: E402
 import scan  # noqa: E402  (rhyme_key — must match generated lines' key format exactly)
 import nlbridge  # noqa: E402  (read-only bridge into ~/nakedlunch, see core/nlbridge.py)
 import filters  # noqa: E402  (_text_tautology — single source of truth for that check)
-from corpus import lemmatize, lemmatize_pairs  # noqa: E402
+from corpus import lemmatize, lemmatize_pairs, содержательных  # noqa: E402
 from _accent import stress_index  # noqa: E402  (shared with build_forms.py)
 
 import пути  # noqa: E402  (где что лежит, см. core/пути.py)
@@ -285,8 +285,25 @@ def _extra_fields(text: str) -> dict:
     # Считаем здесь, потому что разбор на пары уже сделан: цена нулевая.
     taut = filters._text_tautology(lemma_list)
     tokens = list(nlbridge._tokens(text))
+    # СЧЁТ СОДЕРЖАТЕЛЬНЫХ — СВОИМ СЧЁТЧИКОМ, А НЕ `len(обычные)` (2026-08-18).
+    #
+    # `обычные` берутся из `lemmatize_pairs`, а тот считает только шесть частей
+    # речи: существительное, прилагательное, глагол, инфинитив, причастие,
+    # деепричастие. НАРЕЧИЙ и СРАВНИТЕЛЬНЫХ СТЕПЕНЕЙ там нет — и строка
+    # «Дальше — хуже» получала НОЛЬ содержательных слов, то есть выбрасывалась
+    # порогом наравне с архивным шифром «РГАЛИ. Ф. 155. Оп».
+    #
+    # Замер на случайной пробе живого индекса: порогом «не меньше двух» режется
+    # 8.62% годных строк, и 39% из них — не мусор, а короткие разговорные
+    # строки, не прошедшие только из-за части речи. На корпусе ~79 900 строк:
+    # «Нет у меня денег», «ты очень ошибаешься», «как нельзя лучше. Так».
+    #
+    # Список частей речи расширен ОТДЕЛЬНЫМ списком, а не правкой `_CONTENT_POS`:
+    # тот же список задаёт множество ЛЕММ для темы, разнообразия соседей,
+    # тавтологии и эха в избранном, и там наречия лишние — «очень», «уже»,
+    # «дальше» совпадали бы у всего подряд. Разбор — в `corpus.содержательных`.
     return {"banal": round(banal, 3), "taut": taut, "lemmas": lemma_list,
-            "tokens": tokens, "content": len(обычные)}
+            "tokens": tokens, "content": содержательных(text)}
 
 
 def акцентуатор():
