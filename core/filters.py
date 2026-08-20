@@ -21,7 +21,8 @@ import random
 import re
 from operator import itemgetter
 
-from wordfreq import zipf_frequency
+# `from wordfreq import zipf_frequency` снят 2026-08-20 вместе с ручкой
+# «Банальность» — она была единственным читателем частот в этом процессе.
 
 import numpy as np
 
@@ -173,16 +174,20 @@ _NL_RHYME: dict = {}
 
 
 def warm_caches() -> None:
-    """wordfreq lazily unpacks its Russian frequency data (~100ms) on first use
-    and caches it for the process lifetime. Force that here at server startup so
-    the first /api/generate doesn't pay it.
+    """Прогрев кэша фрагментов к первому запросу.
+
+    НАДГРОБИЕ: `zipf_frequency("слово", "ru")` УБРАН ОТСЮДА 2026-08-20. Он
+    распаковывал русскую частотную таблицу wordfreq (~100 мс) ради ручки
+    «Банальность» — единственного, что спрашивало частоты в процессе сервера.
+    Ручка удалена целиком (см. надгробие в core/nlindex.py), а колонку `banal`
+    печёт ОТДЕЛЬНЫЙ ПРОЦЕСС (`core/дочерний.py` запускает сборщики детьми), так
+    что серверу таблица больше не нужна ни разу.
 
     2026-08-01: nl_rhyme.json вырос до 946MB / 2 868 100 записей (пользователь
     залил ~40 книг в июне-июле; кэш строится по ВСЕМ корпусам стора, включая
     выключенные — см. tools/build_nl_rhyme.py). Эта загрузка теперь ~9-11s
     и ~5.5GB RSS на весь срок жизни процесса — главный вклад в память
     сервера на 16GB-машине."""
-    zipf_frequency("слово", "ru")
     global _NL_RHYME
     # РАУНД 34: когда колоночный индекс на месте и своей версии правил, JSON
     # не грузится ВООБЩЕ. Он был нужен двум последним читателям — «классике»
@@ -208,39 +213,19 @@ def warm_caches() -> None:
         _NL_RHYME = кэш.читать_всё()
 
 
-# ИМЕНА СОБСТВЕННЫЕ НЕ СЧИТАЮТСЯ РЕДКИМИ (Раунд 57).
+# НАДГРОБИЕ: `_без_имён` и `_banality` УДАЛЕНЫ 2026-08-20.
 #
-# Банальность — частота САМОГО РЕДКОГО слова строки: чем реже, тем выше балл.
-# Имя собственное в языке почти не встречается, поэтому любая строка с ним
-# получала лучший балл по редкости и лезла в первый слот строфы. в работе: четыре строфы подряд начинались репликой одного персонажа — имя из пьесы
-# занимало первый слот при двух миллионах фрагментов..
+# `_banality(line)` считала частоту самого редкого знаменательного слова строки
+# (zipf, имена собственные вон — их редкость свойство имени, а не находка
+# автора, Раунд 57). Она обслуживала гейт ручки «Банальность» в `run()` и
+# больше ничего. Ручка удалена целиком по замеру — разбор в надгробии
+# core/nlindex.py.
 #
-# Редкость имени — свойство ИМЕНИ, а не находка автора. Считаем без них.
-# Если в строке не осталось ничего, кроме имён, — метрика по ним же, но это
-# честный крайний случай, а не награда: строка из одних имён не должна ни
-# выигрывать, ни падать в ноль.
-def _без_имён(слова: list[str]) -> list[str]:
-    """Слова без имён собственных. Пусто — отдаём исходный список: мерить по
-    чему-то надо.
-
-    Раунд 57: опознаём МОРФОЛОГИЕЙ, а не заглавной буквой. Регистр врал в обе
-    стороны — строка целиком капсом становилась «сплошь именами», а имя со
-    строчной проскакивало как обычное слово."""
-    from corpus import имя_ли
-    обычные = [w for w in слова if not имя_ли(w)]
-    return обычные or слова
-
-
-def _banality(line) -> float:
-    """A line's banality = the zipf frequency of its LEAST-common content word.
-    High = even the rarest word is ordinary, so the whole line reads generic; a
-    single fresh word (low zipf) rescues it. wordfreq is offline, counts-only.
-
-    Раунд 57: имена собственные из подсчёта исключены — см. `_без_имён`."""
-    пары = [(w.surface, w.lemma) for w in _content(line)]
-    годные = set(_без_имён([s for s, _ in пары]))
-    zs = [zipf_frequency(l, "ru") for s, l in пары if s in годные]
-    return min(zs) if zs else 0.0
+# ТА ЖЕ ФОРМУЛА ЖИВА В ДВУХ МЕСТАХ, И ЭТО НЕ ЗАБЫТЫЙ ХВОСТ:
+#   · tools/build_nl_index.py печёт колонку `banal` — по ней `wordsuggest`
+#     сортирует подсказки слов;
+#   · tools/build_nl_rhyme.py пишет то же поле в запасной кэш.
+# Колонка остаётся, RULES не меняются, перепечка не нужна.
 
 
 def _content(line):
@@ -340,11 +325,11 @@ def _cos(a, b) -> float | None:
     return float(a @ b)
 
 
-def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
+def _nl_scored(fragments, corpus, hidden, tags=None, light=False,
                theme_sims=None, literal_cap=None, forced=None, cohesion=0.5,
                no_mat=False, only_mat=False, clausula=0, гсч=random):
     """Score raw nakedlunch fragments (real cut-up text, no Word/stress
-    structure) for the SAME shortlist grammar-candidates land in: banality,
+    structure) for the SAME shortlist grammar-candidates land in:
     blacklist/cliché, tautology apply, same as generated lines — the user
     explicitly rejected exempting nakedlunch from filters generated lines get
     (2026-07-13). No preference/history-distance term (removed 2026-07-14,
@@ -566,7 +551,7 @@ def _nl_scored(fragments, corpus, hidden, ворота, tags=None, light=False,
                   "classic": True, "_literal": False, "_forced": False}
             out.append(row)
     else:
-        table = _score_strict_table(tags, theme_sims, forced, ворота, no_mat, only_mat, clausula)
+        table = _score_strict_table(tags, theme_sims, forced, no_mat, only_mat, clausula)
         for text in fragments:
             if text in hidden:
                 continue
@@ -719,12 +704,12 @@ def _индекс_перепечён(idx) -> None:
 nlindex.при_перепечке(_индекс_перепечён)
 
 
-def _score_strict_table(tags: set, theme_sims, forced: set, ворота,
+def _score_strict_table(tags: set, theme_sims, forced: set,
                         no_mat: bool = False, only_mat: bool = False,
                         clausula: int = 0) -> dict:
     """{text: row} for every `_NL_RHYME` entry that survives the STRICT
-    tier's cliché/banality/tautology gates for this (tags, banal_ceiling,
-    forced, no_mat) — i.e. everything `_nl_scored`'s per-fragment loop used to
+    tier's tautology/mat/clausula gates for this (tags, forced, no_mat)
+    — i.e. everything `_nl_scored`'s per-fragment loop used to
     compute fresh on every call. Deliberately keyed WITHOUT the caller's
     `fragments`/pool or `hidden`/blacklist state: a fragment's relevance
     depends only on its own precomputed properties and the theme — not on
@@ -768,7 +753,8 @@ def _score_strict_table(tags: set, theme_sims, forced: set, ворота,
     # (рядом с клише — то же место отсева по содержимому, и по той же причине
     # кэшируемо: мат — свойство самого фрагмента, не запроса), так что таблицы
     # «с матом» и «без» — разные записи, а не молчаливо переиспользованная одна.
-    key = (id(_NL_RHYME), frozenset(tags), tuple(ворота), frozenset(forced), no_mat, only_mat, clausula)
+    # `ворота` из ключа сняты 2026-08-20 вместе с ручкой «Банальность».
+    key = (id(_NL_RHYME), frozenset(tags), frozenset(forced), no_mat, only_mat, clausula)
     cached = _strict_score_cache.get(key)
     if cached is not None:
         return cached
@@ -787,23 +773,18 @@ def _score_strict_table(tags: set, theme_sims, forced: set, ворота,
     # перед заменой; замер — в докстринге выше.
     table: dict = {}
     themed = bool(tags) or bool(forced)
-    # СЦЕПКИ ЗДЕСЬ НЕТ, И ЭТО ЧЕСТНО (Раунд 58). Вторая ось ручки
-    # «Банальность» живёт КОЛОНКОЙ ИНДЕКСА: она считается по статистике всего
-    # корпуса, а у отдельной записи кэша такого поля нет и быть не может.
-    # Этот путь — запасной (индекса нет или он испечён по другим правилам), и
-    # на нём ручка работает одной осью — словами. Ступень «клише» убрана и
-    # здесь: три зашитых выражения ушли вместе с колонкой.
+    # НАДГРОБИЕ: ГЕЙТА БАНАЛЬНОСТИ ЗДЕСЬ БОЛЬШЕ НЕТ (2026-08-20). Стояло
+    # `b = entry.get("banal", 9.0)` и отсев по полосам ворот; ручка удалена
+    # целиком — см. надгробие в core/nlindex.py. Ступень «клише» убрана
+    # раньше (Раунд 58): три зашитых выражения ушли вместе с колонкой.
     for text, entry in _NL_RHYME.items():
-        b = entry.get("banal", 9.0)
-        if b > ворота.слова_верх or b < ворота.слова_низ:
-            continue
         if entry.get("taut", False):
             continue
         low = text.lower()
-        # Мат — ПОСЛЕ дешёвых banal/taut-гейтов (dict-lookups против
-        # regex-прохода has_mat по строке): при пуле 2.87M замерено 2026-07-31
+        # Мат — ПОСЛЕ дешёвого taut-гейта (dict-lookup против regex-прохода
+        # has_mat по строке): при пуле 2.87M замерено 2026-07-31
         # ~+20s к промаху кэша, только по выжившим — на ~2s меньше. Промах
-        # платится один раз на (тема, банальность, no_mat), дальше кэш.
+        # платится один раз на (тема, no_mat), дальше кэш.
         if no_mat and has_mat(low):
             continue
         if only_mat and not has_mat(low):
@@ -1065,7 +1046,9 @@ def _classic_pool(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clau
             hidden_mask=nlindex.mask_of(_idx, hidden),
             no_mat=no_mat, only_mat=only_mat, clausula=clausula, cap=cap, seed=семя)
         return pool, survived, ступени
-    pool, _ = _nl_scored(nl_fragments or [], corpus, hidden, 9.0, light=True,
+    # Позиционный `9.0` (потолок банальности «пропускать всё») снят 2026-08-20:
+    # ворота удалены целиком, а на «светлом» пути их и так не было.
+    pool, _ = _nl_scored(nl_fragments or [], corpus, hidden, light=True,
                          no_mat=no_mat, only_mat=only_mat, clausula=clausula, гсч=гсч)
     survived = len(pool)
     гсч.shuffle(pool)                   # оценка у всех одна — верхушки не существует
@@ -1261,11 +1244,9 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     семя = семя_прогона(семя)
     гсч = random.Random(семя)
     meter_gate = 0.2 + 0.6 * knobs["meter"]         # slider 0..1 → threshold 0.2..0.8
-    # РУЧКА «БАНАЛЬНОСТЬ» — ДВУСТОРОННЯЯ (Раунд 58, требование: на минимуме язык максимально затёртый, на максимуме нетронутый, в середине
-    # ручка не влияет.).
-    # Перевод положения в пороги живёт ОДНИМ куском в nlindex — им пользуются и
-    # быстрый путь по индексу, и запасной по словарю, и карта воронки.
-    ворота = nlindex.ворота_банальности(knobs["banal"])
+    # НАДГРОБИЕ: здесь считались `ворота = nlindex.ворота_банальности(...)` и
+    # прокидывались в select / _nl_scored / _score_strict_table. Ручка удалена
+    # целиком 2026-08-20 — разбор в надгробии core/nlindex.py.
     hidden = corpus.hidden_set()                    # history (not yet restored/expired) + favorites
     # СОБСТВЕННЫЙ СЛЕД ПРОГОНА НЕ ПРЯЧЕТСЯ ОТ НЕГО САМОГО (Раунд 62) — см.
     # corpus.тексты_прогона, там весь разбор. `getattr` с запасным вариантом
@@ -1388,7 +1369,10 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     stage2 = [(L, sc) for (L, sc) in stage1 if not _tautology(L)]
     n2 = len(stage2)
 
-    # -- stage 3: banality (frequency via wordfreq + blacklist + clichés) ----
+    # -- stage 3: blacklist + clichés + mat/clausula ------------------------
+    # СТУПЕНИ БАНАЛЬНОСТИ ЗДЕСЬ БОЛЬШЕ НЕТ (2026-08-20): ручка удалена целиком,
+    # см. надгробие в core/nlindex.py. Счётчик воронки `banality` остался под
+    # прежним именем — он считает выживших ЭТОЙ ступени, а не банальность.
     # then score directly by intrinsic formal quality only (meter) — no
     # distance-to-favorites term anymore (removed 2026-07-14, see module
     # docstring): what you favorited before no longer pulls future output
@@ -1406,12 +1390,6 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
         if only_mat and not has_mat(L.text):
             continue
         if clausula and scan_mod.clausula(sc.rhyme or "") != clausula:
-            continue
-        # Грамматические строки extendo: у них нет колонки сцепки (её даёт
-        # статистика корпуса), поэтому здесь работает только словесная ось —
-        # обе её стороны.
-        _b = _banality(L)
-        if _b > ворота.слова_верх or _b < ворота.слова_низ:
             continue
         cl = _cand_lemmas(L)
         scored.append({"text": L.text, "template": L.template, "meter": round(sc.meter, 3),
@@ -1463,7 +1441,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             pool_mask=nlindex.pool_mask(_idx, nl_fragments),
             hidden_mask=nlindex.mask_of(_idx, hidden),
             tags=set(tags or ()), forced=set(forced or ()),
-            ворота=ворота, no_mat=no_mat, only_mat=only_mat,
+            no_mat=no_mat, only_mat=only_mat,
             clausula=clausula, cohesion=cohesion,
             pctl_scale=_PCTL_SCALE, literal_cap=literal_cap,
             cap=NL_SELECT_CAP, reserve_n=min(1_000_000, max(30, n_blocks * 5)),
@@ -1473,7 +1451,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             mat_share=knobs.get("mat_share", -1.0), repeat_ok=repeat_ok)
         nl_survivors_full = nl_survivors      # резервы уже внутри; ниже они не досчитываются
     else:
-        nl_survivors, forced_candidates = _nl_scored(nl_fragments or [], corpus, hidden, ворота, гсч=гсч,
+        nl_survivors, forced_candidates = _nl_scored(nl_fragments or [], corpus, hidden, гсч=гсч,
                                                      tags=tags, theme_sims=theme_sims,
                                                      literal_cap=literal_cap, forced=forced,
                                                      cohesion=cohesion, no_mat=no_mat, only_mat=only_mat,

@@ -405,7 +405,7 @@ def test_gate_mask_sprashivaet_masku_u_svoego_indeksa(tmp_path, monkeypatch):
         новый = nlindex.load()
         assert новый is not None and новый.n == len(СТРОКИ_Б)
 
-        м = старый.gate_mask(nlindex.Ворота(), no_mat=False)
+        м = старый.gate_mask(no_mat=False)
         assert len(м) == len(СТРОКИ_А), (
             "`gate_mask` прежнего индекса ответил маской ДРУГОЙ длины — значит "
             "`запрет()` снова берёт индекс сам, а не из аргумента")

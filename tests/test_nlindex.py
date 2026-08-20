@@ -115,8 +115,7 @@ def test_запечённые_флаги_совпадают_с_пересчёт�
 
 @нет_индекса
 def test_гейты_режут_ровно_по_предикатам():
-    в = nlindex.Ворота(слова_верх=4.875)
-    m = ИНДЕКС.gate_mask(в, True)
+    m = ИНДЕКС.gate_mask(True)
     b, t, mt = (np.asarray(x) for x in (ИНДЕКС.banal, ИНДЕКС.taut, ИНДЕКС.mat))
     # Раунд 51: к предикатам добавились ВОРОТА ЦЕЛОСТНОСТИ — фрагмент не должен
     # быть обрывком дефисного слова. Нарезчик годами резал «какая-нибудь»
@@ -126,7 +125,9 @@ def test_гейты_режут_ровно_по_предикатам():
     # меньше двух. «Г-ЖА ДЕ СЕНТ-АНЖ. — Я» проходила всё вышеперечисленное
     # честно: не клише, не тавтология, не мат, слово целое. Она не стих, а
     # ремарка, и отличается именно этим.
-    ждём = (b <= 4.875) & (t == 0) & (mt == 0) & ИНДЕКС.whole_mask()
+    # Полоса банальности из ожидания УБРАНА 2026-08-20: ворота её больше не
+    # считают (ручка удалена целиком, надгробие в core/nlindex.py).
+    ждём = (t == 0) & (mt == 0) & ИНДЕКС.whole_mask()
     if getattr(ИНДЕКС, "content", None) is not None:
         import nlindex as _ni
         ждём = ждём & (np.asarray(ИНДЕКС.content) >= _ni.СЛОВ_МИН)
@@ -138,7 +139,7 @@ def test_гейты_режут_ровно_по_предикатам():
         ждём = ждём & ~з["маска"]
     assert np.array_equal(m, ждём)
     # без фильтра мата выживших не меньше
-    assert int(ИНДЕКС.gate_mask(в, False).sum()) >= int(m.sum())
+    assert int(ИНДЕКС.gate_mask(False).sum()) >= int(m.sum())
 
 
 @нет_индекса
@@ -187,7 +188,7 @@ def test_классика_не_судит_о_качестве():
     """Главное отличие «классики» от строгого яруса: extendo НЕ высказывает
     мнения о качестве. Банальные, тавтологичные и клишированные фрагменты
     обязаны проходить — иначе крутилка теряет весь смысл."""
-    строгие = int(ИНДЕКС.gate_mask(nlindex.Ворота(слова_верх=4.875), True).sum())
+    строгие = int(ИНДЕКС.gate_mask(True).sum())
     все = ИНДЕКС.n
     assert все - строгие > 0, "на этом корпусе нечего проверять"
     строки, выжило, _ = nlindex.select_light(
@@ -278,11 +279,11 @@ def test_мат_отсекается_и_в_классике():
 def test_kesh_daet_te_zhe_chisla():
     idx = ИНДЕКС
     nlindex.забыть_таблицу()
-    a = nlindex._таблица(idx, set(), None, nlindex.Ворота(слова_верх=6.0), False, False, 0, 0.5, 0.8)
-    b = nlindex._таблица(idx, set(), None, nlindex.Ворота(слова_верх=6.0), False, False, 0, 0.5, 0.8)
+    a = nlindex._таблица(idx, set(), None, False, False, 0, 0.5, 0.8)
+    b = nlindex._таблица(idx, set(), None, False, False, 0, 0.5, 0.8)
     assert a[0] is b[0], "кэш не сработал — таблица посчитана заново"
     nlindex.забыть_таблицу()
-    c = nlindex._таблица(idx, set(), None, nlindex.Ворота(слова_верх=6.0), False, False, 0, 0.5, 0.8)
+    c = nlindex._таблица(idx, set(), None, False, False, 0, 0.5, 0.8)
     assert list(c[0]) == list(a[0]) and list(c[2]) == list(a[2]), "после сброса числа разошлись"
 
 
@@ -299,7 +300,7 @@ def test_drugie_ruchki_drugaya_tablica():
     # sims индексируется словарём navec, а не нашими леммами (тот же приём и
     # размер, что в test_relevance_bez_temy_nol выше)
     sims = np.arange(500002, dtype=np.float64) / 500002.0
-    общ = (idx, {"тема"}, sims, nlindex.Ворота(слова_верх=6.0), False, False, 0)
+    общ = (idx, {"тема"}, sims, False, False, 0)
 
     nlindex.забыть_таблицу()
     a = nlindex._таблица(*общ, 0.5, 0.8)
@@ -308,8 +309,8 @@ def test_drugie_ruchki_drugaya_tablica():
     assert not np.array_equal(a[2], b[2]), "связность с темой обязана менять оценку"
 
     nlindex.забыть_таблицу()
-    c = nlindex._таблица(idx, set(), None, nlindex.Ворота(слова_верх=6.0), False, False, 0, 0.5, 0.8)
-    d = nlindex._таблица(idx, set(), None, nlindex.Ворота(слова_верх=6.0), False, False, 0, 0.9, 0.8)
+    c = nlindex._таблица(idx, set(), None, False, False, 0, 0.5, 0.8)
+    d = nlindex._таблица(idx, set(), None, False, False, 0, 0.9, 0.8)
     assert c[2] is d[2], "без темы связности не на чем работать — таблица одна"
     assert len(set(np.asarray(c[2]).tolist())) == 1, "без темы оценка обязана быть одна на всех"
 
@@ -324,8 +325,7 @@ def test_istoriya_ne_keshiruetsya():
     nlindex.забыть_таблицу()
     пул = np.ones(idx.n, dtype=bool)
     пусто = np.zeros(idx.n, dtype=bool)
-    общ = dict(tags=set(), forced=set(), ворота=nlindex.Ворота(слова_верх=6.0),
-               no_mat=False, only_mat=False,
+    общ = dict(tags=set(), forced=set(), no_mat=False, only_mat=False,
                clausula=0, cohesion=0.5, pctl_scale=0.8, literal_cap=None, cap=50,
                reserve_n=0, use_theme_anchor=False, syllable_spec=None, per_bucket=4,
                sims=None, seed=1)
@@ -333,7 +333,7 @@ def test_istoriya_ne_keshiruetsya():
     # Прятать надо тех, кто ВЫЖИЛ ворота: остальные и так не считаются, и
     # ожидание «минус пять» было бы неверным (первая версия теста ошиблась
     # ровно на этом — минус четыре из пяти).
-    выжившие = nlindex._таблица(idx, set(), None, nlindex.Ворота(слова_верх=6.0),
+    выжившие = nlindex._таблица(idx, set(), None,
                                 False, False, 0, 0.5, 0.8)[0]
     скрыт = пусто.copy()
     скрыт[[int(r) for r in выжившие[:5]]] = True
@@ -384,7 +384,7 @@ def test_obryvki_ne_dozhivayut_do_svezhey_vydachi():
     """Та же проверка на живом корпусе и на той самой ручке, с которой пришла
     жалоба: ни одна строка выдачи не смеет кончаться висящим словом."""
     idx = ИНДЕКС
-    m = idx.gate_mask(nlindex.ворота_банальности(0.95, idx), no_mat=False)
+    m = idx.gate_mask(no_mat=False)
     выжившие = np.flatnonzero(m)
     rng = np.random.default_rng(11)
     проба = rng.choice(выжившие, size=min(3000, len(выжившие)), replace=False)
@@ -411,9 +411,8 @@ def test_progrev_greet_to_chto_nuzhno_generacii():
     import time
     nlindex.забыть_запрет()
     nlindex.прогреть(ИНДЕКС)
-    ворота = nlindex.ворота_банальности(0.83)
     t = time.perf_counter()
-    ИНДЕКС.gate_mask(ворота, False, False, 0)
+    ИНДЕКС.gate_mask(False, False, 0)
     прошло = time.perf_counter() - t
     # Порог щедрый нарочно: ловить надо семнадцать секунд, а не сотые доли, и
     # тест не должен мигать на загруженной машине.

@@ -327,6 +327,10 @@ def summary() -> dict:
 # The RAW event log, not summary()'s aggregates — aggregation is for the
 # in-app tab; real offline analysis wants the individual events.
 
+# `banality` ОСТАЁТСЯ В ВЫГРУЗКЕ, ХОТЯ РУЧКИ БОЛЬШЕ НЕТ (2026-08-20). Журнал —
+# это история: 822 живых прогона писались с этим числом, и выбросить колонку
+# значило бы сделать прошлое неразбираемым задним числом. У новых записей она
+# просто пуста — `extrasaction="ignore"` и `restval=""` это и дают.
 _CSV_FIELDS = [
     "t", "kind", "source", "theme", "rhyme", "shortlist",
     "gen_used", "nl_used", "nl_classic_used", "latency_ms",

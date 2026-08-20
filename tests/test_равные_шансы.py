@@ -72,8 +72,7 @@ def test_bez_temy_ne_huzhe_randoma(корпус):
     строки = [t for с in range(ПРОГОНОВ) for t in выдача(пул, с)]
     книги = collections.Counter(int(src[tid[t]]) for t in строки if t in tid)
 
-    ворота = nlindex.ворота_банальности(clean.knobs({})["banal"])
-    живые = np.flatnonzero(ИНДЕКС.gate_mask(ворота, False, False, 0))
+    живые = np.flatnonzero(ИНДЕКС.gate_mask(False, False, 0))
     rng = np.random.default_rng(4242)
     рандом = collections.Counter(
         src[rng.choice(живые, size=len(строки), replace=False)].tolist())
@@ -126,7 +125,6 @@ def test_polosa_temy_daet_ravnyh():
     sims = np.arange(500002, dtype=np.float64) / 500002.0
     nlindex.забыть_таблицу()
     _, pctl, score = nlindex._таблица(ИНДЕКС, {"тема"}, sims,
-                                      nlindex.Ворота(слова_верх=6.0),
                                       False, False, 0, 0.5, 0.8)
     лучших = int(np.count_nonzero(score >= score.max() - 1e-9))
     внутри = int(np.count_nonzero(np.abs(pctl - 0.5) <= nlindex.ПОЛОСА_ТЕМЫ))

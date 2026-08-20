@@ -70,7 +70,7 @@ def test_ключи_рифм_фикстуры_дают_ожидаемую_кла
 def test_ворота_клаузулы_в_светлом_ярусе(словарь_рифм, клаузула, ожидание):
     """РЕГРЕССИЯ. До Раунда 50 этот вызов падал UnboundLocalError на первом же
     фрагменте: проверка клаузулы читала `key` до присваивания."""
-    out, _ = filters._nl_scored(list(ВСЕ), Corpus(), set(), 9.0,
+    out, _ = filters._nl_scored(list(ВСЕ), Corpus(), set(),
                                 light=True, clausula=клаузула)
     assert {r["text"] for r in out} == set(ожидание)
 
@@ -79,13 +79,13 @@ def test_фрагмент_без_ключа_не_проходит_ворота(�
     """Клаузула у неизвестного фрагмента — 0, угадывать нечем. Он честно
     отсеивается, а не проскакивает «за неимением возражений»."""
     out, _ = filters._nl_scored(list(ВСЕ) + ["чужой фрагмент без ключа"],
-                                Corpus(), set(), 9.0, light=True, clausula=2)
+                                Corpus(), set(), light=True, clausula=2)
     assert {r["text"] for r in out} == set(ЖЕНСКИЕ)
 
 
 def test_клаузула_ноль_никого_не_режет(словарь_рифм):
     out, _ = filters._nl_scored(list(ВСЕ) + ["чужой фрагмент без ключа"],
-                                Corpus(), set(), 9.0, light=True, clausula=0)
+                                Corpus(), set(), light=True, clausula=0)
     assert len(out) == len(ВСЕ) + 1
 
 

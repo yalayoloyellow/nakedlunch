@@ -1252,14 +1252,9 @@ def api_nl_funnel():
     """
     if not _ПРОГРЕВ["готов"]:
         return {"ready": False}
-    # ПОЛОЖЕНИЕ РУЧКИ, А НЕ ВЫВЕДЕННЫЙ ИЗ НЕЁ ПОТОЛОК (Раунд 58). Раньше
-    # интерфейс считал `6.5 − 2.5·ручка` сам и слал результат — вторая копия
-    # формулы, живущая на фронте. Теперь формула одна (nlindex), а сюда
-    # приезжает то, что пользователь реально видит на экране.
-    try:
-        ручка = float(request.args.get("banality", 0.5))
-    except (TypeError, ValueError):
-        ручка = 0.5
+    # НАДГРОБИЕ: параметр запроса `banality` больше не читается (2026-08-20).
+    # Он был положением ручки «Банальность»; ручка удалена целиком, см.
+    # надгробие в core/nlindex.py. Фронт его больше и не шлёт.
     try:
         слов = int(request.args.get("content", 0))
     except (TypeError, ValueError):
@@ -1274,7 +1269,6 @@ def api_nl_funnel():
     # Она тоже считает маски по колонкам, и перепечка посреди счёта дала бы ту
     # же несходящуюся пару, — но помнить об этом обязан не вызывающий.
     данные = nlindex.воронка(
-        ручка=ручка,
         no_mat=request.args.get("no_mat") == "1",
         only_mat=request.args.get("only_mat") == "1",
         clausula=int(request.args.get("clausula") or 0),
@@ -1323,7 +1317,6 @@ def api_pool_shape():
         форма = nlindex.форма_пула(
             idx, pool_mask=nlindex.pool_mask(idx, пул),
             hidden_mask=nlindex.mask_of(idx, CORPUS.hidden_set()),
-            ворота=nlindex.ворота_банальности(knobs["banal"]),
             no_mat=bool(knobs.get("no_mat", False)), only_mat=bool(knobs.get("only_mat", False)),
             clausula=int(knobs.get("clausula", 0)))
     return {"готово": True, **форма}
@@ -1476,11 +1469,14 @@ def api_generate():
     #   Мат → mat_share · Клаузула → clausula · Связность → flow ·
     #   Повтор → repeat · Диссонанс → cohesion (ядро держит консонанс) ·
     #   Источники → real_text · Точность рифм → rhyme_precision ·
-    #   Мелодичность → melody · Банальность → banality.
+    #   Мелодичность → melody.
+    # `banality` УБРАНА 2026-08-20 вместе с ручкой (надгробие в nlindex.py).
+    # В ПРОШЛЫХ записях журнала она остаётся и остаётся читаемой — журнал это
+    # история, а не текущее состояние; выгрузка в CSV её колонку держит.
     # `classic` не крутилка, а РЕЖИМ (алгоритм/классика), и пишется он не
-    # вместо девяти, а вдобавок: без него неясно, к какому режиму относятся
+    # вместо остальных, а вдобавок: без него неясно, к какому режиму относятся
     # остальные числа.
-    ui_knobs = {k: knobs[k] for k in ("melody", "cohesion", "banality", "real_text",
+    ui_knobs = {k: knobs[k] for k in ("melody", "cohesion", "real_text",
                                        "rhyme_precision", "classic",
                                        "mat_share", "clausula", "flow", "repeat")
                 if k in knobs}
