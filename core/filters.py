@@ -1425,7 +1425,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             pctl_scale=_PCTL_SCALE, literal_cap=literal_cap,
             cap=NL_SELECT_CAP, reserve_n=min(1_000_000, max(30, n_blocks * 5)),
             use_theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
-            per_bucket=1, sims=theme_sims, seed=семя)
+            per_bucket=1, sims=theme_sims, seed=семя, схема=rhyme or "")
         nl_survivors_full = nl_survivors      # резервы уже внутри; ниже они не досчитываются
     else:
         nl_survivors, forced_candidates = _nl_scored(nl_fragments or [], corpus, hidden, ворота, гсч=гсч,
