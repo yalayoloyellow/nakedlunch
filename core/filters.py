@@ -1440,6 +1440,23 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     # ровно та ложь, ради устранения которой воронка и переписана.
     ступени: dict = {}
     _idx = _index_for_current_cache() if nl_fragments else None
+
+    # МОЖНО ЛИ ОБОЙТИСЬ БЕЗ СБОРЩИКА (2026-08-20). Прямая тяга держит слоги,
+    # рифму, полосу темы, долю мата и запрет близнецов — то есть всё, что нужно
+    # обычной строфе из корпуса. Остальные обязанности сборщика она НЕ несёт, и
+    # список честный, а не «на всякий случай»:
+    #   · строки грамматического генератора в той же строфе (`Источники` < 1) —
+    #     их тянуть неоткуда, они не в индексе;
+    #   · обязательное слово `!слово` — своя гарантия показа;
+    #   · связность — прибавка к рангу от предыдущей строки, то есть ранжир;
+    #   · тематический якорь — отдельная строка-зацепка.
+    # Ни одно из этих условий не выполняется в обычном прогоне владельца:
+    # Источники 1.0, слов нет, связность выключена. Развилка держится тестом.
+    _прямая_тяга = bool(
+        _idx is not None and syllable_spec and rhyme != "none"
+        and not forced and flow < 0.0 and not use_theme_anchor
+        and round(float(knobs["nl_mix"]), 6) >= 1.0)
+
     if _idx is not None:
         nl_survivors, n_nl_survived, forced_candidates, ступени = nlindex.select(
             _idx,
@@ -1451,7 +1468,9 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             pctl_scale=_PCTL_SCALE, literal_cap=literal_cap,
             cap=NL_SELECT_CAP, reserve_n=min(1_000_000, max(30, n_blocks * 5)),
             use_theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
-            per_bucket=1, sims=theme_sims, seed=семя, схема=rhyme or "")
+            per_bucket=1, sims=theme_sims, seed=семя, схема=rhyme or "",
+            тянуть_сразу=(int(knobs["shortlist"]) if _прямая_тяга else 0),
+            mat_share=knobs.get("mat_share", -1.0), repeat_ok=repeat_ok)
         nl_survivors_full = nl_survivors      # резервы уже внутри; ниже они не досчитываются
     else:
         nl_survivors, forced_candidates = _nl_scored(nl_fragments or [], corpus, hidden, ворота, гсч=гсч,
@@ -1524,12 +1543,12 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
         size = min(knobs["shortlist"], len(nl_survivors))
         if rhyme != "none":
             shortlist = _select_with_rhyme(nl_survivors, rhyme, size, set(range(size)),
-                                            precision=knobs["rhyme_precision"],
-                                            mat_share=knobs.get("mat_share", 0.0), flow=flow,
-                                            repeat_ok=repeat_ok,
-                                            theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
-                                            гсч=гсч,
-                                            тема=set(tags or ()), обязательные=set(forced or ()))
+                                                precision=knobs["rhyme_precision"],
+                                                mat_share=knobs.get("mat_share", 0.0), flow=flow,
+                                                repeat_ok=repeat_ok,
+                                                theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
+                                                гсч=гсч,
+                                                тема=set(tags or ()), обязательные=set(forced or ()))
         else:
             shortlist = _diversify(nl_survivors, size, div)
     elif knobs["nl_mix"] <= 0.0:
@@ -1562,8 +1581,14 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             # the SAME sequence. Searching the full `scored` list (not an MMR-
             # sized top-300 pool) matters here: rhyme needs a match on ENDING,
             # not on rank — see _select_with_rhyme's own docstring for measurements.
-            nl_positions = _nl_slot_plan(size, nl_quota)
-            shortlist = _select_with_rhyme(scored + nl_survivors, rhyme, size, nl_positions,
+            if _прямая_тяга:
+                # СБОРЩИК НЕ ЗОВЁТСЯ ВОВСЕ: `nlindex.select` уже вернул готовую
+                # строфу прямой тягой — со слогами, рифмой, полосой темы, долей
+                # мата и запретом близнецов. Искать в ней нечего.
+                shortlist = nl_survivors[:size]
+            else:
+                nl_positions = _nl_slot_plan(size, nl_quota)
+                shortlist = _select_with_rhyme(scored + nl_survivors, rhyme, size, nl_positions,
                                             precision=knobs["rhyme_precision"],
                                             mat_share=knobs.get("mat_share", 0.0), flow=flow,
                                             repeat_ok=repeat_ok,
