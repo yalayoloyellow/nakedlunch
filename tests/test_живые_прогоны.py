@@ -126,3 +126,58 @@ def test_порог_взят_с_плато_а_не_с_края():
         f"порог {stats.ПОРОГ_ВСПЛЕСКА_С} с вышел за замеренное плато 2–4 с — "
         "если данные изменились, пересними развёртку и перепиши комментарий "
         "в core/stats.py, а не двигай число молча")
+
+
+# ---- хит-рейт: вырожденные данные ------------------------------------------
+
+def _журнал(показов: int, строк: int, избранных: int) -> list[dict]:
+    """Минимальный журнал: редкие показы (живые) плюс сохранения."""
+    из = [{"kind": "shown", "t": 1000.0 + i * 60, "count": строк}
+          for i in range(показов)]
+    из += [{"kind": "favorite", "t": 2000.0 + i * 60, "text": f"строка {i}"}
+           for i in range(избранных)]
+    return из
+
+
+def test_хит_рейт_без_единого_сохранения_не_роняет(monkeypatch, tmp_path):
+    """Пустая копилка — обычное состояние первого дня. Деление на ноль здесь
+    было бы отказом статистики ровно тогда, когда она нужнее всего."""
+    файл = tmp_path / "stats.jsonl"
+    import json
+    файл.write_text("\n".join(json.dumps(e, ensure_ascii=False)
+                               for e in _журнал(5, 4, 0)), "utf-8")
+    monkeypatch.setattr(stats, "STATS_PATH", файл)
+    ж = stats.summary()["живое"]
+    assert ж["показано_строк"] == 20
+    assert ж["хит_рейт_pct"] == 0.0
+    assert ж["одна_строка_из"] is None
+
+
+def test_хит_рейт_без_единого_показа_не_роняет(monkeypatch, tmp_path):
+    """Сохранения есть, показов нет — так выглядит журнал, если строки пришли
+    не через ленту. Знаменателя нет, и врать нулём нельзя."""
+    файл = tmp_path / "stats.jsonl"
+    import json
+    файл.write_text("\n".join(json.dumps(e, ensure_ascii=False)
+                               for e in _журнал(0, 0, 3)), "utf-8")
+    monkeypatch.setattr(stats, "STATS_PATH", файл)
+    ж = stats.summary()["живое"]
+    assert ж["показано_строк"] == 0
+    assert ж["хит_рейт_pct"] is None
+
+
+def test_хит_рейт_считается_по_живым_показам_а_не_по_всем(monkeypatch, tmp_path):
+    """ГЛАВНОЕ. Машинный всплеск показов обязан уйти из ЗНАМЕНАТЕЛЯ, иначе
+    хит-рейт падает от прогона нагрузки, а не от качества отбора — и выглядит
+    так, будто программа стала хуже."""
+    import json
+    редкие = [{"kind": "shown", "t": 1000.0 + i * 60, "count": 10} for i in range(10)]
+    всплеск = [{"kind": "shown", "t": 50000.0 + i * 0.1, "count": 10} for i in range(300)]
+    сохр = [{"kind": "favorite", "t": 2000.0 + i, "text": f"с {i}"} for i in range(5)]
+    файл = tmp_path / "stats.jsonl"
+    файл.write_text("\n".join(json.dumps(e, ensure_ascii=False)
+                               for e in редкие + всплеск + сохр), "utf-8")
+    monkeypatch.setattr(stats, "STATS_PATH", файл)
+    ж = stats.summary()["живое"]
+    assert ж["показано_строк"] == 100, "всплеск попал в знаменатель"
+    assert ж["хит_рейт_pct"] == 5.0
