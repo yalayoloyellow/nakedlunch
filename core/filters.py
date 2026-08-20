@@ -1201,6 +1201,15 @@ def _штамп_прогона(семя: int | None, *, пул: int, скрыт�
     return {"seed": семя, "index": nlindex.штамп(), "pool": пул, "hidden": скрыто}
 
 
+# РАЗМЕР ПАЧКИ КАНДИДАТОВ, отдаваемой сборщику строфы. Замер 2026-08-20 — см.
+# подробный разбор у `NL_SELECT_CAP` внутри `run`. Коротко: восьми кандидатов на
+# строку хватает всегда, ниже 32 на строфу рифма начинает рваться, а прежний пол
+# в 300 остался от времён, когда пачку набирали вслепую и годной была шестая
+# часть. Держим числа здесь, а не по местам вызова: их два потребителя.
+_ПАЧКА_НА_СТРОКУ = 8
+_ПАЧКА_МИН = 32
+
+
 def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str = "none",
         tags: list[str] | None = None, forced: set[str] | None = None,
         stanza: list[dict] | None = None, семя: int | None = None) -> dict:
@@ -1334,7 +1343,24 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     # size*8)]`. This bounds SELECTION cost only; the actual filtering still
     # ran over the full pool moments earlier, so funnel counts stay honest —
     # see n_nl_survived/n_nl_classic_survived, captured before this cap.
-    NL_SELECT_CAP = max(300, int(knobs["shortlist"]) * 8)
+    # ПОЛ В 300 УБРАН 2026-08-20. Он стоял с тех пор, когда кандидатов набирали
+    # ВСЛЕПУЮ из всего пула: годных по слогам там было 6.1%, и триста тянули
+    # ради восемнадцати пригодных. Теперь пачка набирается равновероятно среди
+    # ПОДХОДЯЩИХ ФОРМЕ (`nlindex._равновероятно_по_форме`), то есть годны все —
+    # и триста стали числом ниоткуда.
+    #
+    # Сколько нужно на самом деле — ЗАМЕРЕНО на живом индексе, по 40–60 прогонов
+    # на точку, считались собранные строфы и сломанные схемы:
+    #
+    #   строфа «абаб» 4 строки:  пачка 8 и 16 — схема ломается 1 раз из 40;
+    #                            с 32 и выше — ноль;
+    #   боевой запрос, 9 строк:  пачка 72 — 60/60 собрано, 0 сломано, 0.7 мс;
+    #                            пачка 300 — то же самое, но 2.1 мс.
+    #
+    # То есть формула `shortlist × 8` и была верной, а пол её перебивал. Он же
+    # стоил втрое больше времени сборки ни за что. Нижняя граница 32 — не
+    # круглое число, а край замеренного плато: ниже него рифма начинает рваться.
+    NL_SELECT_CAP = max(_ПАЧКА_МИН, int(knobs["shortlist"]) * _ПАЧКА_НА_СТРОКУ)
 
     # -- stage 1: formal validity (syllable range + meter), skip hidden ------
     # The upper bound was a flat 13 (2026-07-14, before the stanza constructor
@@ -1521,7 +1547,13 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
                                             syllable_spec=syllable_spec, гсч=гсч,
                                             тема=set(tags or ()), обязательные=set(forced or ()))
         else:
-            shortlist = _diversify(scored[: max(300, size * 8)], size, div)
+            # ТА ЖЕ ПАЧКА, ЧТО У ПУТИ СО СХЕМОЙ. Здесь стояло своё
+            # `max(300, size * 8)` — дословный близнец NL_SELECT_CAP выше.
+            # Два списка одного и того же в этом проекте расходятся с
+            # гарантией, поэтому число одно и живёт в константах.
+            # [П] замер делался на пути СО схемой; здесь выбор проще (нет ни
+            # рифмы, ни партнёров), значит запас тем более достаточен.
+            shortlist = _diversify(scored[: max(_ПАЧКА_МИН, size * _ПАЧКА_НА_СТРОКУ)], size, div)
     else:
         nl_quota = min(len(nl_survivors), round(size * knobs["nl_mix"]))
         if rhyme != "none":
