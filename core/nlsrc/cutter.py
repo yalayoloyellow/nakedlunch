@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import html
 import re
+from functools import lru_cache
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List
@@ -75,6 +76,14 @@ def _grammeme(word: str, grammeme: str) -> bool:
     return False
 
 
+# ПАМЯТЬ НА СЛОВО (2026-08-21). Функция чистая — слово в тег, — а зовётся она
+# на КАЖДОМ слове каждого фрагмента. Пока это был проход по одной книге при
+# заливке, цена не считалась; с появлением повторяемой чистки склада
+# (`NakedLunchStore.почистить`) тот же вызов идёт по 2 449 400 фрагментам, а
+# слова в книгах повторяются десятками тысяч раз. Размер взят с запасом: в
+# живом складе различных словоформ порядка миллиона, и держать их все дешевле,
+# чем разбирать одно и то же морфологией.
+@lru_cache(maxsize=1 << 20)
 def _name_tag(word: str) -> str | None:
     stripped = word.strip(".,!?;:—–-\"'«»()")
     if not stripped:

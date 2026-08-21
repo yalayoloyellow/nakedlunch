@@ -218,6 +218,13 @@ export function renderSettings(c, vals) {
               <button onClick={function () { c.rebanQuality(); }}
                 title="Пересчитать только качество: банальность (имена собственные больше не считаются редкими) и число знаменательных слов. Ударения и рифмо-ключи не трогаются — идёт минуты, а не час"
                 style={s(КНОПКА)} className={hov('color: var(--ink); border-color: var(--border-soft)')}>пересчитать качество</button>
+              {/* ЧИСТКА — 2026-08-21. Стоит рядом с пересчётами нарочно: это
+                  та же полка «привести корпус в порядок». Но она ЕДИНСТВЕННАЯ
+                  здесь меняет склад, поэтому спрашивает подтверждение с
+                  числами (methods.corpus.cleanCorpus: сперва сухой прогон). */}
+              <button onClick={function () { c.cleanCorpus(); }}
+                title="Прогнать по складу все правила чистки разом: выбросить обломки (кусок другой строки), точные двойники и мусор указателей, подрезать оборванные хвосты, снять имена. Покажет цену и спросит. Необратимо; после — «прогнать всё заново»"
+                style={s(КНОПКА)} className={hov('color: var(--ink); border-color: var(--border-soft)')}>почистить корпус</button>
               <button onClick={function () { c.openCorpusDir(); }} style={s(КНОПКА)} className={hov('color: var(--ink); border-color: var(--border-soft)')}>папка</button>
               {st.corpusBusy ? (<span style={s('font-size: 9px; color: var(--ink);')}>{st.corpusBusy}</span>) : null}
             </div>

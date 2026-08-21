@@ -148,6 +148,8 @@ export const sourceRemove = (id) => post('/api/nl/source/remove', { id });
 export const rhymeRun = () => post('/api/nl/rhyme/run', {});
 // пересчёт только формулы качества — минуты вместо часа, ударения не трогает
 export const rhymeReban = () => post('/api/nl/rhyme/reban', {});
+// Чистка склада: `сухой: true` — только посчитать, ничего не менять.
+export const corpusClean = (сухой) => post('/api/nl/clean', { сухой: !!сухой });
 // карта воронки: сколько фрагментов и книг доживает до каждой ступени отсева
 // чёрный список слов и словосочетаний со счётчиком «сколько строк убирает»
 export const blacklistList = () => get('/api/nl/blacklist');
