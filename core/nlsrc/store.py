@@ -388,37 +388,18 @@ class NakedLunchStore:
             self._save(full=True)
         return changed
 
-    def strip_names(self) -> Dict[str, int]:
-        """Retroactive pass over ALREADY-STORED fragments, applying
-        strip_full_names to each (2026-07-19, user's own ask) — the source
-        text a corpus was cut FROM isn't kept once add_corpus has run (see
-        Corpus/Fragment above: no source_text field), so re-cutting existing
-        books from scratch with the new name filter isn't possible; this is
-        the closest equivalent, run directly on the fragments themselves.
-        A fragment that drops below cut_into_fragments's own thresholds
-        (< 2 words, < 7 chars) once a name is removed is discarded outright
-        rather than kept as a near-empty stub. Returns {checked, edited,
-        dropped} so the CLI can report something concrete, not just "done"."""
-        checked = edited = dropped = 0
-        kept: List[Fragment] = []
-        for f in self.state.fragments:
-            checked += 1
-            new_text = strip_full_names(f.text)
-            if new_text == f.text:
-                kept.append(f)
-                continue
-            if len(new_text.split()) < 2 or len(new_text) < 7:
-                dropped += 1
-                continue
-            edited += 1
-            kept.append(Fragment(id=f.id, text=new_text, corpus_id=f.corpus_id))
-        self.state.fragments = kept
-        for c in self.state.corpora:
-            c.fragment_count = sum(1 for f in self.state.fragments if f.corpus_id == c.id)
-        if edited or dropped:
-            self._rebuild_active_fragments()
-            self._save(full=True)
-        return {"checked": checked, "edited": edited, "dropped": dropped}
+    # НАДГРОБИЕ: `strip_names` УДАЛЁН 2026-08-21.
+    #
+    # Ретро-проход, снимавший «Имя [Отчество] Фамилия» с уже нарезанных
+    # фрагментов (2026-07-19, просьба владельца): исходный текст книги после
+    # `add_corpus` не хранится, поэтому перерезать заново нельзя — правило
+    # применялось прямо к фрагментам. Написан под находку, запущен один раз из
+    # консоли и с тех пор не имел НИ ОДНОГО вызывающего.
+    #
+    # Его работа целиком внутри `почистить()` ниже, вторым шагом, и там же
+    # обломок правила: фрагмент, осыпавшийся ниже порогов после снятия имени,
+    # выбрасывается, а не остаётся огрызком. Разница только в том, что теперь до
+    # него можно дотянуться кнопкой, а не из консоли.
 
     # ---------- ОДИН ПОВТОРЯЕМЫЙ ПРОХОД ЧИСТКИ (2026-08-21) ----------
     #
@@ -652,30 +633,17 @@ class NakedLunchStore:
                     break
         return [f for k, f in enumerate(фрагменты) if not двойник[k] and not обломок[k]]
 
-    def strip_index_junk(self) -> Dict[str, int]:
-        """Retroactive pass over ALREADY-STORED fragments, dropping the ones
-        is_index_junk flags (2026-08-01, user's own ask after «141, 573
-        Хазан В. II 468, 670 торн и контратака» leaked into live extendo
-        output) — same rationale as strip_names above: the raw source text
-        isn't retained after add_corpus, so re-cutting with the new filter
-        (now wired into cut_into_fragments) isn't possible; this is the
-        equivalent for corpora cut before the filter existed. Unlike names,
-        a junk fragment isn't editable prose — it's dropped whole."""
-        checked = dropped = 0
-        kept: List[Fragment] = []
-        for f in self.state.fragments:
-            checked += 1
-            if is_index_junk(f.text):
-                dropped += 1
-                continue
-            kept.append(f)
-        self.state.fragments = kept
-        for c in self.state.corpora:
-            c.fragment_count = sum(1 for f in self.state.fragments if f.corpus_id == c.id)
-        if dropped:
-            self._rebuild_active_fragments()
-            self._save(full=True)
-        return {"checked": checked, "dropped": dropped}
+    # НАДГРОБИЕ: `strip_index_junk` УДАЛЁН 2026-08-21.
+    #
+    # Ретро-проход, выбрасывавший записи именных указателей (2026-08-01, после
+    # того как «141, 573 Хазан В. II 468, 670 торн и контратака» утекло в живую
+    # выдачу). Та же история, что у `strip_names` выше: написан под находку,
+    # прогнан раз из консоли, ноль вызывающих.
+    #
+    # Работа целиком внутри `почистить()`, причём ЛУЧШЕ: там мусор проверяется
+    # ДВАЖДЫ — на входе и после правок, потому что фрагмент становится записью
+    # указателя уже после снятия имени и подрезки хвоста (замер: 7 строк из
+    # 2 101 501 на живом складе).
 
     def get_active_pool(self) -> List[str]:
         return list(self._active_fragments)  # copy for safety
