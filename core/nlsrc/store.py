@@ -23,7 +23,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .cutter import clean_text, cut_into_fragments, is_index_junk, strip_full_names
+from .cutter import (СЛОВО, clean_text, cut_into_fragments, is_index_junk,
+                     strip_full_names)
 from .generator import generate_four, generate_four_from_scored, tokens as _tokens
 
 
@@ -425,7 +426,11 @@ class NakedLunchStore:
     # не менять, иначе кнопку нельзя жать спокойно. Сторожит тест.
 
     _ГЛАСНЫЕ = set("аеёиоуыэюяАЕЁИОУЫЭЮЯ")
-    _СЛОВО = re.compile(r"[а-яёa-z0-9]+")
+    # РАЗБИВЩИК БЕРЁТСЯ ИЗ НАРЕЗЧИКА, А НЕ ЗАВОДИТСЯ СВОЙ. Свой тут уже был, и
+    # он отличался от нарезчикова: разные 5-граммы → разный ответ на «лежит ли
+    # строка внутри другой», и кнопка находила обломки после свежей заливки.
+    # Разбор — у `СЛОВО` в cutter.py.
+    _СЛОВО = СЛОВО
 
     @classmethod
     def _слогов(cls, текст: str) -> int:
