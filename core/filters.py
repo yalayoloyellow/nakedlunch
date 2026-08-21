@@ -281,26 +281,39 @@ _ANCHOR_SIM_CEILING = 0.92
 # самые дорогие случаи по кругу.
 _НЕ_СЧИТАН = object()
 
-# Потолок шкалы «связность соседних строк» (Раунд 44). Замер трёх референсных
-# текстов пользователя: 0.35 / 0.18 / 0.17 по косинусу центроидов лемм соседних
-# строк. То есть даже у самого связного его текста соседство держится втрое
-# слабее единицы — линейная шкала 0..1 означала бы, что верхняя половина
-# ползунка недостижима в принципе. Поэтому ползунок 0..1 переводится в цель
-# 0..0.6: 0.35 приходится примерно на 0.6 шкалы, есть куда крутить в обе
-# стороны.
-_FLOW_MAX = 0.6
-
-# Насколько связность двигает выбор против прочих соображений. Прибавка к
-# рангу кандидата, а не жёсткое условие: связность — свойство постепенное, в
-# отличие от мата и клаузулы, и ломать ради неё рифму нельзя. Число
-# предварительное: его калибруем ЗАМЕРОМ выдачи против профиля референса —
-# ровно для этого мерилка и написана.
-_FLOW_W = 0.9
-
-# Через границу части связь заметно слабее, чем внутри неё — это не догадка, а
-# три замера подряд: 0.42/0.23, 0.19/0.16, 0.18/0.15 (отношение 0.55, 0.84,
-# 0.83). Значит на стыке целимся ниже той же доли.
-_FLOW_EDGE = 0.75
+# НАДГРОБИЕ: РУЧКА «СВЯЗНОСТЬ» УДАЛЕНА 2026-08-21.
+#
+# Она прибавляла к рангу кандидата за близость к ЦЕНТРОИДУ ПРЕДЫДУЩЕЙ строки:
+# `flow_target = _FLOW_MAX(0.6) * flow * (_FLOW_EDGE(0.75) на стыке блоков)`,
+# `rank += _FLOW_W(0.9) * (1 - |cos - flow_target|)`. Единственный механизм в
+# программе, судивший строфу как ЦЕЛОЕ, а не строку по одной.
+#
+# ЗАМЕР ПОДТВЕРДИЛ, ЧТО ОНА ЖИВАЯ (2026-08-21, 40 строф «абаб» на положение):
+# косинус соседних строк 0.0 → +0.008, выкл → +0.187, 1.0 → +0.292,
+# перестановочный P < 0.0001. То есть механизм работал.
+#
+# УДАЛЕНА НЕ ЗА МЁРТВОСТЬ, А ЗА ОТСУТСТВИЕ ПОЛЬЗЫ — и это решил ЖУРНАЛ:
+# из 25 строф, давших хоть одну сохранённую строку, 48% отдали ровно одну, а
+# три последних сохранения сделаны в ОДНУ СЕКУНДУ и между собой не связаны
+# никак («Боб Арчер «Пользователь» · «выглядит Монмартр» · «треск белых
+# взрывов»). Владелец собирает ОТДЕЛЬНЫЕ находки, а соседей выбрасывает.
+# Связность решает, что стоит РЯДОМ, — то есть управляет ровно тем, что он
+# не уносит.
+#
+# Довод «пригодится куплетам и припевам» отвергнут им же: «нахуя мне припевы
+# и хуки если я пайплайн и серию убрал и только строфы генерю». Цепь и серия
+# вырезаны Раундом 63 по его словам «Pipeline и серия с практической точки
+# зрения бесполезны. Строфа единственным режимом и всё».
+#
+# ЧТО ОСТАЛОСЬ ЗАПИСАННЫМ, ЕСЛИ ПОНАДОБИТСЯ ВЕРНУТЬ: возвращать надо НЕ этой
+# прибавкой к рангу (у неё верхняя половина мертва — 0.5 и 1.0 дают +0.287 и
+# +0.292, и потолок +0.292 не достаёт даже до самого связного референсного
+# текста владельца, 0.35), а ПОЛОСОЙ-ФИЛЬТРОМ с равновероятным жребием
+# внутри. Прототип замерен 2026-08-21: цель 0.00 → +0.016, 0.15 → +0.214,
+# 0.30 → +0.381, 0.45 → +0.529 — вдвое шире размах и честная шкала, цена
+# +70 мс на строфу, перепечка не нужна (`Index.relevance` уже считает ровно
+# эту форму). Разбор — план, часть 12.
+# _FLOW_MAX / _FLOW_W / _FLOW_EDGE удалены здесь же вместе с ручкой.
 
 
 def _cos(a, b) -> float | None:
@@ -1276,10 +1289,9 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     no_mat = bool(knobs.get("no_mat", False))
     # Антифильтр — второе ворото той же ручки (см. clean.knobs: only_mat)
     only_mat = bool(knobs.get("only_mat", False))
-    # Клаузула и связность соседних строк — Раунд 44, откалибровано по
-    # референсным текстам пользователя (см. scan.clausula и _FLOW_MAX).
+    # Клаузула — Раунд 44, откалибрована по референсным текстам владельца
+    # (см. scan.clausula). Рядом стояла `flow` — удалена 2026-08-21.
     clausula = int(knobs.get("clausula", 0) or 0)
-    flow = float(knobs.get("flow", -1.0))
     # «Повтор» (Раунд 52, хук): снимает барьер на повтор леммы внутри строфы.
     # В классике не действует — там нет ни лемм, ни отбора по ним: классика
     # это нарезка корпуса, и `_run_classic` до `_select_with_rhyme` не доходит.
@@ -1441,13 +1453,13 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     #   · строки грамматического генератора в той же строфе (`Источники` < 1) —
     #     их тянуть неоткуда, они не в индексе;
     #   · обязательное слово `!слово` — своя гарантия показа;
-    #   · связность — прибавка к рангу от предыдущей строки, то есть ранжир;
     #   · тематический якорь — отдельная строка-зацепка.
     # Ни одно из этих условий не выполняется в обычном прогоне владельца:
-    # Источники 1.0, слов нет, связность выключена. Развилка держится тестом.
+    # Источники 1.0, слов нет. Четвёртым тут стояла связность — с её
+    # удалением 2026-08-21 исключений стало три вместо четырёх.
     _прямая_тяга = bool(
         _idx is not None and syllable_spec and rhyme != "none"
-        and not forced and flow < 0.0 and not use_theme_anchor
+        and not forced and not use_theme_anchor
         and round(float(knobs["nl_mix"]), 6) >= 1.0)
 
     if _idx is not None:
@@ -1537,7 +1549,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
         if rhyme != "none":
             shortlist = _select_with_rhyme(nl_survivors, rhyme, size, set(range(size)),
                                                 precision=knobs["rhyme_precision"],
-                                                mat_share=knobs.get("mat_share", 0.0), flow=flow,
+                                                mat_share=knobs.get("mat_share", 0.0),
                                                 repeat_ok=repeat_ok,
                                                 theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
                                                 гсч=гсч,
@@ -1554,7 +1566,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
         size = min(knobs["shortlist"], len(scored))
         if rhyme != "none":
             shortlist = _select_with_rhyme(scored, rhyme, size, precision=knobs["rhyme_precision"],
-                                            mat_share=knobs.get("mat_share", 0.0), flow=flow,
+                                            mat_share=knobs.get("mat_share", 0.0),
                                             repeat_ok=repeat_ok,
                                             syllable_spec=syllable_spec, гсч=гсч,
                                             тема=set(tags or ()), обязательные=set(forced or ()))
@@ -1583,7 +1595,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
                 nl_positions = _nl_slot_plan(size, nl_quota)
                 shortlist = _select_with_rhyme(scored + nl_survivors, rhyme, size, nl_positions,
                                             precision=knobs["rhyme_precision"],
-                                            mat_share=knobs.get("mat_share", 0.0), flow=flow,
+                                            mat_share=knobs.get("mat_share", 0.0),
                                             repeat_ok=repeat_ok,
                                             theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
                                             гсч=гсч,
@@ -1885,7 +1897,7 @@ def закрепить_разброс(семя: int | None) -> None:
 def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: set | None = None,
                         precision: float = 0.0, theme_anchor: bool = False,
                         syllable_spec: list | None = None, mat_share: float = 0.0,
-                        flow: float = -1.0, repeat_ok: bool = False,
+                        repeat_ok: bool = False,
                         гсч=None, тема: set | None = None,
                         обязательные: set | None = None) -> list:
     """Select `size` lines from candidates while respecting a rhyme scheme,
@@ -2067,12 +2079,15 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     # блок плюс тематическая, блоков пятьдесят — то есть триста полных
     # проходов по семидесяти тысячам за один пул.
     #
-    # А максимум искать перебором незачем. Когда связность выключена
-    # (`flow_target is None` — у пользователя она выключена, но условие проверяется
-    # честно, а не предполагается), ранг кандидата — это его собственный
+    # А максимум искать перебором незачем: ранг кандидата — это его собственный
     # `score` (или `_pctl` у тематического якоря), и от позиции он не зависит
     # вовсе. Значит достаточно идти по заранее отсортированному порядку и взять
     # ПЕРВОГО подходящего: он и есть argmax.
+    #
+    # РАНЬШЕ ЭТО БЫЛО УСЛОВНО: единственным, что делало ранг зависимым от
+    # позиции, была связность (прибавка за близость к предыдущей строке), и
+    # ранний выход проверял `flow_target is None`. С её удалением 2026-08-21
+    # условие отпало — ранний выход верен всегда при полном обходе.
     #
     # ЭКВИВАЛЕНТНОСТЬ, включая ничьи. Старый цикл берёт кандидата по строгому
     # `rank > best_rank`, то есть при равных рангах побеждает ВСТРЕЧЕННЫЙ
@@ -2224,7 +2239,8 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     # Это НЕ ослабление проверки: у кого спросят, тот и посчитается, значение
     # то же самое до последнего бита. Память — тот же список, просто заполняется
     # он по мере надобности.
-    _центроиды: list = [_НЕ_СЧИТАН] * len(candidates) if (theme_anchor or flow >= 0.0) else []
+    # Только ради ЯКОРЯ ТЕМЫ: связность, вторая потребительница, удалена.
+    _центроиды: list = [_НЕ_СЧИТАН] * len(candidates) if theme_anchor else []
 
     class _Центроиды:
         """Список наизнанку: индексируется как список, считает при первом
@@ -2302,16 +2318,6 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
             recent_union |= s
         syl_range = syllable_spec[local_pos] if syllable_spec else None
 
-        # Цель связности для ЭТОЙ позиции: внутри части — как просили, на
-        # первой строке части (то есть на стыке) — ниже, по измеренному
-        # отношению _FLOW_EDGE. Нет предыдущей строки — нет и цели.
-        flow_target = None
-        prev_centroid = None
-        if flow >= 0.0 and selected and cand_centroids is not None:
-            prev_centroid = embeddings.lemma_centroid(selected[-1].get("_lem") or ())
-            if prev_centroid is not None:
-                flow_target = _FLOW_MAX * flow * (_FLOW_EDGE if local_pos == 0 else 1.0)
-
         def scan_for(require_slot: bool, allow_repeat: bool = False, theme_anchor_mode: bool = False,
                      require_length: bool = False, length_range: tuple | None = None,
                      want_mat: bool | None = None) -> int:
@@ -2356,7 +2362,10 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
             # функции на КАЖДОГО кандидата съедал весь выигрыш и уводил в минус,
             # 15.8 с → 20.6 с. Там, где ранний выход не срабатывает (якорь в
             # мелкой рифмо-корзине), остаётся чистая накладная плата.
-            ранний = полный and flow_target is None
+            # `and flow_target is None` снято 2026-08-21 вместе со связностью:
+            # без неё ранг кандидата не зависит от позиции НИКОГДА, и ранний
+            # выход по отсортированному порядку верен при любом полном обходе.
+            ранний = полный
             обход = (порядок_pctl if theme_anchor_mode else порядок_score) if ранний else search_space
             полоса: list[int] = []
             best_idx, best_rank = -1, -999.0
@@ -2516,16 +2525,6 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
                 # (could favor low relevance at "диссонанс"), the wrong
                 # signal for "точно в тему по запросу" (see docstring).
                 rank = cand["_pctl"] if theme_anchor_mode else cand["score"]
-                # Связность с ПРЕДЫДУЩЕЙ строкой (Раунд 44). Не фильтр, а
-                # прибавка: чем ближе связь к запрошенной, тем выше ранг.
-                # Ломать ради связности рифму нельзя — она свойство
-                # постепенное, в отличие от мата и клаузулы.
-                if flow_target is not None and cand_centroids is not None:
-                    текущ = cand_centroids[i]
-                    if текущ is not None:
-                        cos = _cos(prev_centroid, текущ)
-                        if cos is not None:
-                            rank += _FLOW_W * (1.0 - min(1.0, abs(cos - flow_target)))
                 if rank > best_rank:
                     best_rank, best_idx = rank, i
             # Полоса не добралась до полной ширины — пул кончился раньше. Берём

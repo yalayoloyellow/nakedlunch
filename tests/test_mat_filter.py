@@ -259,8 +259,6 @@ def test_clausula_knob_parses():
     assert clean.knobs({})["clausula"] == 0
     assert clean.knobs({"clausula": 2})["clausula"] == 2
     assert clean.knobs({"clausula": 9})["clausula"] == 3       # клампится
-    assert clean.knobs({})["flow"] == -1.0                     # не задано
-    assert clean.knobs({"flow": 0.6})["flow"] == 0.6
 
 
 def test_clausula_is_a_gate_not_a_preference():

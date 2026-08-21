@@ -44,11 +44,11 @@ def test_профиль_всегда_полный():
 
 
 def test_мусор_клампится_а_чужое_отбрасывается():
-    p = clean.knob_params({"Мат": 5, "Клаузула": 2.7, "Связность": -9,
+    p = clean.knob_params({"Мат": 5, "Клаузула": 2.7, "Диссонанс": -9,
                            "Точность рифм": "чушь", "постороннее": 1})
     assert p["Мат"] == 1.0            # выше потолка
     assert p["Клаузула"] == 3         # целое, округлено и прижато к потолку
-    assert p["Связность"] == -1.0     # ниже пола
+    assert p["Диссонанс"] == 0.0      # ниже пола
     assert p["Точность рифм"] == 0.25  # нечисло → дефолт
     assert "постороннее" not in p
 
@@ -105,12 +105,11 @@ def test_инвертированные_шкалы_переводятся_оди
 def test_прямые_шкалы_не_переворачиваются():
     k = clean.knobs_from_profile({"name": "т", "params": {
         "Источники": 0.4, "Точность рифм": 0.9,
-        "Клаузула": 2, "Связность": 0.3}})
+        "Клаузула": 2}})
     assert k["real_text"] == 0.4 and k["nl_mix"] == 0.4
     assert k["rhyme_precision"] == 0.9
     assert "melody" not in k and "meter" not in k   # удалена 2026-08-21
     assert k["clausula"] == 2
-    assert k["flow"] == pytest.approx(0.3)
 
 
 @pytest.mark.parametrize("мат, share, no_mat, only_mat", [

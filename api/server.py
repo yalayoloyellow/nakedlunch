@@ -1466,11 +1466,11 @@ def api_generate():
     # (единственный источник правды об именах крутилок) — сторож
     # `test_stats_knobs.py` не даёт им разойтись снова: заведут десятую ручку —
     # тест покраснеет, а не журнал промолчит.
-    #   Мат → mat_share · Клаузула → clausula · Связность → flow ·
-    #   Повтор → repeat · Диссонанс → cohesion (ядро держит консонанс) ·
+    #   Мат → mat_share · Клаузула → clausula · Повтор → repeat ·
+    #   Диссонанс → cohesion (ядро держит консонанс) ·
     #   Источники → real_text · Точность рифм → rhyme_precision.
-    # `banality` УБРАНА 2026-08-20, `melody` — 2026-08-21, вместе с ручками
-    # (надгробия в nlindex.py и filters.py).
+    # `banality` УБРАНА 2026-08-20, `melody` и `flow` — 2026-08-21, вместе с
+    # ручками (надгробия в nlindex.py и filters.py).
     # В ПРОШЛЫХ записях журнала она остаётся и остаётся читаемой — журнал это
     # история, а не текущее состояние; выгрузка в CSV её колонку держит.
     # `classic` не крутилка, а РЕЖИМ (алгоритм/классика), и пишется он не
@@ -1478,7 +1478,7 @@ def api_generate():
     # остальные числа.
     ui_knobs = {k: knobs[k] for k in ("cohesion", "real_text",
                                        "rhyme_precision", "classic",
-                                       "mat_share", "clausula", "flow", "repeat")
+                                       "mat_share", "clausula", "repeat")
                 if k in knobs}
     # ПОЧИНКА: воронка ПЛОСКАЯ, как её отдаёт filters.run. Здесь стояли три
     # выражения по ВЛОЖЕННОМУ виду (funnel["gen"]["used"]) — его давал
