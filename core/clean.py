@@ -179,8 +179,9 @@ def theme_forced(raw: str) -> set[str]:
 
 
 def knobs(raw: dict | None) -> dict:
-    """Sliders for unified mode: melody, cohesion, banality, real_text.
-    Backward compatible with old names (explore, meter, banal, nl_mix).
+    """Sliders for unified mode: cohesion, real_text (melody и banality
+    удалены — см. надгробия ниже). Backward compatible with old names
+    (explore, nl_mix).
     Missing keys fall back to defaults; out-of-range values are clamped.
 
     No "novelty"/λ knob anymore (removed 2026-07-14, user: "всё что отвечает
@@ -210,7 +211,9 @@ def knobs(raw: dict | None) -> dict:
     # где лежит полное обоснование. Здесь это ФОЛБЭК для вызова без knobs;
     # UI всегда шлёт все ползунки явно. Держать в синхроне: два разных дефолта
     # для одного понятия — это второй источник правды.
-    melody = num("melody", 0.0, 1.0, 0.35, "meter")       # rvaное → звучное
+    # НАДГРОБИЕ: `melody` (алиас `meter`) УДАЛЁН 2026-08-21 — ручка
+    # «Мелодичность» снесена целиком по двум замерам, разбор в надгробии
+    # core/filters.py у МЕТР_ПОРОГ. Профили со старым ключом читаются.
     cohesion = num("cohesion", 0.0, 1.0, 0.5, "explore")  # диссонанс → консонанс
     # НАДГРОБИЕ: `banality` (алиас `banal`) УДАЛЁН 2026-08-20 — ручка снесена
     # целиком по замеру, разбор в надгробии core/nlindex.py. Старые настройки и
@@ -221,7 +224,6 @@ def knobs(raw: dict | None) -> dict:
     # Map new sliders to old domain names for now (will gradually adapt internals)
     return {
         "explore": cohesion,                    # cohesion is the new explore
-        "meter": melody,                        # melody includes meter
         # Lower bound is 1, not the earlier 5: freestyle generates exactly ONE
         # scheme-length at a time (found 2026-07-14 — a 4-letter scheme like
         # "абаб" was silently padded to 5 lines by this floor). Upper bound
@@ -230,7 +232,6 @@ def knobs(raw: dict | None) -> dict:
         # scheme × many stanzas can run past 200 too).
         "shortlist": whole("shortlist", 1, 400, 40),
         "nl_mix": real_text,                    # real_text is the new nl_mix
-        "melody": melody,                       # store raw sliders too for future use
         "cohesion": cohesion,
         "real_text": real_text,
         # 0.25 (2026-07-17) — ИЗМЕРЕННОЕ среднее пользователя по 125 прогонам, не
@@ -359,7 +360,11 @@ KNOB_GATES = {
 
 KNOB_OPINIONS = {
     "Точность рифм": (0.0, 1.0, 0.25, False),   # 0 точные · 1 ассонанс
-    "Мелодичность": (0.0, 1.0, 0.35, False),    # 0 рваное · 1 звучное
+    # НАДГРОБИЕ: «Мелодичность» (0.0, 1.0, 0.35) УДАЛЕНА 2026-08-21. Метр на
+    # прозе не считается ПО ПОСТРОЕНИЮ (у строк корпуса meter=None — реальный
+    # текст никто не писал под долю), то есть ручка была мертва на 89%
+    # прогонов. Замена «через звучность» ОТВЕРГНУТА замером по его же
+    # избранному — разбор в core/filters.py у МЕТР_ПОРОГ.
     # НАДГРОБИЕ: «Банальность» (0.0, 1.0, 0.83) УДАЛЕНА 2026-08-20. Ручка
     # обещала износ языка, а мерила частоту самого редкого СЛОВА; замена
     # офлайн недостижима, а рабочее положение у неё было ровно одно, и даже оно
@@ -452,7 +457,7 @@ def knobs_from_profile(profile: dict | None) -> dict:
         "clausula": p["Клаузула"],
         "flow": p["Связность"],
         "rhyme_precision": p["Точность рифм"],
-        "melody": p["Мелодичность"],
+        # `"melody": p["Мелодичность"]` снято 2026-08-21 вместе с ручкой.
         # `"banality": p["Банальность"]` снято 2026-08-20 вместе с ручкой.
         "cohesion": 1.0 - p["Диссонанс"],     # у ядра консонанс, у ползунка диссонанс
         "repeat": p["Повтор"],

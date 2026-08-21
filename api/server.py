@@ -1468,15 +1468,15 @@ def api_generate():
     # тест покраснеет, а не журнал промолчит.
     #   Мат → mat_share · Клаузула → clausula · Связность → flow ·
     #   Повтор → repeat · Диссонанс → cohesion (ядро держит консонанс) ·
-    #   Источники → real_text · Точность рифм → rhyme_precision ·
-    #   Мелодичность → melody.
-    # `banality` УБРАНА 2026-08-20 вместе с ручкой (надгробие в nlindex.py).
+    #   Источники → real_text · Точность рифм → rhyme_precision.
+    # `banality` УБРАНА 2026-08-20, `melody` — 2026-08-21, вместе с ручками
+    # (надгробия в nlindex.py и filters.py).
     # В ПРОШЛЫХ записях журнала она остаётся и остаётся читаемой — журнал это
     # история, а не текущее состояние; выгрузка в CSV её колонку держит.
     # `classic` не крутилка, а РЕЖИМ (алгоритм/классика), и пишется он не
     # вместо остальных, а вдобавок: без него неясно, к какому режиму относятся
     # остальные числа.
-    ui_knobs = {k: knobs[k] for k in ("melody", "cohesion", "real_text",
+    ui_knobs = {k: knobs[k] for k in ("cohesion", "real_text",
                                        "rhyme_precision", "classic",
                                        "mat_share", "clausula", "flow", "repeat")
                 if k in knobs}

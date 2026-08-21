@@ -119,7 +119,7 @@ def test_run_drops_mat_nl_fragments_only_with_flag():
 def test_run_drops_mat_grammar_lines_only_with_flag():
     """Второй путь отсева — грамматические строки (run, stage 3, рядом с
     blacklist/клише): рукодельная Line с матом отсеивается при no_mat=True
-    и живёт без флага. Крутилки ослаблены (melody=0, banality=0.5), чтобы
+    и живёт без флага. Крутилки ослаблены, чтобы
     строки гарантированно доходили до содержательного фильтра.
 
     Раунд 58: «ослаблено» для банальности — это 0.5, а не 0. Ручка стала
@@ -131,7 +131,7 @@ def test_run_drops_mat_grammar_lines_only_with_flag():
     ok_line = Line([Word("рассвет", 1, "NOUN", "рассвет"),
                     Word("пришёл", 1, "VERB", "прийти")], "t")
     lines = [mat_line, ok_line]
-    base = {"shortlist": 5, "real_text": 0.0, "melody": 0.0, "banality": 0.5}
+    base = {"shortlist": 5, "real_text": 0.0}
 
     res_on = filters.run(lines, clean.knobs({**base, "no_mat": True}), Corpus(), rhyme="none")
     texts_on = {r["text"] for r in res_on["shortlist"]}

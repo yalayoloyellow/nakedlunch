@@ -36,6 +36,8 @@ def файл(tmp_path, monkeypatch):
     return p
 
 
+# «Мелодичность» и «Банальность» здесь — НАРОЧНО: старый файл настроек с
+# диска несёт удалённые ключи, и чтение обязано их пережить, выбросив.
 СТАРЫЙ = {"nl_params": {"mode": "алгоритм", "params": {
     "Источники": 1.0, "Точность рифм": 0.25, "Мелодичность": 0.35,
     "Банальность": 0.35, "Разнообразие": 0.5}}}
@@ -45,8 +47,9 @@ def test_chtenie_vybrasyvaet_myortvyy_klyuch(файл):
     файл.write_text(json.dumps(СТАРЫЙ, ensure_ascii=False), "utf-8")
     p = settings_mod.read()["nl_params"]["params"]
     assert "Разнообразие" not in p
+    assert "Мелодичность" not in p and "Банальность" not in p  # удалены
     # живое сохранено, а не сброшено заодно с мёртвым
-    assert p["Источники"] == 1.0 and p["Мелодичность"] == 0.35
+    assert p["Источники"] == 1.0 and p["Точность рифм"] == 0.25
 
 
 def test_chtenie_dobivaet_zhivye_klyuchi(файл):

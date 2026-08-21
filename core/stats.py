@@ -327,7 +327,8 @@ def summary() -> dict:
 # The RAW event log, not summary()'s aggregates — aggregation is for the
 # in-app tab; real offline analysis wants the individual events.
 
-# `banality` ОСТАЁТСЯ В ВЫГРУЗКЕ, ХОТЯ РУЧКИ БОЛЬШЕ НЕТ (2026-08-20). Журнал —
+# `banality` (2026-08-20) и `melody` (2026-08-21) ОСТАЮТСЯ В ВЫГРУЗКЕ, ХОТЯ
+# РУЧЕК БОЛЬШЕ НЕТ. Журнал —
 # это история: 822 живых прогона писались с этим числом, и выбросить колонку
 # значило бы сделать прошлое неразбираемым задним числом. У новых записей она
 # просто пуста — `extrasaction="ignore"` и `restval=""` это и дают.
