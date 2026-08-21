@@ -201,7 +201,15 @@ export function renderSettings(c, vals) {
             <div style={s('display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;')}>
               <label style={s(КНОПКА + (st.corpusBusy ? ' opacity: 0.5;' : ''))} className={hov('color: var(--ink); border-color: var(--border-soft)')}>
                 ＋ залить книгу
-                <input type="file" multiple accept=".txt,.md,.fb2,.epub,.html,.htm" disabled={!!st.corpusBusy}
+                {/* СПИСОК РАСШИРЕНИЙ = СПИСОК РАЗБОРЩИКА, И ЭТО НЕ ПЕДАНТИЗМ
+                    (2026-08-21). Здесь стояло «.txt,.md,.fb2,.epub,.html,.htm»,
+                    а `cutter.parse_source_file` умеет ровно три: fb2, txt, md.
+                    Остальные окно предлагало выбрать, а бэк отвечал
+                    «unsupported_format» — то есть интерфейс обещал то, чего в
+                    программе нет. Владелец 2026-08-21: «epub не нужен, fb2, txt
+                    и md — этого достаточно, epub не предусматривался».
+                    Сторож — tests/test_чистка_склада.py. */}
+                <input type="file" multiple accept=".txt,.md,.fb2" disabled={!!st.corpusBusy}
                   onChange={function (e) { c.addBooks(e.target.files); e.target.value = ''; }}
                   style={s('display: none;')} />
               </label>
