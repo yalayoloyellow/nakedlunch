@@ -297,14 +297,13 @@ class NakedLunchStore:
         идёт pymorphy3 по всему тексту книги и занимает большую часть времени,
         поэтому молчать на нём нельзя."""
         name = name.strip() or "Без названия"
-        # Clean the raw text (remove HTML tags, normalize, etc.) immediately after "reading"
-        # and before any fragmentation. Centralized here so all add paths benefit.
+        # СТАДИЯ 2 ЦЕЛИКОМ — ОДНИМ ВЫЗОВОМ (2026-08-21). Тут стояли два: сперва
+        # `clean_text`, следом `strip_full_names`. Второй и был той самой
+        # «стадией 2.5», из-за которой чистка оставалась размазанной: снятие
+        # имён — такая же правка текста перед нарезкой, как всё остальное, и
+        # держать её отдельно значило иметь два места, где чистят.
         if шаг: шаг("чищу текст")
-        text = clean_text(text)
-        # Strip real "Имя Фамилия" pairs before cutting (2026-07-19, user's
-        # own ask) — a name never even reaches the sliding-window cuts below.
-        if шаг: шаг("разбираю имена")
-        text = strip_full_names(text)
+        text = clean_text(text, шаг=шаг)
 
         if шаг: шаг("режу на фрагменты")
         frags = cut_into_fragments(text)

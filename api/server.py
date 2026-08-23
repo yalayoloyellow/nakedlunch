@@ -2170,6 +2170,23 @@ def _import_status() -> dict | None:
             "done": i, "total": n, "pct": pct, "detail": _IMPORT["detail"]}
 
 
+# Отказ обязан быть читаемым. Коды («unknown_encoding») — это разговор кода с
+# кодом; человеку в ленте работ нужно предложение, из которого понятно, что
+# случилось. Правило владельца: «если что-то происходит, это мне отображается».
+_ОТКАЗЫ = {
+    "unknown_encoding": "не удалось прочесть текст — файл не в известной "
+                        "кодировке (или это вообще не текст)",
+    "unsupported_format": "формат не поддерживается — нужны .fb2, .txt или .md",
+    "empty_source": "в файле не нашлось текста",
+    "no fragments created from the source text":
+        "текст есть, но нарезать из него нечего — слишком короткий",
+}
+
+
+def _по_русски(ошибка: str) -> str:
+    return _ОТКАЗЫ.get(ошибка, ошибка)
+
+
 def _import_worker(payload: list) -> None:
     """payload — [(имя файла, байты)]. Один поток на пачку: стор не потокобезопасен,
     и две заливки разом порвали бы список фрагментов."""
@@ -2205,7 +2222,8 @@ def _import_worker(payload: list) -> None:
         хвост = f"добавлено {len(added)} {чего} · {фраг:,} фрагментов".replace(",", " ") if added else ""
         if errors:
             хвост += ("; " if хвост else "") + f"не вышло: {len(errors)} — " + \
-                     "; ".join(f'{_коротко(e["name"])}: {e["error"]}' for e in errors[:2])
+                     "; ".join(f'{_коротко(e["name"])}: {_по_русски(e["error"])}'
+                               for e in errors[:2])
         _IMPORT.update({"state": "error" if errors and not added else "done",
                         "i": len(payload), "added": added, "errors": errors,
                         "done_at": time.time(), "detail": хвост})
