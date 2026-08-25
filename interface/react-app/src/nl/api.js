@@ -121,8 +121,11 @@ export const status = () => get('/api/status');
 // ---- корпус nakedlunch: источники и сборка --------------------------------
 // Заливка книг — ЕДИНСТВЕННЫЙ роут не на JSON: бэк читает request.files
 // ('/api/nl/source/add'), поэтому тут FormData и свой fetch, а не post().
-// Таймаут больше генерации: книга на несколько мегабайт режется на фрагменты
-// синхронно в запросе.
+//
+// Роут отвечает СРАЗУ: он читает байты (поток запроса закроется раньше, чем
+// работник до них доберётся) и отдаёт `{queued, sources}`, а разбор, чистка и
+// нарезка идут в фоновом потоке. Ход виден через /api/status, пункт «Книга».
+// Таймаут тут — только на саму передачу файла, не на обработку.
 export async function sourceAdd(files) {
   const form = new FormData();
   for (const f of files) form.append('files', f);
@@ -139,7 +142,7 @@ export async function sourceAdd(files) {
   let data = null;
   try { data = await res.json(); } catch (e) { /* ниже честная ошибка по статусу */ }
   if (!res.ok || (data && data.error)) throw new Error((data && data.error) || ('ошибка сервера: HTTP ' + res.status));
-  return data;   // {added:[{name,fragment_count}], errors:[{name,error}], sources}
+  return data;   // {queued:[имена], sources} — итог заливки приходит через /api/status
 }
 export const sourceToggle = (id) => post('/api/nl/source/toggle', { id });
 export const sourceRemove = (id) => post('/api/nl/source/remove', { id });
