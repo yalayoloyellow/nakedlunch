@@ -126,6 +126,8 @@ class NakedLunchStore:
         # смещению в CLI), а платились они на КАЖДОМ переключении книги:
         # 2.87 млн токенизаций и 2.87 млн множеств. Считаем по первому спросу.
         self._active_frag_tokens: Optional[List[set]] = None
+        # Ключи фрагментов для сверки при заливке — см. `_ключи_склада`.
+        self._ключи: Optional[set] = None
         self._load()
         self._rebuild_active_fragments()
 
@@ -167,6 +169,20 @@ class NakedLunchStore:
             except Exception:
                 pass
 
+    def _ключи_склада(self) -> set:
+        """Ключи всех фрагментов склада — считаются ОДИН раз на пачку.
+
+        Разбор 2.4 млн фрагментов на слова стоит 16 секунд (замер на боевом
+        складе). Пачка из пяти книг платила бы их пять раз подряд, ничего между
+        ними не меняя по существу: новые ключи достаточно досыпать.
+
+        Живёт до ближайшей смены состава фрагментов — `_rebuild_active_fragments`
+        сбрасывает. Хранятся ХЭШИ, а не сами ключи: 145 МБ против 1 213."""
+        if self._ключи is None:
+            self._ключи = {hash(tuple(СЛОВО.findall(f.text.lower())))
+                           for f in self.state.fragments}
+        return self._ключи
+
     def _rebuild_active_fragments(self) -> None:
         """Rebuild cached active fragments list and their tokens.
         Call this whenever active corpora set changes (add, toggle, delete, reset).
@@ -175,6 +191,7 @@ class NakedLunchStore:
         active_ids = {c.id for c in self.state.corpora if c.active}
         self._active_fragments = [f.text for f in self.state.fragments if f.corpus_id in active_ids]
         self._active_frag_tokens = None      # посчитается по первому спросу
+        self._ключи = None                   # состав фрагментов поменялся
 
     def _frag_tokens(self) -> List[set]:
         """Токены активных фрагментов — лениво (Раунд 56).
@@ -368,11 +385,15 @@ class NakedLunchStore:
         # фрагмент, не порча. На боевом складе коллизий ноль (2 385 118
         # уникальных ключей обоими способами).
         if шаг: шаг("сверяю с корпусом")
-        известные = {hash(tuple(СЛОВО.findall(f.text.lower())))
-                     for f in self.state.fragments}
+        известные = self._ключи_склада()
         было_нарезано = len(frags)
-        frags = [f for f in frags
-                 if hash(tuple(СЛОВО.findall(f.lower()))) not in известные]
+        свежие = []
+        for ф in frags:
+            к = hash(tuple(СЛОВО.findall(ф.lower())))
+            if к not in известные:
+                известные.add(к)      # пачка книг не платит разбор дважды
+                свежие.append(ф)
+        frags = свежие
         if not frags:
             # СВОЙ КОД, А НЕ ОБЩИЙ (2026-08-21). Нарезка дала фрагменты, но все
             # до одного уже лежат в складе — то есть книгу заливают ВТОРОЙ РАЗ.
@@ -380,6 +401,20 @@ class NakedLunchStore:
             # короткий», то есть враньё о причине.
             raise ValueError("already_in_corpus" if было_нарезано
                              else "no fragments created from the source text")
+
+        # ИМЯ ДЕЛАЕТСЯ РАЗЛИЧИМЫМ (2026-08-21). Две книги с одинаковым названием
+        # разрешались, и в списке источников появлялись две неотличимые строки:
+        # какую выключать — непонятно, а выключение это единственный способ
+        # убрать книгу из выдачи, не удаляя её.
+        #
+        # Полные двойники сюда не доходят — их отсекает сверка выше. Значит
+        # совпало ИМЯ, а содержимое разное: два тома, две редакции, один автор.
+        занятые = {c.name for c in self.state.corpora}
+        if name in занятые:
+            основа, н = name, 2
+            while name in занятые:
+                name = f"{основа} ({н})"
+                н += 1
 
         cid = _make_id("pers")
         # avoid id collisions (rare)
@@ -402,6 +437,11 @@ class NakedLunchStore:
         self.state.corpora.append(corp)
         self.state.fragments.extend(new_fragments)
         self._rebuild_active_fragments()
+        # Кэш ключей сбрасывается пересборкой — но ЗДЕСЬ мы точно знаем, каким
+        # он стал: `известные` уже досыпан ключами этой книги. Возвращаем, иначе
+        # пачка из пяти книг заново разобрала бы весь склад пять раз подряд, по
+        # шестнадцать секунд каждый.
+        self._ключи = известные
         if save:
             if шаг: шаг("сохраняю корпус")
             self._save(full=True)
