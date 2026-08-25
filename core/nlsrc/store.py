@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import heapq
 import json
+import os
 import random
 import re
 import time
@@ -71,6 +72,42 @@ class State:
     fragments: List[Fragment] = field(default_factory=list)
     chat: Dict[str, Any] = field(default_factory=lambda: {"history": [], "pending_bias": None})
     used_lines: Dict[str, float] = field(default_factory=dict)  # exact output line -> unix timestamp when shown in chat
+
+
+def _записать_целиком(путь: Path, текст: str) -> None:
+    """Записать файл так, чтобы его нельзя было застать наполовину.
+
+    ЗАЧЕМ (2026-08-21, найдено критическим проходом). Склад писался прямо
+    поверх себя: `state_path.write_text(json.dumps(...))`. На корпусе владельца
+    это 550 МБ и несколько десятков секунд, в течение которых файл СУЩЕСТВУЕТ
+    ОБРЕЗАННЫМ. Убей процесс в этот момент — нехваткой памяти, force-quit,
+    отключением питания — и корпус из 2.4 млн фрагментов теряется целиком, без
+    возможности восстановить.
+
+    И это не выдуманный риск: рядом в `api/server.py` записано, что сборщика
+    рифм на 16 ГБ система периодически убивает, — то есть память в этом
+    сценарии кончается на самом деле.
+
+    Пишем во временный файл РЯДОМ (тот же том — иначе `replace` не атомарен) и
+    переименовываем. `os.replace` на POSIX атомарен: наблюдатель видит либо
+    старый файл целиком, либо новый целиком, третьего не дано.
+
+    `fsync` до переименования — чтобы после внезапного отключения питания не
+    оказалось, что имя уже новое, а данные ещё в буфере."""
+    врем = путь.with_name(путь.name + ".пишется")
+    try:
+        with open(врем, "w", encoding="utf-8") as ф:
+            ф.write(текст)
+            ф.flush()
+            os.fsync(ф.fileno())
+        os.replace(врем, путь)
+    except BaseException:
+        # Не оставляем огрызок рядом: он сбивает с толку и занимает полгига.
+        try:
+            врем.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 class NakedLunchStore:
@@ -227,9 +264,8 @@ class NakedLunchStore:
             # Без indent (Раунд 56): это машинный файл на полгигабайта, руками в
             # него никто не смотрит, а отступы — четверть объёма и времени.
             data = self._state_to_dict(self.state)
-            self.state_path.write_text(
-                json.dumps(data, ensure_ascii=False), encoding="utf-8"
-            )
+            _записать_целиком(self.state_path,
+                              json.dumps(data, ensure_ascii=False))
             # Держим сайдкар в согласии с полной записью, иначе он стал бы
             # источником устаревших флагов после залива или удаления книги.
             self._save_active()
