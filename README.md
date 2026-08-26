@@ -130,8 +130,9 @@ pip install ruaccent "transformers<5"
 
 ```sh
 python tools/build_rhyme_index.py   # словарь рифм для /api/word/suggest, ≈4 мин
-python tools/build_nl_rhyme.py      # кэш ударений корпуса
-python tools/build_nl_index.py      # колоночный индекс, ≈95 с
+python tools/build_nl_rhyme.py      # кэш ударений корпуса (дописывает новое)
+python tools/build_nl_rhyme.py --лишнее  # после пересборки корпуса: выбросить мёртвые записи
+python tools/build_nl_index.py      # колоночный индекс + редкость, ≈95 с
 ```
 
 Порядок важен: индекс печётся из кэша ударений.
