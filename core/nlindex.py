@@ -1486,7 +1486,8 @@ def _row(idx, i, score, pctl, light=False):
     return row
 
 
-def select_light(idx, *, pool_mask, hidden_mask, no_mat, only_mat, clausula, cap, seed=None):
+def select_light(idx, *, pool_mask, hidden_mask, no_mat, only_mat, clausula, cap,
+                 seed=None, редкость_слова=None, редкость_пары=None):
     """«Классика» = изначальный нейкедланч: случайные куски активного пула.
 
     РАУНД 35. Раньше она отключала только мнения extendo о качестве
@@ -1522,6 +1523,18 @@ def select_light(idx, *, pool_mask, hidden_mask, no_mat, only_mat, clausula, cap
     # качестве, а брак нарезки: «нибудь гнусность скрывается» — не сырьё, а
     # разорванное пополам слово. Классика подчиняется воротам, а это ворота.
     table_ids = table_ids[idx.whole_mask()[table_ids]]
+    # ПОЛОСЫ РЕДКОСТИ ДЕЙСТВУЮТ И В КЛАССИКЕ (2026-08-27) — по той же
+    # логике, что мат и чёрный список: это не мнение о качестве, а явный
+    # запрос пользователя на содержание («хочу только редкое»). Без этого
+    # полосы на экране в классике были бы контрол-обманкой — тем классом
+    # вранья, за который тут казнили «Банальность».
+    for колонка, полосы in ((getattr(idx, "rare_word", None), редкость_слова),
+                            (getattr(idx, "rare_pair", None), редкость_пары)):
+        if колонка is None or not полосы:
+            continue
+        п = _редкость.маска_полос(колонка, полосы)
+        if п is not None:
+            table_ids = table_ids[п[table_ids]]
     з = запрет(_правила(), idx)
     if з["маска"] is not None:
         table_ids = table_ids[~з["маска"][table_ids]]

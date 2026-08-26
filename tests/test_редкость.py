@@ -192,3 +192,27 @@ def test_полосы_доезжают_до_ядра():
                                   "полосы": {"слова": "5-10", "пара": "90-100"}})
     assert k["rare_word"] == "5-10", k
     assert k["rare_pair"] == "90-100", k
+
+
+def test_полосы_действуют_и_в_классике():
+    """Полосы — не мнение о качестве, а явный запрос на содержание, как мат и
+    чёрный список: классика им подчиняется. Без этого полосы на экране в
+    классике были бы контрол-обманкой — тем классом вранья, за который тут
+    казнили «Банальность». Найдено ревью 2026-08-27: `select_light` про полосы
+    не знал, и весь путь классики молча их выбрасывал."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "core"))
+    import nlindex
+    idx = nlindex.load()
+    if idx is None or getattr(idx, "rare_word", None) is None:
+        pytest.skip("нет живого индекса с колонками редкости")
+    пул = np.ones(idx.n, dtype=bool)
+    нет = np.zeros(idx.n, dtype=bool)
+    _, всех, _ = nlindex.select_light(idx, pool_mask=пул, hidden_mask=нет,
+                                      no_mat=False, only_mat=False,
+                                      clausula=0, cap=3, seed=1)
+    _, узко, _ = nlindex.select_light(idx, pool_mask=пул, hidden_mask=нет,
+                                      no_mat=False, only_mat=False,
+                                      clausula=0, cap=3, seed=1,
+                                      редкость_слова=R.разобрать_полосы("99-100"))
+    assert узко < всех, "полоса не сузила пул классики"
+    assert узко > 0, "полоса опустошила пул — это уже не отбор"

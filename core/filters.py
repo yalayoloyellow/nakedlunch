@@ -1049,7 +1049,9 @@ def _classic_pool(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clau
         pool, survived, ступени = nlindex.select_light(
             _idx, pool_mask=nlindex.pool_mask(_idx, nl_fragments),
             hidden_mask=nlindex.mask_of(_idx, hidden),
-            no_mat=no_mat, only_mat=only_mat, clausula=clausula, cap=cap, seed=семя)
+            no_mat=no_mat, only_mat=only_mat, clausula=clausula, cap=cap, seed=семя,
+            редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
+            редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")))
         return pool, survived, ступени
     # Позиционный `9.0` (потолок банальности «пропускать всё») снят 2026-08-20:
     # ворота удалены целиком, а на «светлом» пути их и так не было.

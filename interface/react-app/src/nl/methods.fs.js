@@ -41,6 +41,7 @@
 //   методы палитры (loadPal/applyPal/pickPal) — модуль панелей.
 
 import * as api from './api.js';
+import { защёлкнуть } from './methods.shelves.js';
 import { создатьВарп, испечьТекст } from './freestyle/warpgl.js';
 import { журнал } from './methods.fsglue.js';
 
@@ -733,7 +734,8 @@ export const fsMethods = {
   fsSetParam(имя, v) {
     var проф = this.fsНастройки();          // гарантирует отделение
     var p = Object.assign({}, проф.params);
-    p[имя] = v;
+    // тот же кламп, что у setKnob: два пути одной крутилки не смеют расходиться
+    p[имя] = защёлкнуть(имя, v);
     this._fsBuf = []; this._fsQ = [];
     this.setState({ fsParams: p });
   },

@@ -25,8 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .cutter import (СЛОВО, clean_text, cut_into_fragments, is_index_junk,
-                     strip_full_names, без_кириллицы, есть_цифра,
-                     снять_маркеры)
+                     без_кириллицы, есть_цифра, снять_маркеры)
 from .generator import generate_four, generate_four_from_scored, tokens as _tokens
 
 
