@@ -401,6 +401,21 @@ def build() -> int:
     tokoff = np.zeros(len(tok_vocab) + 1, dtype=np.int64)
     np.cumsum(np.bincount(tp[:, 0], minlength=len(tok_vocab)), out=tokoff[1:])
     del tp, order
+    # ── РЕДКОСТЬ: ДВЕ КОЛОНКИ (2026-08-26) ─────────────────────────────────
+    #
+    # Считается ЗДЕСЬ, а не на прогреве сервера, по той же причине, по какой
+    # здесь считается всё остальное: это свойство КОРПУСА, а не запроса.
+    # Пересчитывать его при каждом старте значило бы платить шесть секунд за
+    # число, которое не меняется до следующей печати.
+    #
+    # Формула, направление шкалы и почему осей две — в `core/редкость.py`.
+    t = time.time()
+    статус(stage="редкость", done=n)
+    import редкость as _редкость
+    rare_word, rare_pair = _редкость.шкалы(lem_ids, lem_off, src, len(lem_list))
+    print(f"редкость: {time.time()-t:.1f}с | без шкалы слова {(rare_word < 0).sum()}, "
+          f"пара {(rare_pair < 0).sum()}", flush=True)
+
     статус(stage="постобработка", done=n)
     print(f"постобработка: {time.time()-t:.1f}с", flush=True)
 
@@ -414,7 +429,8 @@ def build() -> int:
                       ("syl", syl), ("key_id", key_id), ("span_a", span_a), ("span_b", span_b),
                       ("lem_ids", lem_ids), ("lem_off", lem_off), ("lem2navec", lem2navec),
                       ("tokpost", tokpost), ("tokoff", tokoff), ("text_off", text_off),
-                      ("src", src), ("content", content)):
+                      ("src", src), ("content", content),
+                      ("rare_word", rare_word), ("rare_pair", rare_pair)):
         np.save(tmp / f"{name}.npy", arr)
     (tmp / "text_blob.bin").write_bytes(b"".join(parts))
     key_list = [""] * len(keys)

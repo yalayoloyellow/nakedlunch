@@ -28,6 +28,7 @@ import numpy as np
 
 import embeddings
 import nlbridge
+import редкость as _редкость
 import nlindex          # колоночный индекс корпуса (Раунд 31); None-безопасен
 import scan as scan_mod
 from corpus import lemmatize
@@ -1466,7 +1467,11 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             use_theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
             per_bucket=1, sims=theme_sims, seed=семя, схема=rhyme or "",
             тянуть_сразу=(int(knobs["shortlist"]) if _прямая_тяга else 0),
-            mat_share=knobs.get("mat_share", -1.0), repeat_ok=repeat_ok)
+            mat_share=knobs.get("mat_share", -1.0), repeat_ok=repeat_ok,
+            # ПОЛОСЫ РЕДКОСТИ РАЗБИРАЮТСЯ ЗДЕСЬ, А НЕ В СЕРВЕРЕ: так у ручки
+            # один разбор на всех вызывающих (см. `редкость.разобрать_полосы`).
+            редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
+            редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")))
         nl_survivors_full = nl_survivors      # резервы уже внутри; ниже они не досчитываются
     else:
         nl_survivors, forced_candidates = _nl_scored(nl_fragments or [], corpus, hidden, гсч=гсч,

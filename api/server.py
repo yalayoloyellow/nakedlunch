@@ -35,6 +35,7 @@ import corpus as corpus_mod  # noqa: E402  (RETENTION_PRESETS)
 import settings as settings_mod  # noqa: E402  (persisted knob positions, see core/settings.py)
 import stanza_profiles           # noqa: E402  (builtin + custom stanza forms, see core/stanza_profiles.py)
 import stats as stats_mod    # noqa: E402  (analytics log, see core/stats.py)
+import редкость as _редкость
 import nlindex               # noqa: E402  (фоновый прогрев карты «текст → номер»)
 import jobs                  # noqa: E402  (цепочка фоновых сборок, см. core/jobs.py)
 import wordsuggest           # noqa: E402  (попап по слову — рифмы/по звуку/строкой, см. core/wordsuggest.py)
@@ -1575,7 +1576,8 @@ def api_pool_shape():
     payload = request.get_json(force=True, silent=True) or {}
     if isinstance(payload.get("params"), dict) or payload.get("mode"):
         knobs = clean.knobs(clean.knobs_from_profile(
-            {"name": "запрос", "mode": payload.get("mode"), "params": payload.get("params")}))
+            {"name": "запрос", "mode": payload.get("mode"), "params": payload.get("params"),
+             "полосы": payload.get("полосы")}))
     else:
         knobs = clean.knobs(payload.get("knobs"))
     # ЕДИНСТВЕННЫЙ ЗАМОК, КОТОРЫЙ СЕРВЕР БЕРЁТ САМ, И ЭТО ТОТ ЖЕ ОБЪЕКТ
@@ -1596,7 +1598,9 @@ def api_pool_shape():
             idx, pool_mask=nlindex.pool_mask(idx, пул),
             hidden_mask=nlindex.mask_of(idx, CORPUS.hidden_set()),
             no_mat=bool(knobs.get("no_mat", False)), only_mat=bool(knobs.get("only_mat", False)),
-            clausula=int(knobs.get("clausula", 0)))
+            clausula=int(knobs.get("clausula", 0)),
+            редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
+            редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")))
     return {"готово": True, **форма}
 
 
@@ -1636,7 +1640,8 @@ def api_generate():
     # вырезана — остались тесты, и ради них ветка живёт).
     if isinstance(payload.get("params"), dict) or payload.get("mode"):
         knobs = clean.knobs_from_profile({"name": "запрос", "mode": payload.get("mode"),
-                                          "params": payload.get("params")})
+                                          "params": payload.get("params"),
+                                          "полосы": payload.get("полосы")})
         try:
             knobs["shortlist"] = int(float(payload.get("shortlist", knobs["shortlist"])))
         except (TypeError, ValueError):
@@ -2025,6 +2030,12 @@ def api_settings_post():
         entry = {"params": clean.knob_params(raw.get("params"))}
         mode = raw.get("mode")
         entry["mode"] = mode if mode in clean.KNOB_MODES else clean.MODE_ALGO
+        # ПОЛОСЫ РЕДКОСТИ — РЯДОМ С `params`, А НЕ ВНУТРИ (2026-08-26).
+        # `clean.knob_params` отбрасывает всё, чего нет в числовом каноне
+        # крутилок, и полосы (несколько несмежных отрезков шкалы) он отбросил
+        # бы молча — как когда-то молча терялись «Отбор» и «Мат».
+        entry["полосы"] = (clean.knob_profile({"name": "x", **raw}) or {}).get(
+            "полосы", {"слова": "", "пара": ""})
         to_save["nl_params"] = entry
     if "stanza" in payload:
         to_save["stanza"] = clean.stanza_spec(payload["stanza"])

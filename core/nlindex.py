@@ -32,6 +32,8 @@ import threading
 
 import numpy as np
 
+import редкость as _редкость
+
 СЛОВ_МИН = 2   # минимум знаменательных слов в строке, см. gate_mask
 
 import пути
@@ -195,6 +197,19 @@ class Index:
             self.content = load("content")
         except Exception:
             self.content = None
+        # ДВЕ КОЛОНКИ РЕДКОСТИ (2026-08-26). Процентиль строки среди строк:
+        # 0 — самые нередкие, 100 — самые редкие, −1 — шкалы у строки нет.
+        # Формула и разбор — в `core/редкость.py`. Могут отсутствовать у
+        # индекса, испечённого раньше: тогда ручка просто не отбирает, а всё
+        # остальное работает как работало.
+        try:
+            self.rare_word = load("rare_word")
+        except Exception:
+            self.rare_word = None
+        try:
+            self.rare_pair = load("rare_pair")
+        except Exception:
+            self.rare_pair = None
         # СЦЕПКА СОСЕДНИХ СЛОВ (Раунд 58) — вторая ось ручки «Банальность»,
         # см. tools/build_nl_index.py: сцепка_колонка. Может отсутствовать у
         # индекса, испечённого раньше: тогда ручка работает одной осью, как
@@ -492,7 +507,8 @@ class Index:
         return self._whole
 
     def gate_mask(self, no_mat: bool, only_mat: bool = False,
-                  clausula: int = 0) -> np.ndarray:
+                  clausula: int = 0, редкость_слова=None,
+                  редкость_пары=None) -> np.ndarray:
         """Гейты строгого яруса: тавтология, целостность, мат, клаузула.
         Порядок и предикаты — дословно как в _score_strict_table.
 
@@ -529,6 +545,17 @@ class Index:
         if clausula:
             # 3 = «дактилическая и длиннее» (scan.clausula уже схлопывает)
             m &= np.asarray(self.clau) == clausula
+        # РЕДКОСТЬ — ПОЛОСАМИ, А НЕ ПОРОГОМ (2026-08-26). Требование владельца
+        # дословно: «я хочу мочь выбрать допустим диапазон с 5 по 10 процентов
+        # по редкости + диапазон с 17 по 18 + с 97 по 98». Разбор — в
+        # `core/редкость.py`, там же почему ползунок такого не умеет.
+        for колонка, полосы in ((self.rare_word, редкость_слова),
+                                (self.rare_pair, редкость_пары)):
+            if колонка is None or not полосы:
+                continue
+            п = _редкость.маска_полос(колонка, полосы)
+            if п is not None:
+                m &= п
         return m
 
     def token_hits(self, words) -> np.ndarray:
@@ -781,19 +808,23 @@ def _ранг(idx, sem, table_ids, tags):
     return _ранг_кэш[1]
 
 
-def _таблица(idx, tags, sims, no_mat, only_mat, clausula, cohesion, pctl_scale):
+def _таблица(idx, tags, sims, no_mat, only_mat, clausula, cohesion, pctl_scale,
+             редкость_слова=None, редкость_пары=None):
     """(номера выживших ворот, перцентиль, оценка) — с кэшем на один набор."""
     global _таблица_кэш
     # Связность и её масштаб в ключе — только КОГДА ЕСТЬ ТЕМА: без темы от них
     # ничего не зависит (см. ниже), и держать их в ключе значило бы пересчитывать
     # ворота по 2.4 млн строк на каждое движение ползунка впустую.
     # `ворота` из ключа сняты 2026-08-20 вместе с ручкой «Банальность».
+    # ПОЛОСЫ РЕДКОСТИ — В КЛЮЧЕ. Они меняют ВОРОТА, а не порядок за ними;
+    # без них в ключе сдвиг полосы на экране не пересчитывал бы ничего.
     ключ = (id(idx), tuple(_правила()), bool(no_mat), bool(only_mat), int(clausula),
             float(cohesion) if tags else 0.0, float(pctl_scale) if tags else 0.0,
+            tuple(редкость_слова or ()), tuple(редкость_пары or ()),
             _ключ_темы(tags, sims))
     if _таблица_кэш is not None and _таблица_кэш[0] == ключ:
         return _таблица_кэш[1]
-    gate = idx.gate_mask(no_mat, only_mat, clausula)
+    gate = idx.gate_mask(no_mat, only_mat, clausula, редкость_слова, редкость_пары)
     table_ids = np.flatnonzero(gate)                    # выжившие ГЕЙТОВ по всей базе
     if tags:
         sem = _семантика(idx, tags, sims)
@@ -871,7 +902,8 @@ def _topk_by(score, ids, k, rng):
 def select(idx, *, pool_mask, hidden_mask, tags, forced,
            no_mat, only_mat, clausula, cohesion, pctl_scale, literal_cap, cap, reserve_n, use_theme_anchor,
            syllable_spec, per_bucket, sims, seed=None, схема: str = "",
-           тянуть_сразу: int = 0, mat_share: float = -1.0, repeat_ok: bool = False):
+           тянуть_сразу: int = 0, mat_share: float = -1.0, repeat_ok: bool = False,
+           редкость_слова=None, редкость_пары=None):
     """(строки, число_выживших, кандидаты_на_принудительное_слово, СЧЁТ).
 
     `счёт` — ступени отбора так, как они происходят на самом деле (Раунд 62).
@@ -885,7 +917,8 @@ def select(idx, *, pool_mask, hidden_mask, tags, forced,
     восемь». Замер: буфер режет 99.98%, ворота — 35.7%."""
     rng = np.random.default_rng(seed)
     table_ids, pctl_all, score_all = _таблица(idx, tags, sims, no_mat,
-                                              only_mat, clausula, cohesion, pctl_scale)
+                                              only_mat, clausula, cohesion, pctl_scale,
+                                              редкость_слова, редкость_пары)
 
     keep = pool_mask[table_ids] & ~hidden_mask[table_ids]
     ids, pctl, score = table_ids[keep], pctl_all[keep], score_all[keep]
@@ -1626,7 +1659,7 @@ def reload() -> None:
 
 
 def форма_пула(idx, *, pool_mask, hidden_mask, no_mat=False, only_mat=False,
-               clausula=0) -> dict:
+               clausula=0, редкость_слова=None, редкость_пары=None) -> dict:
     """Из ЧЕГО сейчас будет выбираться — до нажатия «сгенерировать».
 
     ЗАЧЕМ ИМЕННО ЭТО. Замер 3.7: живого предпросмотра выдачи нет и не будет —
@@ -1652,7 +1685,7 @@ def форма_пула(idx, *, pool_mask, hidden_mask, no_mat=False, only_mat=F
     Числа считаются по ТОМУ ЖЕ пересечению, что и генерация (ворота ∩ активный
     пул ∩ не показанное): форма, посчитанная по другому множеству, обещала бы
     не то, что придёт."""
-    gate = idx.gate_mask(no_mat, only_mat, clausula)
+    gate = idx.gate_mask(no_mat, only_mat, clausula, редкость_слова, редкость_пары)
     живые = np.flatnonzero(gate & pool_mask & ~hidden_mask)
     n = int(len(живые))
     итог = {"строк": n}

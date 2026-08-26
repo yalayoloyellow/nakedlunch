@@ -263,7 +263,8 @@ export const genProfileMethods = {
         stanza_profile: st.stanzaProfile || '',
         // последние положения панели: окно должно открываться там, где его
         // закрыли. Именованные наборы — на полке /api/knobs/profiles.
-        nl_params: { params: st.params || {}, mode: st.knobMode || 'алгоритм' },
+        nl_params: { params: st.params || {}, mode: st.knobMode || 'алгоритм',
+                     полосы: st.полосы || { слова: '', пара: '' } },
       }).catch(function (e) { self.flash(e && e.message ? e.message : String(e)); });
     }, 600);
   },

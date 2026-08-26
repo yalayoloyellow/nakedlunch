@@ -129,6 +129,9 @@ export const lentaMethods = {
       var payload = {
         source: 'lenta', shortlist: n * ПАЧКА,
         mode: this.state.knobMode, params: this.state.params || {},
+        // Полосы редкости — не крутилка, а выбор: несколько несмежных
+        // отрезков шкалы. Разбирает их `core/редкость.py`.
+        полосы: this.state.полосы || {},
       };
       if (тема) payload.theme = тема;
       if (spec) payload.stanza = spec;
