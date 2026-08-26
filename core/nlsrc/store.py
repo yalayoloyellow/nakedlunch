@@ -25,7 +25,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .cutter import (СЛОВО, clean_text, cut_into_fragments, is_index_junk,
-                     strip_full_names, есть_цифра, снять_маркеры)
+                     strip_full_names, без_кириллицы, есть_цифра,
+                     снять_маркеры)
 from .generator import generate_four, generate_four_from_scored, tokens as _tokens
 
 
@@ -565,7 +566,7 @@ class NakedLunchStore:
 
         итог = {"было": len(self.state.fragments), "указатель": 0, "имя_вырезано": 0,
                 "осыпалось": 0, "хвост_подрезан": 0, "двойник": 0, "обломок": 0,
-                "с_цифрой": 0,
+                "с_цифрой": 0, "без_русского": 0,
                 "маркер_снят": 0}
         живые: List[Fragment] = []
         # Шаг доклада — не «каждый фрагмент» (два миллиона вызовов через поток
@@ -654,6 +655,14 @@ class NakedLunchStore:
             # покрасневшими тестами сразу.
             if есть_цифра(т):
                 итог["с_цифрой"] += 1
+                continue
+            # НИ ОДНОЙ РУССКОЙ БУКВЫ (2026-08-26). То же правило, что у резака
+            # (`cutter.без_кириллицы`), а не своя копия. ПОСЛЕ ПРАВОК по той же
+            # причине, что и цифра: снятие имени может оставить от строки один
+            # иностранный хвост — «Naked Lunch Иван Петрович Сидоров» после
+            # снятия имени это уже строка без единой русской буквы.
+            if без_кириллицы(т):
+                итог["без_русского"] += 1
                 continue
             живые.append(Fragment(id=f.id, text=т, corpus_id=f.corpus_id))
 
