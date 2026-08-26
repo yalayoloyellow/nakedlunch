@@ -430,6 +430,7 @@ export const fsMethods = {
       source: 'freestyle',
       shortlist: Math.max(1, n || this.FS_BATCH),
       mode: проф.mode, params: проф.params,
+      полосы: проф.полосы || {},
     };
     // тема — СВОЯ, из поля «темы сцены» (Раунд 57). Здесь стоял `_lastKey` —
     // ключ последней генерации в редакторе, и объяснялось это как «фристайл
@@ -639,7 +640,8 @@ export const fsMethods = {
   // наоборот, выбрасывал буфер, набранный не по ней.
   fsGenKey() {
     var проф = this.fsНастройки();
-    return JSON.stringify([this.knobsOfProfile(проф), проф.spec, this.fsТема()]);
+    return JSON.stringify([this.knobsOfProfile(проф), проф.spec, this.fsТема(),
+                           проф.полосы || {}]);
   },
 
   // Дозаполнить очередь до нужного числа единиц. Тянет строки, пока не хватит
@@ -702,17 +704,47 @@ export const fsMethods = {
   // редактора» в панели строки.
   fsНастройки() {
     var st = this.state;
-    if (st.fsParams == null || st.fsKnobMode == null || st.fsSpec === null) {
+    if (st.fsParams == null || st.fsKnobMode == null || st.fsSpec === null
+        || st.fsПолосы == null) {
       var своё = {
         fsKnobMode: st.fsKnobMode == null ? (st.knobMode || null) : st.fsKnobMode,
         fsParams: st.fsParams == null ? JSON.parse(JSON.stringify(st.params || {})) : st.fsParams,
         fsSpec: st.fsSpec === null ? (this.curSpec ? this.curSpec() : null) : st.fsSpec,
+        fsПолосы: st.fsПолосы == null
+          ? Object.assign({ слова: '', пара: '' }, st.полосы || {}) : st.fsПолосы,
       };
       // правим состояние молча: это не выбор пользователя, а первое отделение
       this.setState(своё);
-      return { mode: своё.fsKnobMode, params: своё.fsParams, spec: своё.fsSpec, source: 'фристайл' };
+      return { mode: своё.fsKnobMode, params: своё.fsParams, spec: своё.fsSpec,
+               полосы: своё.fsПолосы, source: 'фристайл' };
     }
-    return { mode: st.fsKnobMode, params: st.fsParams, spec: st.fsSpec, source: 'фристайл' };
+    return { mode: st.fsKnobMode, params: st.fsParams, spec: st.fsSpec,
+             полосы: st.fsПолосы, source: 'фристайл' };
+  },
+
+  /** Правка крутилки СЦЕНЫ. КОНТРОЛ-ОБМАНКА, НАЙДЕННАЯ ЧТЕНИЕМ (2026-08-27):
+   *  с Раунда 57 сцена генерирует из своей копии (fsParams), а ползунки
+   *  панели строки звали setParam → st.params, то есть для сцены были
+   *  МЕРТВЫ, а настройки РЕДАКТОРА меняли тихо, из чужого режима. Комментарий
+   *  над setParam так и остался от Раунда 51 — «фристайла ходит через
+   *  setParam», — но Раунд 57 отделил сцену, а панель не перевёл.
+   *  Буфер сбрасывается здесь же: настройка сменилась — очередь старой
+   *  выдачи врёт о положении ручек. */
+  fsSetParam(имя, v) {
+    var проф = this.fsНастройки();          // гарантирует отделение
+    var p = Object.assign({}, проф.params);
+    p[имя] = v;
+    this._fsBuf = []; this._fsQ = [];
+    this.setState({ fsParams: p });
+  },
+
+  /** Полосы редкости сцены — свои, как и всё остальное в ней. */
+  fsSetПолосы(ось, строка) {
+    var проф = this.fsНастройки();
+    var п = Object.assign({ слова: '', пара: '' }, проф.полосы);
+    п[ось] = строка;
+    this._fsBuf = []; this._fsQ = [];
+    this.setState({ fsПолосы: п });
   },
   // Тема сцены — своё поле, а не ключ последней генерации в редакторе.
   fsТема() {
@@ -727,6 +759,7 @@ export const fsMethods = {
       fsKnobMode: st.knobMode || null,
       fsParams: JSON.parse(JSON.stringify(st.params || {})),
       fsSpec: this.curSpec ? this.curSpec() : null,
+      fsПолосы: Object.assign({ слова: '', пара: '' }, st.полосы || {}),
     });
     this._fsBuf = []; this._fsQ = [];
     this.flash('настройки строфы перенесены в сцену');

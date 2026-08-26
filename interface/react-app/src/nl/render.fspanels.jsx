@@ -30,6 +30,7 @@ import { icoBtn } from './icons.js';
 import { pickStyle, PARAM_DEFAULTS } from './methods.panels.js';
 import { ВОРОТА, МНЕНИЯ, В_КЛАССИКЕ, ШКАЛЫ, подпись, имяКрутилки } from './methods.shelves.js';
 import { BLENDS, BLEND_DEF } from './methods.fsglue.js';
+import { полосаРедкости } from './render.gen.jsx';
 
 // ---- рецепты стилей (renderVals 3395..3607) ----
 const ROW = 'display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 12px; padding: 9px 0; min-height: 34px;';
@@ -157,7 +158,7 @@ function Swatches({ items }) {
 // пор панель обязана рисоваться, а не падать
 function fsvOf(c) { return function (k) { return c.fsv ? c.fsv(k) : ((c.FS_DEF || {})[k] || 0); }; }
 function slOf(c) { return function (k) { return function (e) { if (c.setFsv) c.setFsv(k, parseFloat(e.target.value)); }; }; }
-function call(c, name, arg) { if (typeof c[name] === 'function') return c[name](arg); }
+function call(c, name) { if (typeof c[name] === 'function') return c[name].apply(c, Array.prototype.slice.call(arguments, 2)); }
 
 // ===========================================================================
 // ПАНЕЛЬ «СЦЕНА» — шаблон 323..766
@@ -551,7 +552,13 @@ export function renderFsLinePanel(c) {
   // спрашивается вовсе, поэтому мертвы все. Раньше блок гас по st.algo, а
   // выше по панели уже стоял другой переключатель — и при серверной классике
   // ползунки выглядели живыми, ничего при этом не делая.
-  var классикаЯдра = (st.knobMode || 'алгоритм') === 'классика';
+  // РЕЖИМ И ПОЛОЖЕНИЯ — СЦЕНЫ, А НЕ РЕДАКТОРА (2026-08-27). С Раунда 57 сцена
+  // генерирует из своей копии (fsParams/fsKnobMode), а панель показывала и
+  // правила редакторские: ползунок здесь для сцены был мёртв, редактору же
+  // менял настройки тихо. До первого отделения копии ещё нет — показываем
+  // редакторские: ровно их сцена и унаследует.
+  var фп = st.fsParams || st.params || {};
+  var классикаЯдра = (st.fsKnobMode || st.knobMode || 'алгоритм') === 'классика';
   var algoStyle = algo === 'Классика' ? 'opacity: 0.32; pointer-events: none;' : '';
 
   // ВСЕ крутилки канона, а не четыре (Раунд 51). «Мат», «Клаузула» и
@@ -562,7 +569,7 @@ export function renderFsLinePanel(c) {
   // отсюда сама. Это не правка фристайла, а следствие удаления ручки из
   // ПРОГРАММЫ — ползунок без ключа в ядре был бы контрол-обманкой.
   var крутилка = function (имя) {
-    var v = st.params[имя] != null ? st.params[имя] : PARAM_DEFAULTS[имя];
+    var v = фп[имя] != null ? фп[имя] : PARAM_DEFAULTS[имя];
     var шкала = ШКАЛЫ[имя] || ['', ''];
     var мертво = классикаЯдра && В_КЛАССИКЕ.indexOf(имя) < 0;
     return {
@@ -570,7 +577,7 @@ export function renderFsLinePanel(c) {
       // methods.shelves.имяКрутилки: имя крутилки это ключ сохранённых данных)
       name: имяКрутилки(имя), lo: шкала[0], hi: шкала[1],
       val: Number(v).toFixed(2), show: подпись(имя, v), dead: мертво,
-      onIn: function (e) { c.setParam(имя, parseFloat(e.target.value)); },
+      onIn: function (e) { call(c, 'fsSetParam', имя, parseFloat(e.target.value)); },
     };
   };
   var genParams = ВОРОТА.concat(МНЕНИЯ).map(крутилка);
@@ -653,6 +660,15 @@ export function renderFsLinePanel(c) {
             );
           })}
         </div>
+        {/* Полосы редкости сцены — свои, как params/spec/тема. Рисовалка одна
+            на оба режима (render.gen.jsx): два экземпляра ста ячеек разошлись
+            бы в первый же ремонт. */}
+        {полосаРедкости(c, 'слова', 'редкость слов', 'какие слова',
+                        ((st.fsПолосы || st.полосы || {}).слова),
+                        function (ось, строка) { call(c, 'fsSetПолосы', ось, строка); })}
+        {полосаРедкости(c, 'пара', 'редкость сочетаний', 'как они стоят рядом',
+                        ((st.fsПолосы || st.полосы || {}).пара),
+                        function (ось, строка) { call(c, 'fsSetПолосы', ось, строка); })}
         {stanzaNote
           ? <p style={s('margin: 15px 0 0; font-size: 9px; line-height: 1.6; color: var(--muted-soft); white-space: pre-line;')}>{stanzaNote}</p>
           : null}

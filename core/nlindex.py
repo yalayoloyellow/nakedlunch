@@ -1808,7 +1808,8 @@ def forget_pool() -> None:
 # project-notes/PLAN-разнообразие.md.
 
 def воронка(no_mat: bool = False, only_mat: bool = False,
-            clausula: int = 0, content_min: int = 0) -> dict | None:
+            clausula: int = 0, content_min: int = 0,
+            редкость_слова=None, редкость_пары=None) -> dict | None:
     """Ступени отсева: сколько фрагментов и книг доживает до каждой.
 
     Возвращает None, если индекса нет — воронка это удобство, а не обязанность.
@@ -1821,11 +1822,13 @@ def воронка(no_mat: bool = False, only_mat: bool = False,
     Замок берётся здесь, а не у вызывающего, чтобы его нельзя было забыть.
     """
     with ЗАМОК:
-        return _воронка(no_mat, only_mat, clausula, content_min)
+        return _воронка(no_mat, only_mat, clausula, content_min,
+                        редкость_слова, редкость_пары)
 
 
 def _воронка(no_mat: bool, only_mat: bool,
-             clausula: int, content_min: int) -> dict | None:
+             clausula: int, content_min: int,
+             редкость_слова=None, редкость_пары=None) -> dict | None:
     idx = load()
     if idx is None:
         return None
@@ -1870,6 +1873,21 @@ def _воронка(no_mat: bool, only_mat: bool,
     if content_min and getattr(idx, "content", None) is not None:
         маска = маска & (_np.asarray(idx.content) >= content_min)
         шаги.append((f"слов ≥ {content_min}", маска.copy()))
+
+    # РЕДКОСТЬ — СВОЕЙ СТУПЕНЬЮ НА КАЖДУЮ ОСЬ (2026-08-27). Ворота полосами
+    # уже стоят в отборе; воронка обязана показывать ту же цену тем же шагом,
+    # иначе пользователь видит «ворота 34 509» и не видит, КТО их закрыл.
+    # Подпись несёт сами полосы: «редкость слов 90-100» читается без легенды.
+    for колонка, полосы, имя_оси in (
+            (getattr(idx, "rare_word", None), редкость_слова, "редкость слов"),
+            (getattr(idx, "rare_pair", None), редкость_пары, "редкость сочетаний")):
+        if колонка is None or not полосы:
+            continue
+        п = _редкость.маска_полос(колонка, полосы)
+        if п is not None:
+            маска = маска & п
+            подпись = ",".join(f"{int(а)}-{int(min(б, 100))}" for а, б in полосы)
+            шаги.append((f"{имя_оси} {подпись}", маска.copy()))
 
     всего = int(idx.n)
     ступени = [{"шаг": имя, "дожило": int(m.sum()),
