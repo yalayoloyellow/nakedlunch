@@ -134,12 +134,29 @@ class NakedLunchStore:
     def _load(self) -> None:
         loaded_full = False
         if self.state_path.exists():
+            # БИТЫЙ СКЛАД — ОТКАЗ, А НЕ ТИХИЙ СБРОС (bug_010 ультраревью).
+            # Здесь стоял `except Exception: pass`, и битый state.json молча
+            # превращался в пустой State(). Дальше ловушка захлопывалась: первый
+            # же add_corpus / delete / чистка пишет `_save(full=True)` — и
+            # АТОМАРНО затирает битый-но-починяемый файл на 380 МБ пустотой.
+            # Сорок книг и вся история used_lines гибнут одним кликом без
+            # единого сообщения.
+            #
+            # Прецедент в этом же проекте: core/corpus.py на битом corpus.json
+            # прямо говорит «a corrupt corpus is the one file we must not
+            # silently reset; refuse» и поднимает RuntimeError. Склад — файл
+            # того же класса, только в тысячу раз больше; правило тем более
+            # его. Отсутствующий файл — по-прежнему честный пустой старт.
             try:
                 raw = json.loads(self.state_path.read_text(encoding="utf-8"))
                 self.state = self._dict_to_state(raw)
                 loaded_full = True
-            except Exception:
-                pass
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
+                raise RuntimeError(
+                    f"склад повреждён: {self.state_path} — почини или удали "
+                    f"вручную (рядом могут лежать копии .до-чистки/"
+                    f".до-пересборки); тихо сбросить его значило бы затереть "
+                    f"все книги первой же записью") from e
         if not loaded_full:
             self.state = State()
         # Флаги активности главнее того, что лежит в state.json: он переписывается
@@ -293,9 +310,13 @@ class NakedLunchStore:
             "used_lines": self.state.used_lines or {},
             "updated_at": self.state.updated_at,
         }
-        self.dynamic_path.write_text(
-            json.dumps(dyn, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        # ТЕМ ЖЕ АТОМОМ, ЧТО И state.json (bug_008 ультраревью). Здесь стоял
+        # write_text — файл существует УСЕЧЁННЫМ, пока идёт запись, и смерть
+        # процесса посреди оставляла обрубок; _load его молча глотает и
+        # обнуляет used_lines — все показанные строки CLI возвращаются в
+        # выдачу. Атомарная обёртка лежала двумя строками выше.
+        _записать_целиком(self.dynamic_path,
+                          json.dumps(dyn, ensure_ascii=False, indent=2))
 
     def _state_to_dict(self, s: State) -> Dict[str, Any]:
         return {
@@ -479,10 +500,12 @@ class NakedLunchStore:
     def _save_active(self) -> None:
         """Флаги активности книг — килобайты вместо полугигабайта."""
         try:
-            self.active_path.write_text(
+            # Атомарно по той же причине, что dynamic.json (bug_008): обрубок
+            # флагов на старте молча включил бы выключенные книги.
+            _записать_целиком(
+                self.active_path,
                 json.dumps({c.id: bool(c.active) for c in self.state.corpora},
-                           ensure_ascii=False),
-                encoding="utf-8")
+                           ensure_ascii=False))
         except Exception:
             pass      # не смогли записать флаг — не повод терять переключение в памяти
 
