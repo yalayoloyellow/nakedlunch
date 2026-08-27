@@ -343,20 +343,11 @@ def build() -> int:
     # --внутр) честно читается как «нет»: ворота тогда не найдут ничего, а не
     # найдут лишнее.
     inner = np.zeros(n, dtype=np.uint8)
-    # Спаны рифмующихся слов — для подсветки в выдаче. Переменная длина, тем
-    # же приёмом, что леммы: плоский массив пар + смещения на строку.
-    # int32, не int64: значений всего ~135 000 (пары спанов у 2.9% строк),
-    # а int64 стоил 18 МБ индекса на пустом месте.
-    inner_off = np.zeros(n + 1, dtype=np.int32)
-    inner_поток: list = []
 
     for i, (text, e) in enumerate(записи()):
         src[i] = _книга_по_тексту.get(text, -1)
         content[i] = int(e.get("content") or 0)
         inner[i] = 1 if e.get("inner") else 0
-        сп = e.get("inner_sp") or []
-        inner_поток += сп
-        inner_off[i + 1] = len(inner_поток)
         b = text.encode("utf-8")
         parts.append(b)
         pos += len(b)
@@ -446,8 +437,7 @@ def build() -> int:
                       ("tokpost", tokpost), ("tokoff", tokoff), ("text_off", text_off),
                       ("src", src), ("content", content),
                       ("rare_word", rare_word), ("rare_pair", rare_pair),
-                      ("inner", inner), ("inner_off", inner_off),
-                      ("inner_pos", np.asarray(inner_поток, dtype=np.int32))):
+                      ("inner", inner)):
         np.save(tmp / f"{name}.npy", arr)
     (tmp / "text_blob.bin").write_bytes(b"".join(parts))
     key_list = [""] * len(keys)

@@ -151,10 +151,7 @@ export const lentaMethods = {
       for (var i = 0; i + n <= rows.length; i += n) {
         строфы.push(rows.slice(i, i + n).map(function (r, j) {
           return { text: r.text, letter: spec ? spec[j].letter : 'а',
-                   rk: r.rhyme || '', book: r.source || '', bookId: r.source_id || '',
-                   // спаны внутренней рифмы — для подсветки; пусто у строк
-                   // генератора и у строк без рифмы внутри
-                   inner: r.inner_spans || null };
+                   rk: r.rhyme || '', book: r.source || '', bookId: r.source_id || '' };
         }));
       }
       if (this._буферПодпись !== подпись) this._буфер = [];
@@ -226,13 +223,8 @@ export const lentaMethods = {
     var блок = (this._блокN = (this._блокN || 0) + 1);
     this.setState({
       lenta: строки.map(function (r) {
-        // `inner` обязан пережить ВТОРОЙ маппинг: буфер уже нёс спаны, а эта
-        // пересборка для экрана их молча роняла — подсветка была мертва при
-        // живых данных. Поле потерялось ровно на перекладке, как терялись
-        // «Отбор» и «Мат» в настройках.
         return { text: r.text, letter: r.letter || '', rk: r.rk || '',
                  book: r.book || '', bookId: r.bookId || '',
-                 inner: r.inner || null,
                  блок: блок, вид: (мета && мета.вид) || 'строфа' };
       })
     });

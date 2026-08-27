@@ -217,13 +217,7 @@ class Index:
             self.inner = load("inner")
         except Exception:
             self.inner = None
-        # Спаны для подсветки внутренней рифмы (плоские пары + смещения).
-        try:
-            self.inner_off = load("inner_off")
-            self.inner_pos = load("inner_pos")
-        except Exception:
-            self.inner_off = None
-            self.inner_pos = None
+
         # СЦЕПКА СОСЕДНИХ СЛОВ (Раунд 58) — вторая ось ручки «Банальность»,
         # см. tools/build_nl_index.py: сцепка_колонка. Может отсутствовать у
         # индекса, испечённого раньше: тогда ручка работает одной осью, как
@@ -262,16 +256,10 @@ class Index:
             if self.keys else np.zeros(0, dtype=np.int8)
         self.clau = по_ключу[np.asarray(self.key_id)] if len(по_ключу) else np.zeros(self.n, dtype=np.int8)
 
-    def inner_spans(self, i: int):
-        """Пары [начало, конец] рифмующихся внутри строки слов — или None.
-        Данные для подсветки; ворота ходят по флагу `inner`, не сюда."""
-        if self.inner_off is None:
-            return None
-        a, b = int(self.inner_off[i]), int(self.inner_off[i + 1])
-        if a == b:
-            return None
-        п = self.inner_pos[a:b].tolist()
-        return [[п[j], п[j + 1]] for j in range(0, len(п), 2)]
+    # НАДГРОБИЕ: `inner_spans` (позиции рифмующихся слов для подсветки)
+    # жил здесь один день — 2026-08-27. Владелец посмотрел подсветку живьём
+    # и снял: «читать сложнее». Колонки inner_off/inner_pos вырезаны из
+    # печки, поле из строк выдачи; флаг `inner` и ворота живут.
 
     # ---- тексты ----
     def text(self, i: int) -> str:
@@ -1481,7 +1469,6 @@ def _строки(idx, номера, оценки, перцентили, light=F
                "template": "nakedlunch", "meter": None,
                "rhyme": ключи[key_id[k]],
                "rhyme_span": None if a < 0 else [a, span_b[k]],
-               "inner_spans": idx.inner_spans(int(номера[k])),
                "syllables": syl[k], "score": float(оценки[k]),
                "_lem": {леммы[x] for x in lem_ids[l_a[k]:l_b[k]].tolist()},
                "mat": bool(mat[k]),
@@ -1506,7 +1493,6 @@ def _row(idx, i, score, pctl, light=False):
     row = {"text": idx.text(i), "template": "nakedlunch", "meter": None,
            "rhyme": idx.keys[int(idx.key_id[i])],
            "rhyme_span": None if a < 0 else [a, b],
-           "inner_spans": idx.inner_spans(i),
            "syllables": int(idx.syl[i]), "score": score, "_lem": idx.lemma_set(i),
            # Раунд 39: мат — доля, а не запрет, поэтому признак нужен КАЖДОЙ
            # строке, а не только воротам. Читаем из колонки индекса, считать
