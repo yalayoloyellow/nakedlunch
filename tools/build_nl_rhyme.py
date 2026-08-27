@@ -446,7 +446,7 @@ _ВНУТР_СЛОВО = re.compile(r"[а-яё]{3,}")
 _ВНУТР_ПАМЯТЬ: dict = {}
 
 
-def _внутренняя_рифма(morph, acc, text: str) -> bool:
+def _внутр_спаны(morph, acc, text: str) -> list:
     """Есть ли в строке внутренняя рифма.
 
     ПРАВИЛО (2026-08-27, бумага DESIGN-стык-рядом-рифмы + два замера): два
@@ -463,7 +463,8 @@ def _внутренняя_рифма(morph, acc, text: str) -> bool:
     Ключ — тем же `_word_rhyme_key`, что у клаузул и подсказок: своего понятия
     рифмы у этого правила нет."""
     ключи: dict = {}
-    for w in set(_ВНУТР_СЛОВО.findall(text.lower())):
+    низ = text.lower()
+    for w in set(_ВНУТР_СЛОВО.findall(низ)):
         з = _ВНУТР_ПАМЯТЬ.get(w)
         if з is None:
             p = morph.parse(w)
@@ -475,11 +476,28 @@ def _внутренняя_рифма(morph, acc, text: str) -> bool:
         годно, лемма, ключ = з
         if not годно or not ключ:
             continue
-        леммы = ключи.setdefault(ключ, set())
-        леммы.add(лемма)
-        if len(леммы) >= 2:
-            return True
-    return False
+        ключи.setdefault(ключ, {}).setdefault(лемма, w)
+    # СПАНЫ, А НЕ ГОЛЫЙ ФЛАГ (2026-08-27, «да» владельца на подсветку).
+    # Выигравшие группы — ключ с двумя и более разными леммами; подсвечиваются
+    # ВСЕ вхождения их слов. Позиции — по text.lower(): русский lower длину
+    # не меняет, спаны совпадают с исходным регистром.
+    рифмуются = set()
+    for группы in ключи.values():
+        if len(группы) >= 2:
+            рифмуются.update(группы.values())
+    if not рифмуются:
+        return []
+    спаны = []
+    for m in _ВНУТР_СЛОВО.finditer(низ):
+        if m.group(0) in рифмуются:
+            спаны += [m.start(), m.end()]
+    return спаны
+
+
+def _внутренняя_рифма(morph, acc, text: str) -> bool:
+    """Булев ответ для ворот — тем же правилом, что спаны для подсветки:
+    два счётчика одной сущности разошлись бы в первую же правку."""
+    return bool(_внутр_спаны(morph, acc, text))
 
 
 def _поля_фрагмента(morph, acc, text: str) -> tuple[dict, bool]:
@@ -489,9 +507,11 @@ def _поля_фрагмента(morph, acc, text: str) -> tuple[dict, bool]:
     когда рядом появилась потоковая сборка, второй такой же кусок был бы ровно
     тем «вторым источником правды», от которого проект уже горел трижды."""
     key, span, пусто = _ключ_и_span(morph, acc, text)
-    return {"key": key, "span": span,
-            "inner": _внутренняя_рифма(morph, acc, text),
-            **_extra_fields(text)}, пусто
+    сп = _внутр_спаны(morph, acc, text)
+    поля = {"key": key, "span": span, "inner": bool(сп), **_extra_fields(text)}
+    if сп:
+        поля["inner_sp"] = сп     # только когда есть: 97% записей без рифмы
+    return поля, пусто
 
 
 def build_потоком(mode: str = "incremental") -> int:
@@ -672,8 +692,13 @@ def внутр_потоком() -> int:
     новых = с_рифмой = 0
     with кэш.Писатель() as п:
         for текст, поля in кэш.поток():
-            if "inner" not in поля:
-                поля = {**поля, "inner": _внутренняя_рифма(morph, acc, текст)}
+            if "inner" not in поля or (поля.get("inner")
+                                       and "inner_sp" not in поля):
+                сп = _внутр_спаны(morph, acc, текст)
+                поля = {к: v for к, v in поля.items() if к != "inner_sp"}
+                поля["inner"] = bool(сп)
+                if сп:
+                    поля["inner_sp"] = сп
                 новых += 1
             с_рифмой += bool(поля.get("inner"))
             п.запиши(текст, поля)

@@ -816,6 +816,9 @@ def _score_strict_table(tags: set, theme_sims, forced: set,
         sem = embeddings.relevance(theme_sims, cl) if tags else 0.0
         table[text] = {"text": text, "template": "nakedlunch", "meter": None,
                        "rhyme": entry.get("key", ""), "rhyme_span": entry.get("span"),
+                       # подсветка внутренней рифмы — те же пары, что в индексе
+                       "inner_spans": ([[s[j], s[j + 1]] for j in range(0, len(s), 2)]
+                                       if (s := entry.get("inner_sp")) else None),
                        "syllables": syllables, "_sem": sem, "_lem": cl,
                        # Раунд 39: мат — доля, а не запрет, поэтому признак
                        # нужен каждой строке (см. _select_with_rhyme). Здесь

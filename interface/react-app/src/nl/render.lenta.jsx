@@ -48,6 +48,29 @@ import { s, hov } from './style.js';
 // журнал: 29 прогонов цепи против 587 строф), а с 2026-08-18 на экране и вовсе
 // одна строфа — отделять её не от чего.
 
+// ПОДСВЕТКА ВНУТРЕННЕЙ РИФМЫ (2026-08-27, «да» владельца). Спаны считает
+// build_nl_rhyme тем же правилом, что ворота «внутр. рифма»: два разных
+// знаменательных слова с одним рифмо-ключом. Здесь только разрезание текста
+// по готовым парам [начало, конец] — никакой своей логики рифмы у экрана нет.
+// Стиль — подчёркивание тоном чернил: работает в обеих темах и не спорит с
+// минимализмом ленты.
+function сПодсветкой(r) {
+  var сп = r.inner;
+  if (!сп || !сп.length) return r.text;
+  var т = r.text, куски = [], поз = 0;
+  for (var i = 0; i < сп.length; i++) {
+    var a = сп[i][0], b = сп[i][1];
+    if (a < поз || b > т.length) continue;    // битый спан — текст важнее
+    if (a > поз) куски.push(т.slice(поз, a));
+    куски.push(<span key={i} style={s(
+      'border-bottom: 1px solid color-mix(in srgb, var(--ink) 55%, transparent); '
+      + 'padding-bottom: 1px;')}>{т.slice(a, b)}</span>);
+    поз = b;
+  }
+  if (поз < т.length) куски.push(т.slice(поз));
+  return куски;
+}
+
 export function renderLenta(c) {
   var st = c.state;
   if (st.tab !== 'lenta') return null;
@@ -124,7 +147,7 @@ export function renderLenta(c) {
                              + 'color: var(--ink); cursor: pointer; '
                              + 'transition: opacity 140ms var(--ease); '
                              + 'opacity: ' + (есть ? '.8' : '.16') + ';')}>★</button>
-              <span style={s('min-width: 0;')}>{r.text}</span>
+              <span style={s('min-width: 0;')}>{сПодсветкой(r)}</span>
             </div>
           );
         })}
