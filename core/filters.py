@@ -1553,7 +1553,8 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
                                                 гсч=гсч,
                                                 тема=set(tags or ()), обязательные=set(forced or ()))
         else:
-            shortlist = _diversify(nl_survivors, size, div)
+            shortlist = _diversify_с_долей_мата(
+                nl_survivors, size, div, knobs.get("mat_share", -1.0))
     elif knobs["nl_mix"] <= 0.0:
         # Hard contract: real_text at min → NEVER a nakedlunch line, not even
         # as a rhyme-slot filler (found 2026-07-14: _select_with_rhyme's slot
@@ -1575,7 +1576,9 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             # гарантией, поэтому число одно и живёт в константах.
             # [П] замер делался на пути СО схемой; здесь выбор проще (нет ни
             # рифмы, ни партнёров), значит запас тем более достаточен.
-            shortlist = _diversify(scored[: max(_ПАЧКА_МИН, size * _ПАЧКА_НА_СТРОКУ)], size, div)
+            shortlist = _diversify_с_долей_мата(
+                scored[: max(_ПАЧКА_МИН, size * _ПАЧКА_НА_СТРОКУ)], size, div,
+                knobs.get("mat_share", -1.0))
     else:
         nl_quota = min(len(nl_survivors), round(size * knobs["nl_mix"]))
         if rhyme != "none":
@@ -1601,7 +1604,8 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
         else:
             grammar_size = size - nl_quota
             pool = scored[: max(300, grammar_size * 8)]     # diversify among the best candidates
-            grammar_picks = _diversify(pool, grammar_size, div)
+            grammar_picks = _diversify_с_долей_мата(
+                pool, grammar_size, div, knobs.get("mat_share", -1.0))
 
             # nl_survivors need the SAME diversity pass among themselves: cutter.py's
             # sliding windows produce overlapping near-duplicate cuts of one sentence
@@ -1609,7 +1613,8 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             # scoring similarly — a naive top-N by score let 3 of them into one
             # shortlist together. A raw top-N is fine for grammar candidates (they're
             # independently generated, rarely near-duplicates of each other), but not here.
-            nl_take = _diversify(nl_survivors, nl_quota, div)
+            nl_take = _diversify_с_долей_мата(
+                nl_survivors, nl_quota, div, knobs.get("mat_share", -1.0))
 
             # Spread the reserved nl_take through the sequence (every `stride`-th slot)
             # instead of clumping it at one end — keeps the "reads as one flowing
@@ -1776,6 +1781,46 @@ def _nl_slot_plan(size: int, nl_quota: int) -> set:
             positions.append(i)
         i -= 1
     return set(positions)
+
+
+def _diversify_с_долей_мата(pool: list, k: int, div: float,
+                            mat_share: float) -> list:
+    """MMR-отбор с квотой мата — для путей БЕЗ схемы рифмы.
+
+    НАЙДЕНО УЛЬТРАРЕВЬЮ (bug_002, 2026-08-27). Все три ветки rhyme=="none" в
+    `_run` звали `_diversify` напрямую, а он про мат не знает: середина ручки
+    «Мат» (0<доля<1) на этом пути молча игнорировалась — подпись «50%»
+    обновлялась, выдача не менялась. Контрол-обманка, худший класс бага.
+    Крайности не страдали: 0 и 1 становятся no_mat/only_mat ещё в clean.knobs
+    и режут пул воротами до этого места.
+
+    ПОЧЕМУ НЕ ПРОСТО `_select_with_rhyme(scheme="none")`, как предлагало
+    ревью: та ветка держит долю, но НЕ делает MMR-прохода, а он здесь стоит
+    нарочно — перекрывающиеся окна одного предложения слипаются в выдаче без
+    него (см. докстринг `_diversify`). Правильный размен — квота ПОВЕРХ
+    разнообразия: каждая корзина набирается своим MMR-проходом.
+
+    Раскладка по позициям — тем же `_mat_slot_plan`, что у пути со схемой и у
+    классики: один источник правды о том, «какая доля на каких местах».
+    Пустой план (доля «как есть», −1) — прежний путь без квоты."""
+    план = _mat_slot_plan(mat_share, k)
+    if not план:
+        return _diversify(pool, k, div)
+    нужно = sum(1 for v in план.values() if v)
+    с_матом = _diversify([r for r in pool if r.get("mat")], нужно, div)
+    без_мата = _diversify([r for r in pool if not r.get("mat")], k - нужно, div)
+    м, ч = iter(с_матом), iter(без_мата)
+    взято = []
+    for i in range(k):
+        r = next(м if план.get(i) else ч, None)
+        if r is not None:
+            взято.append(r)
+    # корзина не добрала — строка важнее доли (тот же размен, что в ветке
+    # scheme=="none" у _select_with_rhyme)
+    if len(взято) < k:
+        есть = {id(r) for r in взято}
+        взято += [r for r in pool if id(r) not in есть][:k - len(взято)]
+    return взято[:k]
 
 
 def _mat_slot_plan(share: float, L: int, groups=None) -> dict:
