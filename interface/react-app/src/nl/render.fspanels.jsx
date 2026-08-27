@@ -652,7 +652,7 @@ export function renderFsLinePanel(c) {
                   <input type="range"
                          min={p.name === 'Мат' ? '-1' : '0'}
                          max={p.name === 'Клаузула' ? '3' : '1'}
-                         step={p.name === 'Клаузула' ? '1' : '0.05'}
+                         step={p.name === 'Клаузула' || p.name === 'Внутренняя рифма' ? '1' : '0.05'}
                          value={p.val} disabled={p.dead} onChange={p.onIn} />
                   <span style={s(VAL)}>{p.show}</span>
                 </span>

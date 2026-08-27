@@ -349,7 +349,7 @@ _CSV_FIELDS = [
     "t", "kind", "source", "theme", "rhyme", "shortlist",
     "gen_used", "nl_used", "nl_classic_used", "latency_ms",
     "melody", "cohesion", "banality", "real_text", "rhyme_precision", "classic",
-    "mat_share", "clausula", "repeat", "rare_word", "rare_pair",
+    "mat_share", "clausula", "repeat", "rare_word", "rare_pair", "inner_rhyme",
     "text", "template", "lemmas", "count", "days",
 ]
 
@@ -366,7 +366,8 @@ def export_csv() -> str:
         row = dict(e)
         knobs = row.pop("knobs", None) or {}
         for k in ("melody", "cohesion", "banality", "real_text", "rhyme_precision",
-                  "classic", "mat_share", "clausula", "repeat", "rare_word", "rare_pair"):
+                  "classic", "mat_share", "clausula", "repeat", "rare_word",
+                  "rare_pair", "inner_rhyme"):
             if k in knobs:
                 row[k] = knobs[k]
         if isinstance(row.get("lemmas"), list):

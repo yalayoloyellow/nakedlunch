@@ -332,7 +332,8 @@ _НЕ_СЧИТАН = object()
 
 def _nl_scored(fragments, corpus, hidden, tags=None, light=False,
                theme_sims=None, literal_cap=None, forced=None, cohesion=0.5,
-               no_mat=False, only_mat=False, clausula=0, гсч=random):
+               no_mat=False, only_mat=False, clausula=0, внутр_рифма=0,
+               гсч=random):
     """Score raw nakedlunch fragments (real cut-up text, no Word/stress
     structure) for the SAME shortlist grammar-candidates land in:
     blacklist/cliché, tautology apply, same as generated lines — the user
@@ -556,7 +557,8 @@ def _nl_scored(fragments, corpus, hidden, tags=None, light=False,
                   "classic": True, "_literal": False, "_forced": False}
             out.append(row)
     else:
-        table = _score_strict_table(tags, theme_sims, forced, no_mat, only_mat, clausula)
+        table = _score_strict_table(tags, theme_sims, forced, no_mat,
+                                    only_mat, clausula, внутр_рифма)
         for text in fragments:
             if text in hidden:
                 continue
@@ -711,7 +713,7 @@ nlindex.при_перепечке(_индекс_перепечён)
 
 def _score_strict_table(tags: set, theme_sims, forced: set,
                         no_mat: bool = False, only_mat: bool = False,
-                        clausula: int = 0) -> dict:
+                        clausula: int = 0, внутр_рифма: int = 0) -> dict:
     """{text: row} for every `_NL_RHYME` entry that survives the STRICT
     tier's tautology/mat/clausula gates for this (tags, forced, no_mat)
     — i.e. everything `_nl_scored`'s per-fragment loop used to
@@ -759,7 +761,8 @@ def _score_strict_table(tags: set, theme_sims, forced: set,
     # кэшируемо: мат — свойство самого фрагмента, не запроса), так что таблицы
     # «с матом» и «без» — разные записи, а не молчаливо переиспользованная одна.
     # `ворота` из ключа сняты 2026-08-20 вместе с ручкой «Банальность».
-    key = (id(_NL_RHYME), frozenset(tags), frozenset(forced), no_mat, only_mat, clausula)
+    key = (id(_NL_RHYME), frozenset(tags), frozenset(forced), no_mat,
+           only_mat, clausula, внутр_рифма)
     cached = _strict_score_cache.get(key)
     if cached is not None:
         return cached
@@ -795,6 +798,11 @@ def _score_strict_table(tags: set, theme_sims, forced: set,
         if only_mat and not has_mat(low):
             continue
         if clausula and scan_mod.clausula(entry.get("key", "")) != clausula:
+            continue
+        # ВНУТРЕННЯЯ РИФМА НА ЗАПАСНОМ ПУТИ (без индекса): флаг лежит в той
+        # же записи кэша (--внутр). Отсутствие поля — «нет»: строка, которая
+        # не может доказать рифму, ворота не проходит.
+        if внутр_рифма and not entry.get("inner"):
             continue
         cl = set(entry.get("lemmas", []))
         syllables = sum(map(low.count, VOWELS))
@@ -1051,12 +1059,14 @@ def _classic_pool(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clau
             hidden_mask=nlindex.mask_of(_idx, hidden),
             no_mat=no_mat, only_mat=only_mat, clausula=clausula, cap=cap, seed=семя,
             редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
-            редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")))
+            редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")),
+            внутр_рифма=int(knobs.get("inner_rhyme", 0) or 0))
         return pool, survived, ступени
     # Позиционный `9.0` (потолок банальности «пропускать всё») снят 2026-08-20:
     # ворота удалены целиком, а на «светлом» пути их и так не было.
     pool, _ = _nl_scored(nl_fragments or [], corpus, hidden, light=True,
-                         no_mat=no_mat, only_mat=only_mat, clausula=clausula, гсч=гсч)
+                         no_mat=no_mat, only_mat=only_mat, clausula=clausula, гсч=гсч,
+                         внутр_рифма=int(knobs.get("inner_rhyme", 0) or 0))
     survived = len(pool)
     гсч.shuffle(pool)                   # оценка у всех одна — верхушки не существует
     return pool[:cap], survived, {}     # старый путь ступеней не считает — и не выдумывает
@@ -1286,6 +1296,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     # Клаузула — Раунд 44, откалибрована по референсным текстам владельца
     # (см. scan.clausula). Рядом стояла `flow` — удалена 2026-08-21.
     clausula = int(knobs.get("clausula", 0) or 0)
+    внутр_рифма = int(knobs.get("inner_rhyme", 0) or 0)
     # «Повтор» (Раунд 52, хук): снимает барьер на повтор леммы внутри строфы.
     # В классике не действует — там нет ни лемм, ни отбора по ним: классика
     # это нарезка корпуса, и `_run_classic` до `_select_with_rhyme` не доходит.
@@ -1473,14 +1484,16 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             # ПОЛОСЫ РЕДКОСТИ РАЗБИРАЮТСЯ ЗДЕСЬ, А НЕ В СЕРВЕРЕ: так у ручки
             # один разбор на всех вызывающих (см. `редкость.разобрать_полосы`).
             редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
-            редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")))
+            редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")),
+            внутр_рифма=внутр_рифма)
         nl_survivors_full = nl_survivors      # резервы уже внутри; ниже они не досчитываются
     else:
         nl_survivors, forced_candidates = _nl_scored(nl_fragments or [], corpus, hidden, гсч=гсч,
                                                      tags=tags, theme_sims=theme_sims,
                                                      literal_cap=literal_cap, forced=forced,
                                                      cohesion=cohesion, no_mat=no_mat, only_mat=only_mat,
-                                                     clausula=clausula)
+                                                     clausula=clausula,
+                                                     внутр_рифма=внутр_рифма)
         гсч.shuffle(nl_survivors)                      # break ties (mostly bias=0) before a stable sort
         nl_survivors.sort(key=lambda r: r["score"], reverse=True)
         n_nl_survived = len(nl_survivors)               # TRUE count, captured before the selection cap below

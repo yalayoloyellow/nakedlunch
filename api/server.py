@@ -1617,6 +1617,7 @@ def api_nl_funnel():
         content_min=слов,
         редкость_слова=_редкость.разобрать_полосы(request.args.get("rare_word")),
         редкость_пары=_редкость.разобрать_полосы(request.args.get("rare_pair")),
+        внутр_рифма=int(request.args.get("inner_rhyme") or 0),
     )
     if данные is None:
         return {"ready": False, "detail": "индекс не испечён"}
@@ -1665,7 +1666,8 @@ def api_pool_shape():
             no_mat=bool(knobs.get("no_mat", False)), only_mat=bool(knobs.get("only_mat", False)),
             clausula=int(knobs.get("clausula", 0)),
             редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
-            редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")))
+            редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")),
+            внутр_рифма=int(knobs.get("inner_rhyme", 0) or 0))
     return {"готово": True, **форма}
 
 
@@ -1826,7 +1828,8 @@ def api_generate():
     # остальные числа.
     ui_knobs = {k: knobs[k] for k in ("cohesion", "real_text",
                                        "rhyme_precision", "classic",
-                                       "mat_share", "clausula", "repeat")
+                                       "mat_share", "clausula", "repeat",
+                                       "inner_rhyme")
                 if k in knobs}
     # ПОЛОСЫ РЕДКОСТИ - В ЖУРНАЛ, КАК И ВСЁ, ЧЕМ КРУТЯТ ВЫДАЧУ (2026-08-27).
     # «Ручка, о которой журнал молчит, невидима ровно тогда, когда решают,

@@ -601,6 +601,7 @@ export const corpusMethods = {
         + (Number(к['Мат']) === 0 ? '&no_mat=1' : '')
         + (Number(к['Мат']) >= 0.9995 ? '&only_mat=1' : '')
         + '&clausula=' + (Number(к['Клаузула']) || 0)
+        + '&inner_rhyme=' + (Math.round(Number(к['Внутренняя рифма'])) || 0)
         // полосы редкости — те же, что уедут в генерацию (ворота полосами)
         + (пол.слова ? '&rare_word=' + encodeURIComponent(пол.слова) : '')
         + (пол.пара ? '&rare_pair=' + encodeURIComponent(пол.пара) : '');

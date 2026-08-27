@@ -338,10 +338,16 @@ def build() -> int:
     # (`_extra_fields`), сюда переносится колонкой. Без неё ворота по нему
     # невыразимы так же, как были невыразимы ворота по источнику.
     content = np.zeros(n, dtype=np.int16)
+    # ВНУТРЕННЯЯ РИФМА (2026-08-27) — флаг из кэша ударений, правило и замеры
+    # в `build_nl_rhyme._внутренняя_рифма`. Отсутствие поля (кэш до бэкфила
+    # --внутр) честно читается как «нет»: ворота тогда не найдут ничего, а не
+    # найдут лишнее.
+    inner = np.zeros(n, dtype=np.uint8)
 
     for i, (text, e) in enumerate(записи()):
         src[i] = _книга_по_тексту.get(text, -1)
         content[i] = int(e.get("content") or 0)
+        inner[i] = 1 if e.get("inner") else 0
         b = text.encode("utf-8")
         parts.append(b)
         pos += len(b)
@@ -430,7 +436,8 @@ def build() -> int:
                       ("lem_ids", lem_ids), ("lem_off", lem_off), ("lem2navec", lem2navec),
                       ("tokpost", tokpost), ("tokoff", tokoff), ("text_off", text_off),
                       ("src", src), ("content", content),
-                      ("rare_word", rare_word), ("rare_pair", rare_pair)):
+                      ("rare_word", rare_word), ("rare_pair", rare_pair),
+                      ("inner", inner)):
         np.save(tmp / f"{name}.npy", arr)
     (tmp / "text_blob.bin").write_bytes(b"".join(parts))
     key_list = [""] * len(keys)

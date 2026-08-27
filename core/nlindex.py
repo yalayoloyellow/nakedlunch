@@ -210,6 +210,13 @@ class Index:
             self.rare_pair = load("rare_pair")
         except Exception:
             self.rare_pair = None
+        # ВНУТРЕННЯЯ РИФМА (2026-08-27): флаг «в строке рифмуются два разных
+        # знаменательных слова». Правило и замеры — build_nl_rhyme. У старого
+        # индекса колонки нет — ворота тогда не отбирают, как у редкости.
+        try:
+            self.inner = load("inner")
+        except Exception:
+            self.inner = None
         # СЦЕПКА СОСЕДНИХ СЛОВ (Раунд 58) — вторая ось ручки «Банальность»,
         # см. tools/build_nl_index.py: сцепка_колонка. Может отсутствовать у
         # индекса, испечённого раньше: тогда ручка работает одной осью, как
@@ -508,7 +515,7 @@ class Index:
 
     def gate_mask(self, no_mat: bool, only_mat: bool = False,
                   clausula: int = 0, редкость_слова=None,
-                  редкость_пары=None) -> np.ndarray:
+                  редкость_пары=None, внутр_рифма: int = 0) -> np.ndarray:
         """Гейты строгого яруса: тавтология, целостность, мат, клаузула.
         Порядок и предикаты — дословно как в _score_strict_table.
 
@@ -556,6 +563,10 @@ class Index:
             п = _редкость.маска_полос(колонка, полосы)
             if п is not None:
                 m &= п
+        # ВНУТРЕННЯЯ РИФМА — ВОРОТА ТОГО ЖЕ КЛАССА, ЧТО КЛАУЗУЛА (2026-08-27):
+        # свойство строки, посчитанное заранее. 0 — неважно, 1 — только с ней.
+        if внутр_рифма and getattr(self, "inner", None) is not None:
+            m &= np.asarray(self.inner) != 0
         return m
 
     def token_hits(self, words) -> np.ndarray:
@@ -809,7 +820,7 @@ def _ранг(idx, sem, table_ids, tags):
 
 
 def _таблица(idx, tags, sims, no_mat, only_mat, clausula, cohesion, pctl_scale,
-             редкость_слова=None, редкость_пары=None):
+             редкость_слова=None, редкость_пары=None, внутр_рифма: int = 0):
     """(номера выживших ворот, перцентиль, оценка) — с кэшем на один набор."""
     global _таблица_кэш
     # Связность и её масштаб в ключе — только КОГДА ЕСТЬ ТЕМА: без темы от них
@@ -821,10 +832,11 @@ def _таблица(idx, tags, sims, no_mat, only_mat, clausula, cohesion, pctl_
     ключ = (id(idx), tuple(_правила()), bool(no_mat), bool(only_mat), int(clausula),
             float(cohesion) if tags else 0.0, float(pctl_scale) if tags else 0.0,
             tuple(редкость_слова or ()), tuple(редкость_пары or ()),
-            _ключ_темы(tags, sims))
+            int(внутр_рифма), _ключ_темы(tags, sims))
     if _таблица_кэш is not None and _таблица_кэш[0] == ключ:
         return _таблица_кэш[1]
-    gate = idx.gate_mask(no_mat, only_mat, clausula, редкость_слова, редкость_пары)
+    gate = idx.gate_mask(no_mat, only_mat, clausula, редкость_слова,
+                         редкость_пары, внутр_рифма)
     table_ids = np.flatnonzero(gate)                    # выжившие ГЕЙТОВ по всей базе
     if tags:
         sem = _семантика(idx, tags, sims)
@@ -903,7 +915,7 @@ def select(idx, *, pool_mask, hidden_mask, tags, forced,
            no_mat, only_mat, clausula, cohesion, pctl_scale, literal_cap, cap, reserve_n, use_theme_anchor,
            syllable_spec, per_bucket, sims, seed=None, схема: str = "",
            тянуть_сразу: int = 0, mat_share: float = -1.0, repeat_ok: bool = False,
-           редкость_слова=None, редкость_пары=None):
+           редкость_слова=None, редкость_пары=None, внутр_рифма: int = 0):
     """(строки, число_выживших, кандидаты_на_принудительное_слово, СЧЁТ).
 
     `счёт` — ступени отбора так, как они происходят на самом деле (Раунд 62).
@@ -918,7 +930,8 @@ def select(idx, *, pool_mask, hidden_mask, tags, forced,
     rng = np.random.default_rng(seed)
     table_ids, pctl_all, score_all = _таблица(idx, tags, sims, no_mat,
                                               only_mat, clausula, cohesion, pctl_scale,
-                                              редкость_слова, редкость_пары)
+                                              редкость_слова, редкость_пары,
+                                              внутр_рифма)
 
     keep = pool_mask[table_ids] & ~hidden_mask[table_ids]
     ids, pctl, score = table_ids[keep], pctl_all[keep], score_all[keep]
@@ -1487,7 +1500,8 @@ def _row(idx, i, score, pctl, light=False):
 
 
 def select_light(idx, *, pool_mask, hidden_mask, no_mat, only_mat, clausula, cap,
-                 seed=None, редкость_слова=None, редкость_пары=None):
+                 seed=None, редкость_слова=None, редкость_пары=None,
+                 внутр_рифма: int = 0):
     """«Классика» = изначальный нейкедланч: случайные куски активного пула.
 
     РАУНД 35. Раньше она отключала только мнения extendo о качестве
@@ -1535,6 +1549,10 @@ def select_light(idx, *, pool_mask, hidden_mask, no_mat, only_mat, clausula, cap
         п = _редкость.маска_полос(колонка, полосы)
         if п is not None:
             table_ids = table_ids[п[table_ids]]
+    # Внутренняя рифма в классике — по той же логике, что мат и клаузула:
+    # явный запрос на содержание, не мнение о качестве.
+    if внутр_рифма and getattr(idx, "inner", None) is not None:
+        table_ids = table_ids[np.asarray(idx.inner)[table_ids] != 0]
     з = запрет(_правила(), idx)
     if з["маска"] is not None:
         table_ids = table_ids[~з["маска"][table_ids]]
@@ -1672,7 +1690,8 @@ def reload() -> None:
 
 
 def форма_пула(idx, *, pool_mask, hidden_mask, no_mat=False, only_mat=False,
-               clausula=0, редкость_слова=None, редкость_пары=None) -> dict:
+               clausula=0, редкость_слова=None, редкость_пары=None,
+               внутр_рифма: int = 0) -> dict:
     """Из ЧЕГО сейчас будет выбираться — до нажатия «сгенерировать».
 
     ЗАЧЕМ ИМЕННО ЭТО. Замер 3.7: живого предпросмотра выдачи нет и не будет —
@@ -1698,7 +1717,8 @@ def форма_пула(idx, *, pool_mask, hidden_mask, no_mat=False, only_mat=F
     Числа считаются по ТОМУ ЖЕ пересечению, что и генерация (ворота ∩ активный
     пул ∩ не показанное): форма, посчитанная по другому множеству, обещала бы
     не то, что придёт."""
-    gate = idx.gate_mask(no_mat, only_mat, clausula, редкость_слова, редкость_пары)
+    gate = idx.gate_mask(no_mat, only_mat, clausula, редкость_слова,
+                         редкость_пары, внутр_рифма)
     живые = np.flatnonzero(gate & pool_mask & ~hidden_mask)
     n = int(len(живые))
     итог = {"строк": n}
@@ -1822,7 +1842,8 @@ def forget_pool() -> None:
 
 def воронка(no_mat: bool = False, only_mat: bool = False,
             clausula: int = 0, content_min: int = 0,
-            редкость_слова=None, редкость_пары=None) -> dict | None:
+            редкость_слова=None, редкость_пары=None,
+            внутр_рифма: int = 0) -> dict | None:
     """Ступени отсева: сколько фрагментов и книг доживает до каждой.
 
     Возвращает None, если индекса нет — воронка это удобство, а не обязанность.
@@ -1836,12 +1857,13 @@ def воронка(no_mat: bool = False, only_mat: bool = False,
     """
     with ЗАМОК:
         return _воронка(no_mat, only_mat, clausula, content_min,
-                        редкость_слова, редкость_пары)
+                        редкость_слова, редкость_пары, внутр_рифма)
 
 
 def _воронка(no_mat: bool, only_mat: bool,
              clausula: int, content_min: int,
-             редкость_слова=None, редкость_пары=None) -> dict | None:
+             редкость_слова=None, редкость_пары=None,
+             внутр_рифма: int = 0) -> dict | None:
     idx = load()
     if idx is None:
         return None
@@ -1901,6 +1923,10 @@ def _воронка(no_mat: bool, only_mat: bool,
             маска = маска & п
             подпись = ",".join(f"{int(а)}-{int(min(б, 100))}" for а, б in полосы)
             шаги.append((f"{имя_оси} {подпись}", маска.copy()))
+
+    if внутр_рифма and getattr(idx, "inner", None) is not None:
+        маска = маска & (_np.asarray(idx.inner) != 0)
+        шаги.append(("внутренняя рифма", маска.copy()))
 
     всего = int(idx.n)
     ступени = [{"шаг": имя, "дожило": int(m.sum()),

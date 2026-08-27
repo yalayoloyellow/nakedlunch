@@ -41,6 +41,8 @@ import clean  # noqa: E402
     "Диссонанс": "cohesion",        # у ядра консонанс, у ползунка диссонанс
     # «Связность» → "flow" УДАЛЕНА 2026-08-21 (надгробие в filters.py).
     "Повтор": "repeat",
+    # «Внутренняя рифма» → inner_rhyme (2026-08-27) — ворота, как клаузула.
+    "Внутренняя рифма": "inner_rhyme",
 }
 
 
@@ -133,6 +135,7 @@ def test_csv_выгрузка_не_отстаёт_от_журнала():
     промолчит."""
     import stats
     ЖУРНАЛ_ПИШЕТ = {"cohesion", "real_text", "rhyme_precision", "classic",
-                    "mat_share", "clausula", "repeat", "rare_word", "rare_pair"}
+                    "mat_share", "clausula", "repeat", "rare_word", "rare_pair",
+                    "inner_rhyme"}
     assert ЖУРНАЛ_ПИШЕТ <= set(stats._CSV_FIELDS), (
         sorted(ЖУРНАЛ_ПИШЕТ - set(stats._CSV_FIELDS)))
