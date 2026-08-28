@@ -256,9 +256,9 @@ def test_clausula_from_rhyme_key():
 
 
 def test_clausula_knob_parses():
-    assert clean.knobs({})["clausula"] == 0
+    assert clean.knobs({})["clausula"] == 7   # маска «любая» (2026-08-28)
     assert clean.knobs({"clausula": 2})["clausula"] == 2
-    assert clean.knobs({"clausula": 9})["clausula"] == 3       # клампится
+    assert clean.knobs({"clausula": 9})["clausula"] == 7       # клампится в маску
 
 
 def test_clausula_is_a_gate_not_a_preference():

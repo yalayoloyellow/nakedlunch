@@ -29,7 +29,7 @@ import { renderFsBar } from './render.fspanels.jsx';
 import { renderLenta } from './render.lenta.jsx';
 
 // корневой div — стили дословно из дизайна (строка 156 шаблона)
-const ROOT_STYLE = "height: 100vh; position: relative; --canvas:#131313; --ink:#ededed; --muted-hard:#cfcfcf; --muted:#949494; --muted-soft:#5c5c5c; --border-soft:#3d3d3d; --border-subtle:#242424; --menu-bg:color-mix(in srgb, var(--canvas) 82%, transparent); --content-max-width: min(clamp(620px, 34vw, 780px), calc(100% - 120px)); --radius:6px; --ease:cubic-bezier(0.4,0,0.2,1); --ease-spring:cubic-bezier(0.32,0.72,0,1); font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; background: var(--canvas); color: var(--ink); font-size: 13px; line-height: 1.5; display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased;";
+const ROOT_STYLE = "height: 100vh; position: relative; --canvas:#131313; --ink:#ededed; --muted-hard:#cfcfcf; --muted:#949494; --muted-soft:#5c5c5c; --border-soft:#3d3d3d; --border-subtle:#242424; --menu-bg:color-mix(in srgb, var(--canvas) 82%, transparent); --content-max-width: min(clamp(440px, 24vw, 540px), calc(100% - 120px)); --radius:6px; --ease:cubic-bezier(0.4,0,0.2,1); --ease-spring:cubic-bezier(0.32,0.72,0,1); font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; background: var(--canvas); color: var(--ink); font-size: 13px; line-height: 1.5; display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased;";
 
 // SVG-фильтры дизайна (строки 99..154 шаблона): стекло панелей (#nl-warp /
 // #nl-warp-aber — applyTheme крутит их scale), кнопочный варп и текстовые
@@ -357,11 +357,15 @@ export default class Nakedlunch extends Component {
     var ga = document.querySelectorAll('#nl-warp-aber feDisplacementMap');
     for (var gi = 0; gi < ga.length; gi++) ga[gi].setAttribute('scale', String(gw * [0.7, 1, 1.38][gi]));
     var cw = {
+      // «очень узкая» добавлена и стала умолчанием 2026-08-28 по слову
+      // владельца: колонка теперь ФИКСИРОВАННОЙ ширины (render.lenta.jsx),
+      // и стихам с их короткой строкой узкий столб — родной размер.
+      'очень узкая': 'min(clamp(440px, 24vw, 540px), calc(100% - 120px))',
       'узкая': 'min(clamp(620px, 34vw, 780px), calc(100% - 120px))',
       'средняя': 'min(clamp(900px, 45vw, 1100px), calc(100% - 120px))',
       'широкая': 'min(clamp(1080px, 62vw, 1400px), calc(100% - 80px))'
     };
-    el.style.setProperty('--content-max-width', cw[C.colWidth] || cw['узкая']);
+    el.style.setProperty('--content-max-width', cw[C.colWidth] || cw['очень узкая']);
   }
   toggleTheme() { this.setState({ theme: this.state.theme === 'light' ? 'dark' : 'light' }); }
 

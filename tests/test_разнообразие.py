@@ -43,7 +43,7 @@ def прогнать(доли, размер=2, семян=ПРОГОНОВ, **kw
     for семя in range(семян):
         filters.закрепить_разброс(семя)
         выдача = filters._select_with_rhyme([dict(c) for c in пул(доли)], "аа", размер,
-                                            precision=0.0, **kw)
+                                            ярусы=1, **kw)
         for r in выдача:
             счёт[r["text"].split()[0]] += 1
     filters.закрепить_разброс(20260806)
@@ -87,7 +87,7 @@ def test_ball_glavnee_sluchaynosti():
     строки[7]["_pctl"] = 0.95
     for семя in range(60):
         filters.закрепить_разброс(семя)
-        выдача = filters._select_with_rhyme([dict(c) for c in строки], "аа", 2, precision=0.0)
+        выдача = filters._select_with_rhyme([dict(c) for c in строки], "аа", 2, ярусы=1)
         assert "альфа строка 7" in {r["text"] for r in выдача}, (
             f"лучший по баллу проигран случайности, семя {семя}")
     filters.закрепить_разброс(20260806)
@@ -109,7 +109,7 @@ def test_tema_suzhaet_namerenno():
     for семя in range(40):
         filters.закрепить_разброс(семя)
         выдача = filters._select_with_rhyme([dict(c) for c in строки], "аа", 2,
-                                            set(range(2)), precision=0.0, theme_anchor=True)
+                                            set(range(2)), ярусы=1, theme_anchor=True)
         выбранные += [r.get("_pctl", 0.0) for r in выдача if r.get("anchor")]
     filters.закрепить_разброс(20260806)
     assert выбранные, "якоря темы не было ни в одной выдаче"

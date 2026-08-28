@@ -187,6 +187,21 @@ export function renderHistPanel(c) {
 // ============================================================
 
 // Одна строка сводки: подпись слева, число справа.
+// Имя книги — для глаз, не для машины (2026-08-28). Имена источников — это
+// имена файлов: «Pelevin_Nepobedimoe-solnce.CJ_RYw.591928», и владелец про
+// такой список сказал «некрасивое». Хвост-хэш со счётчиком отрезается,
+// подчёркивания становятся пробелами; само имя в данных НЕ трогается — это
+// подпись на экране, полное живёт в подсказке.
+function имяКниги(s) {
+  var t = String(s || '');
+  t = t.replace(/[._]\d{3,8}$/, '');                       // счётчик-хвост
+  t = t.replace(/[._]([A-Za-z0-9_-]{4,8})$/, function (m, х) {
+    return /[0-9]/.test(х) || /[A-Z]/.test(х.slice(1)) ? '' : m;  // хэш, не слово
+  });
+  return t.replace(/_+/g, ' ').trim();
+}
+
+
 function ряд(k, v, i) {
   return (
     <div key={i} style={s('display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 10px; color: var(--muted); padding: 2px 0;')}>
@@ -211,7 +226,6 @@ export function renderStatsPanel(c) {
   var работы = c.jobRows ? c.jobRows() : [];
   var s0 = d.stats || {};
   var g = s0.generate || {}, f = s0.favorites || {}, sh = s0.shown || {}, nl = st.nl || {};
-  var лента = st.lenta || [];
 
   // КАРТА ВОРОНКИ (Раунд 57). Сколько фрагментов и книг доживает до каждой
   // ступени отсева — чтобы цена каждой ручки была видна числом, а не на словах.
@@ -232,15 +246,23 @@ export function renderStatsPanel(c) {
       })}
       {(ворон.источники || []).length ? (
         <div style={s('margin-top: 8px;')}>
-          <div style={s('font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted-soft); margin-bottom: 4px;')}>кто доходит до отбора</div>
-          {ворон.источники.slice(0, 6).map(function (и, j) {
-            return (
-              <div key={j} style={s('display: flex; align-items: baseline; gap: 8px; font-size: 10px; padding: 1px 0;')}>
-                <span style={s('width: 42px; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums;')}>{и.доля}%</span>
-                <span style={s('flex: 1; min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;')}>{и.источник}</span>
-              </div>
-            );
-          })}
+          <div style={s('font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted-soft); margin-bottom: 4px;')}>
+            кто доходит до отбора · {ворон.источники.length} книг</div>
+          {/* ВСЕ книги двумя колонками, а не топ-6 в столбик (2026-08-28,
+              владелец: «я вижу только 5, и даже так она дохуя места занимает»).
+              Сорок книг ложатся в двадцать строк; имена — для глаз (имяКниги),
+              полное имя и счёт строк — в подсказке. */}
+          <div style={s('display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px;')}>
+            {ворон.источники.map(function (и, j) {
+              return (
+                <div key={j} title={и.источник + ' · строк ' + фмт(и.строк)}
+                     style={s('display: flex; align-items: baseline; gap: 5px; font-size: 9px; padding: 1px 0; min-width: 0;')}>
+                  <span style={s('width: 30px; text-align: right; flex-shrink: 0; color: var(--ink); font-variant-numeric: tabular-nums;')}>{и.доля}%</span>
+                  <span style={s('min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;')}>{имяКниги(и.источник)}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       ) : null}
     </div>
@@ -254,8 +276,6 @@ export function renderStatsPanel(c) {
 
   var темы = (c.textThemes ? c.textThemes() : []).slice(0, 12);
   var схемы = Object.entries(g.rhyme_scheme_counts || {}).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 5);
-  var всегоИсточников = (g.gen_used_total || 0) + (g.nl_used_total || 0) + (g.classic_used_total || 0);
-  var доля = function (n) { return всегоИсточников ? Math.round(100 * n / всегоИсточников) + '%' : '—'; };
 
   return (
     <div data-pa="down" data-po={st.closing === 'jobs' ? '1' : null} style={s(ПАНЕЛЬ + ' width: 340px; max-height: 74vh; overflow-y: auto;')}>
@@ -286,48 +306,34 @@ export function renderStatsPanel(c) {
 
       <div style={s(ЗАГОЛОВОК + ' margin-bottom: 9px;')}>статистика</div>
 
-      {/* СНИМОК ДОЛЖЕН БЫТЬ САМОДОСТАТОЧНЫМ (Раунд 59). Панель фотографируют и
-          присылают: по одним счётчикам, без версии и без состояния данных,
-          такой снимок не отвечает даже на первый вопрос — «а собрано ли у него
-          вообще всё». Поэтому среда стоит первой строкой, до цифр работы. */}
-      {блок('среда', [
-        ['версия', (st.версия || '—')],
-        ['система', (st.среда || (navigator.platform + ' · ' + (navigator.language || ''))).slice(0, 40)],
-        ['ядро', (st.ядроМолчит ? 'не отвечает' : 'отвечает')],
-        ['ошибок за сессию', фмт((st.логОшибок != null ? st.логОшибок : 0))],
-      ], 'env')}
-
+      {/* НАДГРОБИЕ: ЗДЕСЬ СТОЯЛИ ШЕСТЬ БЛОКОВ — «среда», «работа», «откуда
+          строки», «избранное», «корпус», «лента» (сняты 2026-08-28, владелец:
+          «всё лишнее, бесполезное и некрасивое из статистики удалить»).
+          Что и почему умерло:
+            · «среда» (версия/система/ядро/ошибки) — второй источник правды:
+              всё это несёт отчёт во вкладке «лог», который и создан, чтобы
+              его присылали;
+            · «лента: строк 5» — строфа стоит на экране, считать её строки
+              цифрой в панели — говорить человеку то, что он видит глазами;
+            · «в избранном» и «в истории» — дубли счётчиков шапки;
+            · задержки (средняя/p95) — метрика разработчика, живёт в csv;
+            · «откуда строки» — три доли, застывшие у него на одном значении
+              (корпус ~100%): форма, которая не движется, врёт движением;
+            · «источников включено» — то же число стоит строкой выше, в
+              шапке воронки («N книг»).
+          Осталось то, что отвечает на вопросы «сколько я работаю», «каков
+          выход в избранное» и «не кончается ли корпус». */}
       {блок('работа', [
         ['генераций', фмт(g.count)],
         ['строк показано', фмт(sh.total_lines)],
-        ['средняя генерация', (g.avg_latency_ms != null ? Math.round(g.avg_latency_ms) + ' мс' : '—')],
-        ['девять из десяти быстрее', (g.p95_latency_ms != null ? Math.round(g.p95_latency_ms) + ' мс' : '—')],
-      ], 'work')}
-
-      {блок('откуда строки', [
-        ['генератор', доля(g.gen_used_total || 0)],
-        ['корпус', доля(g.nl_used_total || 0)],
-        ['классика', доля(g.classic_used_total || 0)],
-      ], 'src')}
-
-      {блок('избранное', [
-        ['в избранном', фмт((st.favs || []).length)],
-        ['добавлено за всё время', фмт(f.added)],
-        ['доля показанного', (f.rate_pct != null ? f.rate_pct + '%' : '—')],
-      ], 'fav')}
-
-      {блок('корпус', [
-        ['источников включено', фмт((nl.sources || []).filter(function (x) { return x.active; }).length)],
-        ['фрагментов', фмт(nl.pool_total)],
+        ['в избранное за всё время', фмт(f.added)],
+        // «выход показанного в избранное» стоял здесь прочерком: rate_pct снят
+        // на сервере ещё в блоке «живое» (core/stats.py — «мерить не
+        // программу, а человека»), а экран продолжал обещать число. Поле без
+        // производителя — та же мёртвая строка, что поле без читателя.
+        ['фрагментов в корпусе', фмт(nl.pool_total)],
         ['ещё не показано', фмт(nl.pool_available)],
-        ['в истории', фмт((st.hist || []).length)],
-      ], 'corp')}
-
-      {/* Блок назывался «этот лист» и считал строки документа. Листов нет с
-          2026-08-18; считаем то, что на экране. */}
-      {блок('лента', [
-        ['строк', фмт(лента.length)],
-      ], 'lenta')}
+      ], 'work')}
 
       {ключи.length ? (
         <div style={s('margin-bottom: 12px;')}>

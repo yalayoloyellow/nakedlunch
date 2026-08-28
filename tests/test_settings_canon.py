@@ -49,7 +49,8 @@ def test_chtenie_vybrasyvaet_myortvyy_klyuch(файл):
     assert "Разнообразие" not in p
     assert "Мелодичность" not in p and "Банальность" not in p  # удалены
     # живое сохранено, а не сброшено заодно с мёртвым
-    assert p["Источники"] == 1.0 and p["Точность рифм"] == 0.25
+    # старая «Точность рифм» с диска переведена в маску ярусов, не потеряна
+    assert p["Источники"] == 1.0 and p["Ярусы рифмы"] == 3
 
 
 def test_chtenie_dobivaet_zhivye_klyuchi(файл):
@@ -88,7 +89,7 @@ def test_musornyy_rezhim_i_musornye_znacheniya(файл):
     np = settings_mod.read()["nl_params"]
     assert np["mode"] == clean.MODE_ALGO
     assert np["params"]["Мат"] == -1.0        # мусор → дефолт
-    assert np["params"]["Клаузула"] == 3      # вне диапазона → в диапазон
+    assert np["params"]["Клаузула"] == 7      # вне маски 1..7 → в диапазон
 
 
 def test_bez_nl_params_nichego_ne_pridumyvaetsya(файл):

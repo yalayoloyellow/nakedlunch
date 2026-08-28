@@ -539,7 +539,8 @@ def _nl_scored(fragments, corpus, hidden, tags=None, light=False,
             # становится достижимым.
             # Фрагмент без известного рифмо-ключа воротам клаузулы не отвечает
             # (clausula("") == 0) и честно отсеивается — угадывать нечем.
-            if clausula and scan_mod.clausula(key) != clausula:
+            if clausula and (int(clausula) & 7) != 7 and not (
+                    (кл := scan_mod.clausula(key)) and (1 << (кл - 1)) & int(clausula)):
                 continue
             cl = set(lemma_list)
             syllables = sum(1 for ch in text.lower() if ch in VOWELS)
@@ -797,7 +798,8 @@ def _score_strict_table(tags: set, theme_sims, forced: set,
             continue
         if only_mat and not has_mat(low):
             continue
-        if clausula and scan_mod.clausula(entry.get("key", "")) != clausula:
+        if clausula and (int(clausula) & 7) != 7 and not (
+                (кл := scan_mod.clausula(entry.get("key", ""))) and (1 << (кл - 1)) & int(clausula)):
             continue
         # ВНУТРЕННЯЯ РИФМА НА ЗАПАСНОМ ПУТИ (без индекса): флаг лежит в той
         # же записи кэша (--внутр). Отсутствие поля — «нет»: строка, которая
@@ -899,7 +901,7 @@ def _diversify(pool: list, k: int, div: float) -> list:
     return chosen
 
 
-def _ensure_forced(shortlist, forced, forced_candidates, rhyme, precision, hidden=None):
+def _ensure_forced(shortlist, forced, forced_candidates, rhyme, ярусы, hidden=None):
     """`!слово` hard guarantee (2026-07-17, PLAN.md 0.2b) — runs AFTER the
     shortlist is fully assembled, on the assembled list directly (mutates
     `shortlist` in place). Unlike ordinary theme words (`literal_cap`: a
@@ -988,7 +990,7 @@ def _ensure_forced(shortlist, forced, forced_candidates, rhyme, precision, hidde
             if partner is None:
                 continue
             for cand in candidates:
-                if _rhymes(cand, shortlist[partner], precision):
+                if _rhymes(cand, shortlist[partner], ярусы):
                     shortlist[i] = cand
                     used_texts.add(cand["text"])
                     placed = True
@@ -1421,7 +1423,8 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             continue
         if only_mat and not has_mat(L.text):
             continue
-        if clausula and scan_mod.clausula(sc.rhyme or "") != clausula:
+        if clausula and (int(clausula) & 7) != 7 and not (
+                (кл := scan_mod.clausula(sc.rhyme or "")) and (1 << (кл - 1)) & int(clausula)):
             continue
         cl = _cand_lemmas(L)
         scored.append({"text": L.text, "template": L.template, "meter": round(sc.meter, 3),
@@ -1485,7 +1488,10 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             # один разбор на всех вызывающих (см. `редкость.разобрать_полосы`).
             редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
             редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")),
-            внутр_рифма=внутр_рифма)
+            внутр_рифма=внутр_рифма,
+            # прямая тяга сводит пары сама — ей нужна та же маска ярусов,
+            # какой режет _rhymes, иначе она вернёт «точные» на любом ярусе
+            ярусы_рифмы=int(knobs["rhyme_tiers"]))
         nl_survivors_full = nl_survivors      # резервы уже внутри; ниже они не досчитываются
     else:
         nl_survivors, forced_candidates = _nl_scored(nl_fragments or [], corpus, hidden, гсч=гсч,
@@ -1559,7 +1565,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
         size = min(knobs["shortlist"], len(nl_survivors))
         if rhyme != "none":
             shortlist = _select_with_rhyme(nl_survivors, rhyme, size, set(range(size)),
-                                                precision=knobs["rhyme_precision"],
+                                                ярусы=int(knobs["rhyme_tiers"]),
                                                 mat_share=knobs.get("mat_share", 0.0),
                                                 repeat_ok=repeat_ok,
                                                 theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
@@ -1577,7 +1583,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
         # impossible rather than merely unlikely.
         size = min(knobs["shortlist"], len(scored))
         if rhyme != "none":
-            shortlist = _select_with_rhyme(scored, rhyme, size, precision=knobs["rhyme_precision"],
+            shortlist = _select_with_rhyme(scored, rhyme, size, ярусы=int(knobs["rhyme_tiers"]),
                                             mat_share=knobs.get("mat_share", 0.0),
                                             repeat_ok=repeat_ok,
                                             syllable_spec=syllable_spec, гсч=гсч,
@@ -1608,7 +1614,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             else:
                 nl_positions = _nl_slot_plan(size, nl_quota)
                 shortlist = _select_with_rhyme(scored + nl_survivors, rhyme, size, nl_positions,
-                                            precision=knobs["rhyme_precision"],
+                                            ярусы=int(knobs["rhyme_tiers"]),
                                             mat_share=knobs.get("mat_share", 0.0),
                                             repeat_ok=repeat_ok,
                                             theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
@@ -1648,7 +1654,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     # same as every other shortlist item at this point) so an inserted
     # candidate goes through the SAME lemmas/classic normalization below.
     forced_notice = _ensure_forced(shortlist, forced, forced_candidates, rhyme,
-                                   knobs["rhyme_precision"], hidden)
+                                   int(knobs["rhyme_tiers"]), hidden)
 
     nl_in_shortlist = sum(1 for r in shortlist if r["template"] == "nakedlunch")
     # СКОЛЬКО КАНДИДАТОВ ВООБЩЕ МОГУТ ВСТАТЬ В ПАРУ (Раунд 62).
@@ -1660,18 +1666,32 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     # 154 кандидата из 300 — то есть половина буфера физически не может занять
     # рифмующую позицию, и воронка об этом молчала.
     #
-    # Считаем по ТОМУ ЖЕ правилу корзины, что и отбор (префикс по точности),
-    # иначе число описывало бы не то, что происходит.
+    # Считаем по ТОМУ ЖЕ правилу пары, что и отбор (_rhymes/ярус_пары), иначе
+    # число описывало бы не то, что происходит. Арифметика по маске: у строки
+    # есть партнёр на «точной», если её ключ встречается дважды; на «близкой» —
+    # если в её 3-значной корзине есть ДРУГОЙ ключ; на «созвучии» — в 2-значной
+    # другой 3-префикс; на «ассонансе» — в 1-значной другой 2-префикс.
     if ступени and rhyme != "none":
-        plen = _rhyme_prefix_len(knobs["rhyme_precision"])
-        корзины: dict = {}
-        for r in nl_survivors:
-            k = r.get("rhyme") or ""
-            if k:
-                b = k if plen is None else k[:plen]
-                корзины[b] = корзины.get(b, 0) + 1
-        ступени["в_парах"] = sum(v for v in корзины.values() if v >= 2)
-        ступени["корзин"] = len(корзины)
+        м = int(knobs["rhyme_tiers"])
+        c0: dict = {}
+        c3: dict = {}
+        c2: dict = {}
+        c1: dict = {}
+        ключи_строк = [r.get("rhyme") for r in nl_survivors if r.get("rhyme")]
+        for k in ключи_строк:
+            c0[k] = c0.get(k, 0) + 1
+            c3[k[:3]] = c3.get(k[:3], 0) + 1
+            c2[k[:2]] = c2.get(k[:2], 0) + 1
+            c1[k[:1]] = c1.get(k[:1], 0) + 1
+        ступени["в_парах"] = sum(
+            1 for k in ключи_строк
+            if ((м & 1) and c0[k] >= 2)
+            or ((м & 2) and c3[k[:3]] - c0[k] >= 1)
+            or ((м & 4) and c2[k[:2]] - c3[k[:3]] >= 1)
+            or ((м & 8) and c1[k[:1]] - c2[k[:2]] >= 1))
+        плен = nlindex.корзина_яруса(м)
+        ступени["корзин"] = len(c0 if плен is None else
+                                (c3 if плен == 3 else (c2 if плен == 2 else c1)))
     for r in shortlist:
         r["lemmas"] = sorted(r.pop("_lem"))          # echoed back on accept — see corpus.accept
         # Раунд 50: сюда доходит только алгоритм — классика ушла развилкой в
@@ -1715,50 +1735,26 @@ def _last_word(text: str) -> str:
     return tokens[-1].strip(".,!?:;\"'()»«—-").lower() if tokens else ""
 
 
-def _rhyme_prefix_len(precision: float) -> int | None:
-    """None = exact key match (precision<=0 — the only behavior that existed
-    before 2026-07-14, kept as the default). Otherwise, the number of LEADING
-    characters of the key (which always starts at the stressed vowel) that
-    must match for two lines to count as rhyming. Discretized into 3 tiers
-    rather than continuous: a fixed prefix length lets the anchor
-    partner-count check in _select_with_rhyme bucket candidates in O(1); a
-    length computed per-PAIR (e.g. relative to each key's own length) would
-    need an O(candidates²) scan to find partners instead."""
-    if precision <= 0.0:
-        return None
-    if precision <= 0.34:
-        return 3
-    if precision <= 0.67:
-        return 2
-    return 1
+# НАДГРОБИЕ: `_rhyme_prefix_len` (ползунок 0..1 → длина префикса) жил здесь
+# с 2026-07-14 по 2026-08-28 и умер вместе с ползунком: ручка стала битовой
+# маской ярусов, корзину считает nlindex.корзина_яруса, годность пары —
+# nlindex.ярус_пары. Старое имя rhyme_precision переводится в clean.knobs.
 
 
-def _rhymes(r1: dict, r2: dict, precision: float = 0.0) -> bool:
-    """Check if two lines rhyme by comparing their rhyme keys (stressed vowel
-    to end of word, reduced/devoiced — see scan.rhyme_key). Empty rhyme key =
-    no rhyme data (nakedlunch fragments missing from the offline build). Same
-    final WORD ("пепел"/"пепел") always matches its own rhyme key — that's
-    not a rhyme, it's a repeat, so it's excluded explicitly.
-
-    `precision` (user's "Точность рифм" knob, 0=точные..1=мягкие) trades
-    strictness for supply: at 0 the keys must match EXACTLY (the only
-    behavior before 2026-07-14 — kept as the default so existing tuning
-    doesn't shift under anyone). Above 0, only a shared LEADING run of the
-    key needs to match — the key always starts at the stressed vowel, so a
-    shorter required run keeps the vowel (still recognizably "the same
-    sound") but tolerates the tail after it differing (asonance/consonance
-    territory: 'сУде'/'красотЕ' share only the stressed 'е' — see the
-    user's own screenshot 2026-07-14). At precision=1, a 1-character match
-    (the stressed vowel alone) is enough."""
+def _rhymes(r1: dict, r2: dict, ярусы: int = 3) -> bool:
+    """Рифмуются ли две строки при данной МАСКЕ ярусов (2026-08-28, владелец:
+    «хочу только ассонанс и точные»). Ярус пары — теснейшее совпадение её
+    ключей (nlindex.ярус_пары — канон один на движок): тождественные ключи —
+    «точная», три общих знака — «близкая», два — «созвучие», ударная гласная —
+    «ассонанс». Ярусы исключающие; пара годится, если её ярус горит в маске.
+    Один и тот же последний ВОРД («пепел»/«пепел») — не рифма, а повтор,
+    отсекается всегда."""
     k1, k2 = r1.get("rhyme"), r2.get("rhyme")
     if not k1 or not k2:
         return False
     if _last_word(r1.get("text", "")) == _last_word(r2.get("text", "")):
         return False
-    plen = _rhyme_prefix_len(precision)
-    if plen is None:
-        return k1 == k2
-    return k1[:plen] == k2[:plen]
+    return bool(nlindex.ярус_пары(k1, k2) & int(ярусы))
 
 
 def _rhyme_scheme_groups(scheme: str) -> list[list[int]]:
@@ -1951,7 +1947,7 @@ def закрепить_разброс(семя: int | None) -> None:
 
 
 def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: set | None = None,
-                        precision: float = 0.0, theme_anchor: bool = False,
+                        ярусы: int = 3, theme_anchor: bool = False,
                         syllable_spec: list | None = None, mat_share: float = 0.0,
                         repeat_ok: bool = False,
                         гсч=None, тема: set | None = None,
@@ -2066,7 +2062,7 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
     selected: list = []
     used_indices: set = set()
     used_texts: set = set()
-    plen = _rhyme_prefix_len(precision)
+    plen = nlindex.корзина_яруса(int(ярусы))
 
     def bucket(k: str | None) -> str | None:
         """Groups candidates for the O(1) anchor partner-count check below —
@@ -2226,6 +2222,13 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
                 continue
             другой = candidates[j]
             if другой["_lem"] & лем:
+                continue
+            # Ярусы исключающие (2026-08-28): корзина режется широким префиксом
+            # и потому ШИРЕ настоящих партнёров — на «близкой» в ней лежат и
+            # тождественные ключи, которые больше не пара. Без этой проверки
+            # якорь запирался бы в корзину, где все соседи — «слишком точные»,
+            # и пара молча ломалась.
+            if not _rhymes(cand, другой, ярусы):
                 continue
             if другой["text"] not in used_texts:
                 return True
@@ -2473,10 +2476,21 @@ def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: s
                         for other_local in target_group:
                             if other_local < local_pos:
                                 other_global = block_start + other_local
-                                if other_global < len(selected) and not _rhymes(cand, selected[other_global], precision):
+                                if other_global < len(selected) and not _rhymes(cand, selected[other_global], ярусы):
                                     valid = False
                                     break
-                    elif is_rhyme_anchor:
+                    elif is_rhyme_anchor and not theme_anchor_mode:
+                        # ЯКОРЬ ТЕМЫ ОСВОБОЖДЁН ОТ ВЕТО ПАРТНЁРА (2026-08-28).
+                        # С исключающими ярусами проверка партнёра стала строже,
+                        # и на «близкой» тематический пул («деньги…» кончается
+                        # словом темы у половины буквальных строк) не находил
+                        # якорю НИ ОДНОГО годного соседа — буквальная строка не
+                        # вставала вовсе: 0 из 15 прогонов против обещанных 12
+                        # (тест test_yakor_predpochitaet_bukvalnuyu, найдено
+                        # бисекцией). Якорь — обещание «слово видно», оно
+                        # старше гарантии пары: без партнёра группа честно
+                        # распадётся ниже по каскаду, а не украдёт тему молча.
+                        #
                         # needs itself + at least one more unused candidate sharing
                         # its bucket, or the partner slot later in this stanza is doomed
                         b = корзина[i]

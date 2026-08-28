@@ -177,7 +177,7 @@ def test_select_with_rhyme_avoids_lemma_repeat_within_stanza():
         row("плакал от смеха", "еха"),
         row("выпил без спеха", "еха"),   # бакет "еха" — рифмуется, лемма-отличен
     ]
-    out = filters._select_with_rhyme(candidates, "аа", 2, precision=0.0)
+    out = filters._select_with_rhyme(candidates, "аа", 2, ярусы=1)
     assert len(out) == 2
     lem0, lem1 = out[0]["_lem"], out[1]["_lem"]
     assert not (lem0 & lem1), f"строфа содержит повтор леммы: {lem0 & lem1} — {[r['text'] for r in out]}"
@@ -201,21 +201,21 @@ def test_forced_word_hard_guarantee():
     shortlist = [row("деньги решают всё"), row("иду домой пешком")]
     before = list(shortlist)
     notice = filters._ensure_forced(shortlist, {"деньги"},
-                                    {"деньги": [row("запасной вариант")]}, "none", 0.0)
+                                    {"деньги": [row("запасной вариант")]}, "none", 1)
     assert notice == {"деньги": "ok"}
     assert shortlist == before, "слово уже было — форсить вставку не нужно"
 
     # (2) кандидат есть, но естественным отбором не выбран — вставляем силой
     shortlist = [row("иду домой пешком"), row("дождь идёт весь день")]
     candidate = row("у меня много денег")
-    notice = filters._ensure_forced(shortlist, {"денег"}, {"денег": [candidate]}, "none", 0.0)
+    notice = filters._ensure_forced(shortlist, {"денег"}, {"денег": [candidate]}, "none", 1)
     assert notice == {"денег": "ok"}
     assert candidate in shortlist, "доступный кандидат не был вставлен"
 
     # (3) слова нет в базе вообще — честное 'missing', БЕЗ тихой подмены
     shortlist = [row("иду домой пешком")]
     before = list(shortlist)
-    notice = filters._ensure_forced(shortlist, {"биткоин"}, {"биткоин": []}, "none", 0.0)
+    notice = filters._ensure_forced(shortlist, {"биткоин"}, {"биткоин": []}, "none", 1)
     assert notice == {"биткоин": "missing"}
     assert shortlist == before, "при отсутствии слова выдача не должна тихо меняться"
 
@@ -225,7 +225,7 @@ def test_forced_word_hard_guarantee():
     shortlist = [row("белый снег идёт", "эт"), row("на пустой обед", "эт")]
     bad_cand = row("много было денег", "эг")       # не рифмуется с группой "эт"
     good_cand = row("у меня совсем нет денег", "эт")  # рифмуется
-    notice = filters._ensure_forced(shortlist, {"денег"}, {"денег": [bad_cand, good_cand]}, scheme, 0.0)
+    notice = filters._ensure_forced(shortlist, {"денег"}, {"денег": [bad_cand, good_cand]}, scheme, 1)
     assert notice == {"денег": "ok"}
     assert good_cand in shortlist and bad_cand not in shortlist, \
         "вставился рифмующийся кандидат, а не первый в списке"
@@ -371,7 +371,7 @@ def test_theme_anchor_present_on_topic_and_not_a_duplicate():
         assert anchors[0]["text"] == theme_line, (
             f"якорь обязан быть строкой, точно попадающей в тему, даже при диссонансе: {anchors[0]}")
         other = [r for r in sl if not r.get("anchor")][0]
-        assert filters._rhymes(anchors[0], other, knobs["rhyme_precision"]), \
+        assert filters._rhymes(anchors[0], other, knobs["rhyme_tiers"]), \
             "якорь обязан рифмоваться со своим партнёром по схеме, как обычная строка"
     finally:
         filters._NL_RHYME = old_rhyme
@@ -431,7 +431,7 @@ def test_stanza_syllable_length_prefers_but_never_beats_rhyme():
     candidates = [row("гулял по лесу долго и упрямо", "ад", 15),
                   row("веселый сад", "ад", 6),
                   row("прыгал через ямы напролом", "ад", 14)]
-    out = filters._select_with_rhyme(candidates, "аа", 2, precision=0.0,
+    out = filters._select_with_rhyme(candidates, "аа", 2, ярусы=1,
                                      syllable_spec=[(5, 6), (5, 6)])
     assert any(r["syllables"] == 6 for r in out), \
         f"строка нужной длины была доступна, но не выбрана: {[(r['syllables'], r['text']) for r in out]}"
@@ -442,7 +442,7 @@ def test_stanza_syllable_length_prefers_but_never_beats_rhyme():
     candidates2 = [row("шел он долго вдоль дороги позабытой напрочь", "ад", 20),
                    row("плыл он мимо острова того же самого", "ад", 18),
                    row("хороший день", "юк", 5)]
-    out2 = filters._select_with_rhyme(candidates2, "аа", 2, precision=0.0,
+    out2 = filters._select_with_rhyme(candidates2, "аа", 2, ярусы=1,
                                       syllable_spec=[(5, 6), (5, 6)])
     assert out2[0]["rhyme"] == out2[1]["rhyme"] == "ад", \
         f"рифма должна была победить длину: {[(r['rhyme'], r['syllables'], r['text']) for r in out2]}"
@@ -490,7 +490,7 @@ def test_splice_fills_a_too_short_slot_with_a_rhyming_tail():
     # and require_slot=True (used inside the repair's own tail/head search)
     # would reject every candidate here regardless of length.
     out = filters._select_with_rhyme([anchor, short_tail, filler], "аа", 2, nl_positions={0, 1},
-                                     precision=0.0, syllable_spec=[(8, 9), (8, 9)])
+                                     ярусы=1, syllable_spec=[(8, 9), (8, 9)])
     assert len(out) == 2, f"ожидались 2 строки: {out}"
     second = out[1]
     assert second.get("spliced"), f"вторая строка должна была получиться склейкой: {second}"
@@ -529,7 +529,7 @@ def test_trim_shortens_an_overlong_candidate_without_touching_the_rhyme():
 
         anchor, overlong = row(anchor_text), row(overlong_text)
         out = filters._select_with_rhyme([anchor, overlong], "аа", 2, nl_positions={0, 1},
-                                         precision=0.0, syllable_spec=[(8, 9), (8, 9)])
+                                         ярусы=1, syllable_spec=[(8, 9), (8, 9)])
         assert len(out) == 2, f"ожидались 2 строки: {out}"
         second = out[1]
         assert second.get("trimmed"), f"вторая строка должна была получиться обрезкой: {second}"

@@ -34,6 +34,13 @@
 # 10 случаях из 11 (одиннадцатый — лучший кандидат не прошёл рифму/слоги, то
 # есть «лучший ДОСТУПНЫЙ» честно ниже).
 #
+# ЭТАЛОН ПЕРЕСНЯТ 2026-08-28 — 3 случая из 24, все со схемой и якорями. Тоже
+# нарочная смена: проверка партнёра якоря стала ходить через _rhymes, а тот
+# отвергает соседа с ТЕМ ЖЕ последним словом — раньше якорь мог запереться на
+# «партнёре», с которым пара обречена (повтор слова — не рифма). Сами ярусы
+# на эталон не влияют: вложенная шкала переводится в маску поведенчески
+# (до яруса N), предикат пары побитово тот же — 21 случай и не шелохнулся.
+#
 # Прогон: .venv/bin/python -m pytest tests/test_select_speed.py -q
 
 import json
@@ -104,7 +111,10 @@ def прогнать(c):
     return filters._select_with_rhyme(
         кандидаты, c["схема"], c["size"],
         set(c["nl_positions"]) if c["nl_positions"] is not None else None,
-        precision=c["precision"], theme_anchor=c["theme_anchor"],
+        # золотые случаи записаны при вложенной шкале; поведенческий перевод
+        # (до яруса N) даёт ТОТ ЖЕ предикат пары — выдача обязана совпасть
+        ярусы={0.0: 1, 0.25: 3, 0.5: 7, 1.0: 15}[c["precision"]],
+        theme_anchor=c["theme_anchor"],
         syllable_spec=вилка, mat_share=c["mat_share"],
         repeat_ok=c["repeat_ok"])
 
@@ -155,7 +165,7 @@ def test_nichi_ne_zavisyat_ot_nomera_no_ball_glavnee():
     # балл главнее: единственный лучший обязан быть выбран при любом семени
     for семя in (1, 2, 3, 4, 5):
         filters.закрепить_разброс(семя)
-        выдача = filters._select_with_rhyme(пул([0.6] * 30 + [0.9]), "аа", 2, precision=0.0)
+        выдача = filters._select_with_rhyme(пул([0.6] * 30 + [0.9]), "аа", 2, ярусы=1)
         assert выдача, "лучший по баллу не выбран вовсе"
         assert "строка 30" in {r["text"] for r in выдача}, f"балл проигран номеру, семя {семя}"
 
@@ -163,7 +173,7 @@ def test_nichi_ne_zavisyat_ot_nomera_no_ball_glavnee():
     видели = set()
     for семя in range(40):
         filters.закрепить_разброс(семя)
-        выдача = filters._select_with_rhyme(пул([0.6] * 50), "аа", 2, precision=0.0)
+        выдача = filters._select_with_rhyme(пул([0.6] * 50), "аа", 2, ярусы=1)
         видели.add(tuple(r["text"] for r in выдача))
     filters.закрепить_разброс(20260806)
     assert len(видели) > 1, "ничьи решаются одинаково — разнообразие снова мертво"
@@ -199,7 +209,7 @@ def test_bolshoy_pul_ne_kvadratichen():
     кандидаты = [кандидат(rnd, i) for i in range(10_000)]
     t = time.time()
     выдача = filters._select_with_rhyme(кандидаты, "абабввгддг", 200,
-                                        set(range(200)), precision=0.25,
+                                        set(range(200)), ярусы=3,
                                         theme_anchor=True,
                                         syllable_spec=[(8, 9)] * 10)
     прошло = time.time() - t
@@ -224,7 +234,7 @@ def test_odinochnaya_stopa_ne_medlennee():
     кандидаты = [кандидат(rnd, i) for i in range(10_000)]
     t = time.time()
     выдача = filters._select_with_rhyme(кандидаты, "абаб", 100, set(range(100)),
-                                        precision=0.25, theme_anchor=True,
+                                        ярусы=3, theme_anchor=True,
                                         syllable_spec=[(6, 9)] * 4)
     прошло = time.time() - t
     assert len(выдача) == 100

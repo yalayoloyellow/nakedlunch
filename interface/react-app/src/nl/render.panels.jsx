@@ -183,7 +183,7 @@ export function renderHeader(c) {
   var docCfgItems = c.cfgRowsCalc([
     c.cfgNumItem('textSize', 'размер строки', 11, 40, 1, 15, 'px'),
     c.cfgNumItem('lineGap', 'интерлиньяж', 1.2, 2.4, 0.05, 1.5),
-    c.cfgPickItem('colWidth', 'ширина колонки', ['узкая', 'средняя', 'широкая'], 'узкая')
+    c.cfgPickItem('colWidth', 'ширина колонки', ['очень узкая', 'узкая', 'средняя', 'широкая'], 'очень узкая')
   ]);
   var legendRows = legendRowsCalc();
 

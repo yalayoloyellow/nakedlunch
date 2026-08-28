@@ -33,7 +33,7 @@ import clean  # noqa: E402
     "Источники": "real_text",
     "Мат": "mat_share",
     "Клаузула": "clausula",
-    "Точность рифм": "rhyme_precision",
+    "Ярусы рифмы": "rhyme_tiers",
     # «Мелодичность» → "melody" УДАЛЕНА 2026-08-21 (надгробие в filters.py),
     # «Банальность» → "banality" УДАЛЕНА 2026-08-20 вместе с ручкой (надгробие
     # в core/nlindex.py). Карта обязана сойтись с `clean.KNOB_SPEC` — этот
@@ -134,7 +134,7 @@ def test_csv_выгрузка_не_отстаёт_от_журнала():
     колонкой CSV. Заведут десятую — этот тест покраснеет, а не выгрузка
     промолчит."""
     import stats
-    ЖУРНАЛ_ПИШЕТ = {"cohesion", "real_text", "rhyme_precision", "classic",
+    ЖУРНАЛ_ПИШЕТ = {"cohesion", "real_text", "rhyme_tiers", "classic",
                     "mat_share", "clausula", "repeat", "rare_word", "rare_pair",
                     "inner_rhyme"}
     assert ЖУРНАЛ_ПИШЕТ <= set(stats._CSV_FIELDS), (
