@@ -84,6 +84,19 @@ export function renderLenta(c) {
   return (
     <div style={s('position: relative; z-index: 1; flex: 1; min-width: 0; display: flex; '
                 + 'flex-direction: column; min-height: 0;')}>
+      {/* ГРАНИЦЫ КОЛОНКИ ВИДНЫ, ПОКА ОТКРЫТА ПАНЕЛЬ С РУЧКОЙ (2026-08-28).
+          Владелец: «сломана концепция ширины колонки». Ручка работала всю
+          дорогу (кнопка → --content-max-width → перенос длинных строк), но на
+          коротких строках стиха эффект невидим: блок сжимается по самой
+          длинной строке, и клик выглядел пустым. Волосяные края показывают
+          колонку в момент настройки и уходят вместе с панелью — ручка больше
+          не молчит о том, чем управляет. */}
+      {st.openPill === 'cfg' ? (
+        <div style={s('position: absolute; top: 0; bottom: 0; left: 0; right: 0; margin: 0 auto; '
+                    + 'max-width: min(var(--content-max-width), 100%); pointer-events: none; '
+                    + 'border-left: 1px solid var(--border-soft); '
+                    + 'border-right: 1px solid var(--border-soft); opacity: .45;')} />
+      ) : null}
       <section ref={c.lentaRef} data-noscrollbar="1"
                style={s('flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex;')}>
         <div style={s(блокStyle)}>
@@ -105,6 +118,12 @@ export function renderLenta(c) {
           var есть = c.строкаВИзбранном(r.text);
           return (
             <div key={i} style={s('display: flex; gap: 8px; align-items: flex-start;')}>
+              {/* ЗВЕЗДА СПРАВА ОТ СТРОКИ (2026-08-28, владелец: «значки
+                  звёздочки… справа должен быть, а не слева»). Текст первым,
+                  звезда после: строки читаются с левого края без частокола
+                  кнопок перед ними, а звёзды выстраиваются рейкой по правому
+                  краю блока. */}
+              <span style={s('flex: 1 1 auto; min-width: 0;')}>{r.text}</span>
               {/* ЕДИНСТВЕННЫЙ ОБРАБОТЧИК СОХРАНЕНИЯ на весь экран. Способ
                   вызова уже менялся (пробел → клик по строке → звезда), и
                   менять его снова должно стоить одной строки здесь: вся
@@ -130,7 +149,6 @@ export function renderLenta(c) {
                              + 'color: var(--ink); cursor: pointer; '
                              + 'transition: opacity 140ms var(--ease); '
                              + 'opacity: ' + (есть ? '.8' : '.16') + ';')}>★</button>
-              <span style={s('min-width: 0;')}>{r.text}</span>
             </div>
           );
         })}

@@ -1667,7 +1667,11 @@ def api_pool_shape():
             clausula=int(knobs.get("clausula", 0)),
             редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
             редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")),
-            внутр_рифма=int(knobs.get("inner_rhyme", 0) or 0))
+            внутр_рифма=int(knobs.get("inner_rhyme", 0) or 0),
+            # корзины «разных рифм» — тем же ярусом, каким отбор ищет пары:
+            # цифра, посчитанная целыми ключами при ярусе «ассонанс», врала бы
+            рифма_префикс=filters._rhyme_prefix_len(
+                float(knobs.get("rhyme_precision", 0.0) or 0.0)))
     return {"готово": True, **форма}
 
 
