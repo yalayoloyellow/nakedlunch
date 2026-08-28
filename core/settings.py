@@ -40,9 +40,6 @@ SETTINGS_PATH = DATA_DIR / "settings.json"
 # constructor). An old settings.json on the user's own disk with the
 # retired keys just has them silently dropped by `read()`'s _ALLOWED
 # filter — a graceful no-op transition, not a migration that needs writing.
-# `nl_smart_folders` (2026-07-31, фаза 0 nakedlunch v2) — умные папки листов:
-# чисто интерфейсная структура, сервер её не интерпретирует, поэтому и не
-# валидирует — хранит как есть.
 # `nl_fs_profiles`/`nl_ui_profiles`/`nl_palette`/`nl_view` (2026-08-01, фаза 3) —
 # профили сцены фристайла, профили вида, палитра и текущие настройки вида.
 # Дизайн клал их в localStorage; решение раунда 26 действует и здесь: хранилище
@@ -65,8 +62,26 @@ SETTINGS_PATH = DATA_DIR / "settings.json"
 # — файл data/chain_profiles.json и core/chain_profiles.py — ушла 2026-08-18.
 # Старые значения из settings.json на диске просто отфильтруются на чтении:
 # миграция не нужна, `read()` молча выбрасывает всё, чего нет в списке.
+#
+# НАДГРОБИЕ 2026-08-28: `nl_smart_folders` УБРАН ИЗ БЕЛОГО СПИСКА.
+#
+# Это были умные папки листов (2026-07-31, фаза 0 nakedlunch v2) — чисто
+# интерфейсная структура, которую сервер хранил как есть. Сами листы вырезаны
+# 2026-08-18 вместе с core/sheets.py и роутами /api/sheets/*, и с того дня во
+# фронте у ключа НЕ ОСТАЛОСЬ НИ ОДНОГО читателя (проверено grep'ом по
+# interface/react-app/src — пусто). Хранить положение папок для того, чего нет,
+# значит держать второй источник правды о вырезанном режиме, — ровно та же
+# причина, по которой выше ушёл `nl_chain`. Решением владельца, 2026-08-28.
+#
+# Ключ снят и в api/server.py (роут POST /api/settings): фильтра два, и оставить
+# его в одном значило бы получать ValueError на каждом сохранении панели —
+# `write()` на чужой ключ ругается нарочно.
+#
+# У пользователя на диске он лежать МОЖЕТ, и это ничего не стоит: `read()`
+# молча выбрасывает всё, чего нет в списке, а первая же запись убирает его и
+# из файла. Сторож — tests/test_умные_папки_ушли.py.
 _ALLOWED = {"nl_params", "stanza", "stanza_profile",
-            "nl_smart_folders", "nl_fs_profiles", "nl_ui_profiles", "nl_palette", "nl_view"}
+            "nl_fs_profiles", "nl_ui_profiles", "nl_palette", "nl_view"}
 
 
 def _nl_params(raw) -> dict:
