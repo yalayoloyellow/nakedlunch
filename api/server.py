@@ -1800,7 +1800,8 @@ def api_pool_shape():
     if isinstance(payload.get("params"), dict) or payload.get("mode"):
         knobs = clean.knobs(clean.knobs_from_profile(
             {"name": "запрос", "mode": payload.get("mode"), "params": payload.get("params"),
-             "полосы": payload.get("полосы")}))
+             "полосы": payload.get("полосы"),
+             "доли": payload.get("доли")}))
     else:
         knobs = clean.knobs(payload.get("knobs"))
     # ЕДИНСТВЕННЫЙ ЗАМОК, КОТОРЫЙ СЕРВЕР БЕРЁТ САМ, И ЭТО ТОТ ЖЕ ОБЪЕКТ
@@ -1864,7 +1865,8 @@ def api_generate():
     if isinstance(payload.get("params"), dict) or payload.get("mode"):
         knobs = clean.knobs_from_profile({"name": "запрос", "mode": payload.get("mode"),
                                           "params": payload.get("params"),
-                                          "полосы": payload.get("полосы")})
+                                          "полосы": payload.get("полосы"),
+             "доли": payload.get("доли")})
         try:
             knobs["shortlist"] = int(float(payload.get("shortlist", knobs["shortlist"])))
         except (TypeError, ValueError):
@@ -2270,8 +2272,11 @@ def api_settings_post():
         # `clean.knob_params` отбрасывает всё, чего нет в числовом каноне
         # крутилок, и полосы (несколько несмежных отрезков шкалы) он отбросил
         # бы молча — как когда-то молча терялись «Отбор» и «Мат».
-        entry["полосы"] = (clean.knob_profile({"name": "x", **raw}) or {}).get(
-            "полосы", {"слова": "", "пара": ""})
+        проф = clean.knob_profile({"name": "x", **raw}) or {}
+        entry["полосы"] = проф.get("полосы", {"слова": "", "пара": ""})
+        # ДОЛИ — по той же причине и тем же путём (2026-08-29): строка вида
+        # «1:20,2:50,4:30» в числовой канон не влезает.
+        entry["доли"] = проф.get("доли", {"клаузула": "", "рифма": ""})
         to_save["nl_params"] = entry
     if "stanza" in payload:
         to_save["stanza"] = clean.stanza_spec(payload["stanza"])

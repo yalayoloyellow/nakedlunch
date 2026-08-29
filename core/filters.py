@@ -31,6 +31,7 @@ import numpy as np
 # держит слой «близкое» в core/wordsuggest.py.
 import nlbridge
 import редкость as _редкость
+import доли as _доли
 import nlindex          # колоночный индекс корпуса (Раунд 31); None-безопасен
 import scan as scan_mod
 from corpus import lemmatize
@@ -1180,7 +1181,12 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
             редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")),
             внутр_рифма=внутр_рифма,
-            ярусы_рифмы=int(knobs["rhyme_tiers"]))
+            ярусы_рифмы=int(knobs["rhyme_tiers"]),
+            # ДОЛИ КОНЦОВОК — разбираются здесь, как и полосы редкости: один
+            # разбор на всех вызывающих (маска нужна разборщику, чтобы
+            # выключенный чипом сорт не воскрес из сохранённой строки).
+            доли_клаузул=_доли.разобрать(knobs.get("clausula_shares"),
+                                         int(clausula) & 7 or 7))
         nl_survivors_full = nl_survivors      # резервы уже внутри; ниже они не досчитываются
     else:
         # ИНДЕКСА НЕТ — ЧЕСТНЫЙ СВЕТЛЫЙ ПУТЬ, А НЕ ВТОРОЙ ДВИЖОК (2026-08-29).

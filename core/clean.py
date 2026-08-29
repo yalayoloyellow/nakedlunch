@@ -302,6 +302,10 @@ def knobs(raw: dict | None) -> dict:
         # Разбор и проверка — в `core/редкость.py`, здесь только проезд.
         # Пустая строка = ворота не закрыты вовсе, и это дефолт.
         "rare_word": str(raw.get("rare_word") or "")[:200],
+        # ДОЛИ (2026-08-29) — строкой «сорт:процент», разбирает `core/доли.py`.
+        # Пустая строка значит «поровну по маске», то есть прежнее поведение.
+        "clausula_shares": str(raw.get("clausula_shares") or "")[:200],
+        "rhyme_shares": str(raw.get("rhyme_shares") or "")[:200],
         "rare_pair": str(raw.get("rare_pair") or "")[:200],
         # НАДГРОБИЕ: `flow` (связность соседних строк, Раунд 44) УДАЛЁН
         # 2026-08-21 вместе с ручкой — разбор в надгробии core/filters.py.
@@ -495,6 +499,11 @@ def knob_profile(raw) -> dict | None:
     # ПОЛОСЫ РЕДКОСТИ ЛЕЖАТ РЯДОМ С `params`, А НЕ ВНУТРИ. `knob_params`
     # отбрасывает всё, чего нет в числовом каноне, — и отбросил бы их молча.
     полосы = raw.get("полосы") if isinstance(raw.get("полосы"), dict) else {}
+    # ДОЛИ ЕДУТ ТАМ ЖЕ, ГДЕ ПОЛОСЫ (2026-08-29). Одна причина на двоих: канон
+    # крутилок числовой (одно число на ручку), а доли — несколько пар
+    # «сорт:процент». Строкой рядом, а не внутри `params`, иначе `knob_params`
+    # выбросил бы их молча — ровно та беда, что уже была с «Отбором» и «Матом».
+    доли_ = raw.get("доли") if isinstance(raw.get("доли"), dict) else {}
     params = knob_params(raw.get("params"))
     # В классике мнения не действуют — и не хранятся: иначе профиль обещал бы
     # глазами то, чего не делает (требование: то, что не работает, лучше убрать вовсе.). Остаётся только то, чему классика подчиняется.
@@ -502,7 +511,9 @@ def knob_profile(raw) -> dict | None:
         params = {k: v for k, v in params.items() if k in KNOB_CLASSIC}
     return {"name": name, "mode": mode, "params": params,
             "полосы": {"слова": str(полосы.get("слова") or "")[:200],
-                       "пара": str(полосы.get("пара") or "")[:200]}}
+                       "пара": str(полосы.get("пара") or "")[:200]},
+            "доли": {"клаузула": str(доли_.get("клаузула") or "")[:200],
+                     "рифма": str(доли_.get("рифма") or "")[:200]}}
 
 
 def knobs_from_profile(profile: dict | None) -> dict:
@@ -541,6 +552,9 @@ def knobs_from_profile(profile: dict | None) -> dict:
         # разбор у ключа "rare_word" в knobs() и в `core/редкость.py`.
         "rare_word": (prof.get("полосы") or {}).get("слова", ""),
         "rare_pair": (prof.get("полосы") or {}).get("пара", ""),
+        # доли — тем же путём, что полосы: строкой, разбирает `core/доли.py`
+        "clausula_shares": (prof.get("доли") or {}).get("клаузула", ""),
+        "rhyme_shares": (prof.get("доли") or {}).get("рифма", ""),
     })
 
 
