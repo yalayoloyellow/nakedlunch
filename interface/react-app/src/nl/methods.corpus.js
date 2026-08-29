@@ -384,20 +384,9 @@ export const corpusMethods = {
     } catch (e) { this.flash(e.message); }
   },
 
-  // Вернуть показанное обратно в пул: по теме — пачкой, поштучно — из попапа
-  // истории. Это ровно то, чем история и полезна: строка, которую прогнали
-  // мимо, снова становится доступной.
-  async restoreByTheme() {
-    var theme = (this.state.restoreTheme || '').trim();
-    if (!theme) return;
-    try {
-      var res = await api.historyRestoreTheme(theme);
-      this.flash(res && res.restored ? ('вернул в пул: ' + res.restored)
-        : ('по теме «' + theme + '» в истории ничего нет'));
-      this.setState({ restoreTheme: '' });
-      this.reloadHistory();
-    } catch (e) { this.flash(e.message); }
-  },
+  // НАДГРОБИЕ 2026-08-29: `restoreByTheme` — возврат показанного пачкой по
+  // теме. Ушёл вместе с темой и роутом /api/history/restore_theme.
+  // Поштучный возврат (`restoreOne`) остаётся: история тем и полезна.
 
   async restoreOne(text) {
     try { await api.historyRestore([text]); this.flash('вернул в пул'); this.reloadHistory(); }

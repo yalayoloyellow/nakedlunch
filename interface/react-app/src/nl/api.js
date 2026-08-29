@@ -165,7 +165,7 @@ export const historyRetentionGet = () => get('/api/history/retention');
 export const historyRetentionSet = (days) => post('/api/history/retention', { days });
 export const historyClear = () => post('/api/history/clear', {});
 export const historyRestore = (texts) => post('/api/history/restore', { texts });
-export const historyRestoreTheme = (theme) => post('/api/history/restore_theme', { theme });
+// НАДГРОБИЕ 2026-08-29: `historyRestoreTheme` — роут снят вместе с темой.
 // «показанное» самого nakedlunch (его собственный учёт, не наша история):
 // обёртки nlRetentionGet/nlRetentionSet/nlClearUsed убраны в Раунде 63 вместе с
 // их единственными вызывающими — экрана у этих ручек не было никогда. Сами

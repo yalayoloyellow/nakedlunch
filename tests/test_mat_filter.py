@@ -4,6 +4,23 @@
 # («рубля» содержит «бля», «команда» — «манд», «хлеб» и «себя» — «еб»,
 # «характер» — «хер» — substring-подход поймал бы их все).
 # Run: .venv/bin/python -m pytest tests/test_mat_filter.py -q
+#
+# НАДГРОБИЕ 2026-08-29: `test_run_drops_mat_grammar_lines_only_with_flag`.
+# Он стерёг ВТОРОЙ путь отсева мата — ступень 3 в `filters._run`, где рядом с
+# чёрным списком и клише отсеивались строки ГРАММАТИЧЕСКОГО ГЕНЕРАТОРА
+# (`if no_mat and has_mat(L.text): continue`). Строил он их руками, из
+# `generate.Line`/`generate.Word`.
+#
+# Механизма больше нет по двум причинам сразу, и каждой хватило бы:
+#   · `core/generate.py` удалён целиком — `Line`/`Word` неоткуда взять, файл
+#     даже не собирался (ModuleNotFoundError на импорте);
+#   · производителя у аргумента `lines` не осталось: `api/server.py` шлёт
+#     `lines = []` всегда (там своё надгробие «генератор вырезан»), а в
+#     `_run` шорт-лист собирается только из `nl_survivors` — грамматические
+#     кандидаты до выдачи не доходят физически.
+# Переписать было не на что: у ворот нет ни входа, ни выхода. Мат по строкам
+# КОРПУСА стерегут `test_run_drops_mat_nl_fragments_only_with_flag` и
+# `test_run_hits_requested_mat_share` ниже — они остались.
 
 import sys
 from pathlib import Path
@@ -14,7 +31,6 @@ import clean
 import filters
 import nlbridge
 from corpus import Corpus, lemmatize
-from generate import Line, Word
 
 
 # Словоформы по всем корням списка, включая ё/е-варианты и приставочные формы.
@@ -116,31 +132,8 @@ def test_run_drops_mat_nl_fragments_only_with_flag():
         filters._NL_RHYME = old_rhyme
 
 
-def test_run_drops_mat_grammar_lines_only_with_flag():
-    """Второй путь отсева — грамматические строки (run, stage 3, рядом с
-    blacklist/клише): рукодельная Line с матом отсеивается при no_mat=True
-    и живёт без флага. Крутилки ослаблены, чтобы
-    строки гарантированно доходили до содержательного фильтра.
-
-    Раунд 58: «ослаблено» для банальности — это 0.5, а не 0. Ручка стала
-    двусторонней, и ноль теперь означает не «фильтра нет», а «максимально
-    банально» — то есть пол по частоте слов, под который «рассвет пришёл» не
-    проходит."""
-    mat_line = Line([Word("мудак", 1, "NOUN", "мудак"),
-                     Word("пропал", 1, "VERB", "пропасть")], "t")
-    ok_line = Line([Word("рассвет", 1, "NOUN", "рассвет"),
-                    Word("пришёл", 1, "VERB", "прийти")], "t")
-    lines = [mat_line, ok_line]
-    base = {"shortlist": 5, "real_text": 0.0}
-
-    res_on = filters.run(lines, clean.knobs({**base, "no_mat": True}), Corpus(), rhyme="none")
-    texts_on = {r["text"] for r in res_on["shortlist"]}
-    assert ok_line.text in texts_on, "обычная строка не должна страдать от фильтра мата"
-    assert mat_line.text not in texts_on, "мат-строка прошла грамматический путь при no_mat=True"
-
-    res_off = filters.run(lines, clean.knobs(base), Corpus(), rhyme="none")
-    assert mat_line.text in {r["text"] for r in res_off["shortlist"]}, \
-        "без флага мат-строка должна жить как обычная"
+# НАДГРОБИЕ 2026-08-29: здесь стоял `test_run_drops_mat_grammar_lines_only_with_flag`
+# — разбор в шапке файла.
 
 
 # --- Раунд 39: мат ДОЛЕЙ, а не запретом ------------------------------------

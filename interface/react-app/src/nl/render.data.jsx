@@ -164,11 +164,10 @@ export function renderHistPanel(c) {
       </div>
 
       <div style={s('display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--border-subtle); margin-top: 9px; padding-top: 9px;')}>
-        <input type="text" value={st.restoreTheme || ''} placeholder="вернуть в пул по теме" spellCheck={false}
-          onChange={function (e) { c.setState({ restoreTheme: e.target.value }); }}
-          onKeyDown={function (e) { if (e.key === 'Enter') { e.preventDefault(); c.restoreByTheme(); } }}
-          style={s(ПОИСК)} />
-        <button onClick={function () { c.restoreByTheme(); }} style={s(ССЫЛКА)} className={hov('color: var(--ink)')}>вернуть</button>
+        {/* НАДГРОБИЕ 2026-08-29: здесь было поле «вернуть в пул по теме» и
+            кнопка к нему. Тема вырезана целиком по слову владельца, и
+            отбирать показанное по ней стало нечем. Поштучное «вернуть»
+            из строки истории — живо, оно ниже. */}
         {st.confirm === 'hist' ? (
           <Fragment>
             <button onClick={function () { c.clearHistory(); }} style={s(ССЫЛКА + ' color: var(--ink);')}>очистить всё</button>

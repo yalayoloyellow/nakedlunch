@@ -53,8 +53,9 @@ sys.path.insert(0, {core!r})
 sys.path.insert(0, {api!r})
 # Заглушаем ЧУЖИЕ тяжёлые прогревы (навек — 1.6 ГБ, кэш рифм — до 5.5 ГБ), но
 # НЕ `wordsuggest`: он и есть предмет проверки.
-import embeddings, filters, generate
-for м in (embeddings, filters, generate):
+# `generate` из этого списка ушёл 2026-08-29 вместе с core/generate.py.
+import embeddings, filters
+for м in (embeddings, filters):
     м.warm_caches = lambda: None
 import wordsuggest
 

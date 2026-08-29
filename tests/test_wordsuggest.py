@@ -561,18 +561,18 @@ def client():
     # чего больше не происходит. Оставить её значило бы уверять следующего
     # читателя, что `open_store` зовётся на импорте; сторож этого обратного
     # утверждения — `test_boot.py::test_korpus_ne_gruzitsya_na_urovne_modulya`.
+    # `generate` из этого списка ушёл 2026-08-29 вместе с самим файлом
+    # core/generate.py: глушить прогрев модуля, которого нет, — это
+    # ModuleNotFoundError на импорте фикстуры, а не защита.
     import embeddings
-    import generate
-    saved = (filters.warm_caches, generate.warm_caches, embeddings.warm_caches)
+    saved = (filters.warm_caches, embeddings.warm_caches)
     filters.warm_caches = lambda: None
-    generate.warm_caches = lambda: None
     embeddings.warm_caches = lambda: None
     sys.path.insert(0, str(ROOT / "api"))
     try:
         import server
     finally:
-        (filters.warm_caches, generate.warm_caches,
-         embeddings.warm_caches) = saved
+        (filters.warm_caches, embeddings.warm_caches) = saved
     return server.app.test_client()
 
 

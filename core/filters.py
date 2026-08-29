@@ -26,7 +26,9 @@ from operator import itemgetter
 
 import numpy as np
 
-import embeddings
+# НАДГРОБИЕ 2026-08-29: `import embeddings` — векторы navec читались ради
+# темы (relevance, центроиды якоря). Тема вырезана; сам модуль жив, его
+# держит слой «близкое» в core/wordsuggest.py.
 import nlbridge
 import редкость as _редкость
 import nlindex          # колоночный индекс корпуса (Раунд 31); None-безопасен
@@ -523,6 +525,15 @@ def _nl_scored(fragments, corpus, hidden, tags=None, light=False,
             if entry is not None and entry.get("content") is not None \
                     and entry["content"] < nlindex.СЛОВ_МИН:
                 continue
+            # ВОРОТА ВНУТРЕННЕЙ РИФМЫ ДЕЙСТВУЮТ И БЕЗ КОЛОНОК (починка
+            # 2026-08-29). Параметр функция ПРИНИМАЛА и нигде не применяла:
+            # оба вызывающих его честно передавали, а `nlindex.gate_mask` и
+            # `select_light` его исполняли — то есть ручка «Внутренняя рифма»
+            # работала или нет в зависимости от того, испечён ли индекс.
+            # Ровно то расхождение двух путей, на котором в этот же день
+            # поймали молчаливый ноль у классики. Найдено правкой тестов.
+            if внутр_рифма and not (entry or {}).get("inner"):
+                continue
             if entry is None:
                 lemma_list = lemmatize(text)
                 key, span = "", None
@@ -558,57 +569,32 @@ def _nl_scored(fragments, corpus, hidden, tags=None, light=False,
                   "classic": True, "_literal": False, "_forced": False}
             out.append(row)
     else:
-        table = _score_strict_table(tags, theme_sims, forced, no_mat,
-                                    only_mat, clausula, внутр_рифма)
-        for text in fragments:
-            if text in hidden:
-                continue
-            cached_row = table.get(text)
-            if cached_row is None:
-                continue   # unknown banal/taut, or failed cliché/banal/taut gate — skip honestly
-            row = dict(cached_row)   # copy — run() mutates rows (pops "_lem", etc); never touch the cache's own dict
-            # Без темы связности не на чем работать, и уровень оценки не должен
-            # от неё зависеть даже одинаково для всех: иначе неработающая ручка
-            # молча меняла бы соотношение сил между фрагментами и строками
-            # грамматики. С темой — ПОЛОСА, внутри которой все равны. Оба
-            # правила зеркалят nlindex._таблица, там же замеры: разойтись этим
-            # двум нельзя, иначе режим зависел бы от того, испечён индекс.
-            if not tags:
-                bias = 0.0
-            else:
-                d = abs(row["_pctl"] - cohesion)
-                bias = 0.0 if d <= nlindex.ПОЛОСА_ТЕМЫ else -_PCTL_SCALE * (d - nlindex.ПОЛОСА_ТЕМЫ)
-            row["score"] = round(0.6 + bias, 4)
-            out.append(row)
-            for w in row["_forced_hits"]:
-                forced_candidates[w].append(row)
-    # СРЕЗ БУКВАЛЬНЫХ УБРАН И ЗДЕСЬ (волна B, 2026-08-14) — по той же причине,
-    # что и в колоночном пути: он выбрасывал строки ИЗ ПУЛА, обещая при этом
-    # «не больше одной на строфу». Предел на строфу теперь стоит при сборке
-    # (`_select_with_rhyme`), где строфа и есть, и считает по лемме.
-    for r in out:
-        del r["_literal"]
-        del r["_forced"]
-        r.pop("_forced_hits", None)   # strict-tier rows only; a SET — must not reach json.dumps in the API response
+        # НАДГРОБИЕ: СТРОГАЯ ВЕТКА БЕЗ КОЛОНОК (2026-08-29). Здесь строилась
+        # `_score_strict_table` — второй, дословарный движок отбора со своей
+        # семантикой темы, буквальными вхождениями и перцентиль-рангом. Тема
+        # вырезана, движок остался один (колонки индекса), и без индекса честнее
+        # работать светлым путём выше, чем держать вторую машину ради минут
+        # между установкой и первой выпечкой.
+        raise RuntimeError("строгий ярус без колоночного индекса снят 2026-08-29 — "
+                           "зови _nl_scored(light=True)")
+    # ВОЗВРАТ ПОТЕРЯЛСЯ ПРИ СНОСЕ СТРОГОЙ ВЕТКИ (починка 2026-08-29). Он стоял
+    # ПОСЛЕ обеих веток и отдавал их общий результат; строгую ветку вырезали
+    # вместе с темой, и `return` уехал вместе с ней. Светлая ветка стала
+    # проваливаться за конец функции и отдавать None — а оба её вызывающих
+    # распаковывают пару:
+    #     filters._run       →  nl_survivors, forced_candidates = _nl_scored(...)
+    #     filters._classic_pool →  pool, _ = _nl_scored(...)
+    # то есть `TypeError: cannot unpack non-iterable NoneType object` на ЛЮБОМ
+    # прогоне без колоночного индекса — и в алгоритме, и в классике. Это ровно
+    # то состояние, в котором живёт свежая установка до первой выпечки и любая
+    # машина, где индекс разошёлся с кэшем рифм: генерация падала пятисоткой,
+    # а не работала грубее, как обещано надгробием выше.
     return out, forced_candidates
 
 
-# Cache for _score_strict_table — see that function and _nl_scored's own
-# docstring for why (user: 5-10s per stanza; repeated calls within one
-# theme/knob session, which is the overwhelmingly common case — a buffer
-# refill or freestyle's own prefetch queue — otherwise redo the SAME
-# full-pool scoring pass from scratch every time). Bounded to a handful of
-# entries: each holds a row per surviving _NL_RHYME entry (2026-08-01: пул
-# 2.87M, выживает ~2.6M — таблица ≈ +0.4GB RSS каждая, при том что сам
-# _NL_RHYME уже держит ~5.5GB на 16GB-машине со своп-давлением), so an
-# unbounded — or even merely LARGER — cache would trade cache misses for
-# swap, which is what actually made the measured miss cost float 24→43s.
-# 2 covers the realistic pattern (current theme, plus whatever was active
-# a moment ago) without keeping a whole history warm.
-_STRICT_SCORE_CACHE_MAX = 2
-_strict_score_cache: dict = {}
-_strict_score_cache_order: list = []
-
+# Вердикт «этот индекс отвечает нынешнему кэшу рифм» — кэшируется по самому
+# объекту индекса (разбор ниже). Жил рядом со снесённой строгой таблицей и
+# переехал сюда 2026-08-29 вместе с её удалением.
 _index_verdict: tuple | None = None
 
 
@@ -712,152 +698,11 @@ def _индекс_перепечён(idx) -> None:
 nlindex.при_перепечке(_индекс_перепечён)
 
 
-def _score_strict_table(tags: set, theme_sims, forced: set,
-                        no_mat: bool = False, only_mat: bool = False,
-                        clausula: int = 0, внутр_рифма: int = 0) -> dict:
-    """{text: row} for every `_NL_RHYME` entry that survives the STRICT
-    tier's tautology/mat/clausula gates for this (tags, forced, no_mat)
-    — i.e. everything `_nl_scored`'s per-fragment loop used to
-    compute fresh on every call. Deliberately keyed WITHOUT the caller's
-    `fragments`/pool or `hidden`/blacklist state: a fragment's relevance
-    depends only on its own precomputed properties and the theme — not on
-    which OTHER fragments happen to be in the currently active pool, or
-    which lines the user has since seen — so the exact same table is valid
-    for every call in a theme/knob session even as the active pool and
-    hidden set keep changing underneath it. `_nl_scored` applies
-    `hidden`/blacklist filtering itself, fresh, on every call — those
-    genuinely can't be cached (blacklist can change mid-session; hidden
-    changes on nearly every request).
-
-    `cohesion` is NOT in this table or its cache key (2026-07-18, see
-    _nl_scored's own docstring for the full percentile-target story) — a
-    row's `_pctl` (percentile rank of its `sem` within THIS pool) is a
-    property of the theme alone, not of where the user's cohesion slider
-    happens to sit; `_nl_scored` turns `_pctl` into a `score` per-call using
-    whatever `cohesion` it was actually called with. This is why dragging
-    the slider no longer busts this cache at all.
-
-    Цена промаха (2026-08-01, пул 2 868 100 — Раунд 28 в DECISIONS.md):
-    без темы ~20-24s до оптимизации цикла ниже → ~16s после; no_mat ~33s →
-    ~24s; с темой ~28-33s (правка почти не помогает — доминируют
-    relevance() по 2.6M строк и постройка 2.6M row-dict'ов, это уже не
-    точечная территория). Всё плавает до ~2× под своп-давлением: один
-    _NL_RHYME держит ~5.5GB RSS — 43s из замера пользователя это ~24s счёта +
-    своп. Промах платится на каждую НОВУЮ комбинацию (тема, банальность,
-    no_mat, forced) за пределами 2 кэш-слотов — осознанная цена решения
-    Раунда 20 («всегда полная база»); отвергнутые альтернативы (урезание
-    таблицы до активного пула, больше кэш-слотов) — в Раунде 28."""
-    # id(_NL_RHYME) in the key (2026-07-18, caught live): _NL_RHYME is
-    # effectively immutable for a running server's lifetime (see this
-    # function's own docstring), but the test suite monkeypatches it
-    # between tests — without this, a cache entry built from an EARLIER
-    # _NL_RHYME survives the swap and silently serves stale rows for any
-    # later call sharing the same (tags, banal_ceiling, forced).
-    # Reassignment (`_NL_RHYME = {...}`), not in-place mutation, is the only
-    # way _NL_RHYME ever changes (build_nl_rhyme.py's rebuild writes to disk
-    # and only takes effect on server restart — see filters.warm_caches) —
-    # so id() is a correct, cheap "has the underlying data changed" proxy.
-    # no_mat в ключе (2026-07-31): фильтр мата стоит внутри построения таблицы
-    # (рядом с клише — то же место отсева по содержимому, и по той же причине
-    # кэшируемо: мат — свойство самого фрагмента, не запроса), так что таблицы
-    # «с матом» и «без» — разные записи, а не молчаливо переиспользованная одна.
-    # `ворота` из ключа сняты 2026-08-20 вместе с ручкой «Банальность».
-    key = (id(_NL_RHYME), frozenset(tags), frozenset(forced), no_mat,
-           only_mat, clausula, внутр_рифма)
-    cached = _strict_score_cache.get(key)
-    if cached is not None:
-        return cached
-
-    # Тело этого цикла — самое горячее место файла (2026-08-01: пул 2 868 100
-    # записей — докстринги вокруг писались при ~274k; промах кэша стоил
-    # 24-43s, разброс — от memory pressure: один распарсенный _NL_RHYME
-    # держит ~5.5GB RSS на 16GB-машине). cProfile показал: большая часть
-    # уходила не в сами гейты, а в питон-оверхед НА ЗАПИСЬ — genexpr-фреймы
-    # any()/sum() и лишние set(). Отсюда: (1) дешёвые dict-гейты (banal/taut)
-    # раньше строковых; (2) _CLICHE_RE — один C-поиск вместо genexpr по
-    # сидам; (3) слоги через str.count (C-сканы) вместо посимвольного
-    # genexpr; (4) токены без темы/forced не трогаются вовсе, а с темой —
-    # isdisjoint/intersection прямо по списку, без постройки set на запись.
-    # Построчная эквивалентность старому циклу проверена на полном пуле
-    # перед заменой; замер — в докстринге выше.
-    table: dict = {}
-    themed = bool(tags) or bool(forced)
-    # НАДГРОБИЕ: ГЕЙТА БАНАЛЬНОСТИ ЗДЕСЬ БОЛЬШЕ НЕТ (2026-08-20). Стояло
-    # `b = entry.get("banal", 9.0)` и отсев по полосам ворот; ручка удалена
-    # целиком — см. надгробие в core/nlindex.py. Ступень «клише» убрана
-    # раньше (Раунд 58): три зашитых выражения ушли вместе с колонкой.
-    for text, entry in _NL_RHYME.items():
-        if entry.get("taut", False):
-            continue
-        low = text.lower()
-        # Мат — ПОСЛЕ дешёвого taut-гейта (dict-lookup против regex-прохода
-        # has_mat по строке): при пуле 2.87M замерено 2026-07-31
-        # ~+20s к промаху кэша, только по выжившим — на ~2s меньше. Промах
-        # платится один раз на (тема, no_mat), дальше кэш.
-        if no_mat and has_mat(low):
-            continue
-        if only_mat and not has_mat(low):
-            continue
-        if clausula and (int(clausula) & 7) != 7 and not (
-                (кл := scan_mod.clausula(entry.get("key", ""))) and (1 << (кл - 1)) & int(clausula)):
-            continue
-        # ВНУТРЕННЯЯ РИФМА НА ЗАПАСНОМ ПУТИ (без индекса): флаг лежит в той
-        # же записи кэша (--внутр). Отсутствие поля — «нет»: строка, которая
-        # не может доказать рифму, ворота не проходит.
-        if внутр_рифма and not entry.get("inner"):
-            continue
-        cl = set(entry.get("lemmas", []))
-        syllables = sum(map(low.count, VOWELS))
-        if themed:
-            tokens = entry.get("tokens", [])
-            literal = bool(tags) and not tags.isdisjoint(tokens)
-            forced_hits = forced.intersection(tokens) if forced else set()
-        else:
-            literal = False
-            forced_hits = set()
-        sem = embeddings.relevance(theme_sims, cl) if tags else 0.0
-        table[text] = {"text": text, "template": "nakedlunch", "meter": None,
-                       "rhyme": entry.get("key", ""), "rhyme_span": entry.get("span"),
-                       "syllables": syllables, "_sem": sem, "_lem": cl,
-                       # Раунд 39: мат — доля, а не запрет, поэтому признак
-                       # нужен каждой строке (см. _select_with_rhyme). Здесь
-                       # low уже посчитан выше для гейта — второй раз не гоним.
-                       "mat": has_mat(low), "clausula": scan_mod.clausula(entry.get("key", "")),
-                       "classic": False, "_literal": literal, "_forced": bool(forced_hits),
-                       "_forced_hits": forced_hits}
-
-    # Percentile rank of each row's `_sem` WITHIN this table (0=least
-    # relevant fragment this theme's pool has, 1=most) — see _nl_scored's
-    # docstring for why this replaced a scalar multiplier. Ties (the common
-    # `sem=0.0` case for an untagged run, or genuinely identical cosines)
-    # land at whatever index sort() gives them — fine, since ties by
-    # definition don't care which side of the target they land on.
-    # Без темы sem у ВСЕХ строк 0.0 — stable sort вернул бы ровно insertion
-    # order, поэтому сортировка честно пропускается (идентичный результат,
-    # минус ~2s на 2.6M вызовов ключа при промахе без темы).
-    if tags:
-        ranked = sorted(table.values(), key=itemgetter("_sem"))
-        n = len(ranked)
-        for idx, row in enumerate(ranked):
-            row["_pctl"] = idx / (n - 1) if n > 1 else 0.5
-            del row["_sem"]
-    else:
-        # БЕЗ ТЕМЫ ПЕРЦЕНТИЛЯ НЕТ (Раунд 62) — зеркало nlindex._таблица, там же
-        # и замер. Здесь стояло `idx / (n-1)` по insertion order, то есть номер
-        # фрагмента в корпусе, выданный за «релевантность». Оценка из него
-        # выбирала кусок корпуса: вся выдача из одной книги, перекос 25.8×.
-        # Ранжировать нечем — перцентиль нейтральный у всех.
-        for row in table.values():
-            row["_pctl"] = 0.5
-            del row["_sem"]
-
-    _strict_score_cache[key] = table
-    _strict_score_cache_order.append(key)
-    if len(_strict_score_cache_order) > _STRICT_SCORE_CACHE_MAX:
-        oldest = _strict_score_cache_order.pop(0)
-        _strict_score_cache.pop(oldest, None)
-    return table
-
+# НАДГРОБИЕ: `_score_strict_table` — СТРОГИЙ ЯРУС БЕЗ КОЛОНОК (2026-08-29).
+# Таблица баллов по фрагментам со своим кэшем: банальность, сцепка, мат,
+# клаузула и СЕМАНТИКА ТЕМЫ (`embeddings.relevance`, перцентиль-ранг, буквальные
+# вхождения). Это был второй движок отбора — старый, дословарный. Тема вырезана,
+# а без неё таблица считала то же, что колонки индекса, только медленнее.
 
 def _diversify(pool: list, k: int, div: float) -> list:
     """Greedy MMR pick: k items from pool (already sorted best-first), each
@@ -901,153 +746,12 @@ def _diversify(pool: list, k: int, div: float) -> list:
     return chosen
 
 
-def _ensure_forced(shortlist, forced, forced_candidates, rhyme, ярусы, hidden=None):
-    """`!слово` hard guarantee (2026-07-17, PLAN.md 0.2b) — runs AFTER the
-    shortlist is fully assembled, on the assembled list directly (mutates
-    `shortlist` in place). Unlike ordinary theme words (`literal_cap`: a
-    soft, probabilistic ≈1-per-stanza bias applied DURING scoring), a forced
-    word needs a certain answer: is it in this response or not, and if not,
-    why. That can't be decided during scoring — only after selection is
-    final does "is it actually there" have an answer — hence a separate
-    corrective pass rather than folding into the ranking machinery.
-
-    Returns {word: "ok"|"missing"|"unrhymed"} for `run()` to turn into an
-    honest notice:
-      "shown"    — кандидаты есть, но ВСЕ уже в истории. Железное правило
-                   пользователя: показанное не возвращается ни при каких
-                   обстоятельствах, значит честный отказ — единственный ответ.
-      "missing"  — no STRICT-tier-quality fragment anywhere in the active
-                   pool contains the word literally (пользователь: "если в базе
-                   есть это слово" — не в базе, или только в строках, не
-                   прошедших банальность/клише/тавтологию; один честный ответ
-                   для обоих случаев, а не два разных сообщения ради
-                   формальной точности).
-      "unrhymed" — candidates exist, but NONE rhymes with any existing
-                   scheme-group slot (only when `rhyme != "none"`) — the
-                   scheme wins; a forced word never gets inserted at the cost
-                   of breaking rhyme, it's reported unmet instead.
-      "ok"       — already present, or successfully placed.
-
-    Insertion for `rhyme == "none"` takes slots from the END of the
-    shortlist (one per forced word, first-come-first-served — simple and
-    safe, no clustering risk since each word only ever inserts ONE line).
-    With a scheme active, a candidate only takes a slot whose existing
-    letter-group PARTNER it actually rhymes with (checked against one
-    partner — trusted transitively, since `_select_with_rhyme` already
-    guarantees every member of a group rhymes with every other member)."""
-    result = {}
-    if not forced:
-        return result
-    if not shortlist:
-        return {w: "missing" for w in forced}
-    used_texts = {r["text"] for r in shortlist}
-    free_slot = len(shortlist) - 1
-    for word in sorted(forced):   # deterministic order, not set-iteration-order-dependent
-        if any(word in nlbridge._tokens(r["text"]) for r in shortlist):
-            result[word] = "ok"
-            continue
-        candidates = [c for c in forced_candidates.get(word, []) if c["text"] not in used_texts]
-        # ИСТОРИЮ УЧИТЫВАЕМ И ЗДЕСЬ (Раунд 57). `forced_candidates` собирается
-        # в КЭШИРУЕМОЙ строгой таблице, ключ которой — (теги, потолок
-        # банальности, forced). История в ключ не входит и входить не может:
-        # она меняется после каждого показа, кэш бы не жил ни одного вызова.
-        # Из-за этого гарантия `!слово` подставляла ОДНУ И ТУ ЖЕ строку в
-        # каждую строфу подряд — отчёт: доставалась буквально идентичная строка, уже лежащая в истории..
-        #
-        # ЖЕЛЕЗНОЕ ПРАВИЛО (Раунд 57, правило, заданное дословно: что в истории — не повторяется и не генерится, пока
-        # история не очищена; в любых обстоятельствах. Нет материала на тему — честно
-        # отказать..
-        #
-        # Поэтому здесь НЕТ запасного варианта. Показанное вычитается наглухо, и
-        # если у обязательного слова не осталось непоказанных кандидатов — это
-        # честный «missing», а не тихий повтор. Первая версия этой правки
-        # оставляла показанных «на крайний случай», рассуждая, что обещание
-        # `!слово` сильнее свежести. Пользователь решил иначе, и он прав: повтор,
-        # который он не заказывал, хуже честного отказа.
-        было_до_истории = bool(candidates)
-        if hidden:
-            candidates = [c for c in candidates if c["text"] not in hidden]
-        if not candidates:
-            # ДВА РАЗНЫХ ОТКАЗА (Раунд 57). Для пользователя это разные ситуации:
-            # «нет в базе» — заливать источники, «всё показано» — чистить
-            # историю. Раньше оба назывались «missing», и подсказка врала в
-            # половине случаев.
-            result[word] = "shown" if было_до_истории else "missing"
-            continue
-        if rhyme == "none":
-            if free_slot < 0:
-                result[word] = "missing"   # more forced words than slots — honest, not silently dropped
-                continue
-            shortlist[free_slot] = candidates[0]
-            used_texts.add(candidates[0]["text"])
-            free_slot -= 1
-            result[word] = "ok"
-            continue
-        letters = [rhyme[i % len(rhyme)] for i in range(len(shortlist))]
-        placed = False
-        for i, letter in enumerate(letters):
-            partner = next((j for j, l in enumerate(letters) if l == letter and j != i), None)
-            if partner is None:
-                continue
-            for cand in candidates:
-                if _rhymes(cand, shortlist[partner], ярусы):
-                    shortlist[i] = cand
-                    used_texts.add(cand["text"])
-                    placed = True
-                    break
-            if placed:
-                break
-        result[word] = "ok" if placed else "unrhymed"
-    return result
-
-
-def _syllable_reserve(pool: list, syllable_spec: list | None, per_bucket: int = 1) -> list:
-    """Extra rows to keep alongside the score-based cap so a position's
-    syllable_spec range isn't invisible to _select_with_rhyme just because
-    its natural score rank falls outside the cap slice (2026-07-19 — same
-    starvation shape as the theme-anchor `_pctl` reserve below, this time
-    for length: found live, a corpus with 859 correctly-rhyming AND
-    correctly-length "ом" survivors still produced an 11-syllable line,
-    because none of those 859 were ranked highly enough by cohesion score to
-    survive NL_SELECT_CAP before syllable_spec ever got a look).
-
-    A flat top-N-by-score reserve (the first version of this function) isn't
-    enough: which RHYME ENDING a position actually needs only gets decided
-    live, as _select_with_rhyme picks each group's first (anchor) member —
-    a reserve that isn't spread across endings mostly just reserves whatever
-    scores highest overall, which is no more likely to share a SPECIFIC
-    ending than the plain score cap was (measured live: Онегинская строфа's
-    7 distinct endings, 0 splices fired with a flat 20-item reserve — it
-    never had the right ending on hand). Fix: group in-range survivors by
-    their exact rhyme key first, then take the top `per_bucket` FROM EACH —
-    whichever ending later gets established as a group's anchor, its own
-    length-conforming members (if any exist at all) are then guaranteed
-    present, not just possible. Grouping by the exact key (not the
-    precision-adjusted bucket _select_with_rhyme itself uses) is a safe,
-    strictly finer split — every precision-bucket is a union of one or more
-    exact keys, so per-exact-key coverage implies per-bucket coverage too.
-
-    One reserve pass per DISTINCT (min_syl, max_syl) pair actually used in
-    the active stanza, not per line — a scheme rarely uses more than a
-    handful of distinct ranges even at 14+ lines (Онегинская строфа: 14
-    lines, exactly 1 range). `None`/empty spec (every pre-constructor
-    caller) returns [] unconditionally — zero cost, zero behavior change
-    for existing schemes."""
-    if not syllable_spec:
-        return []
-    out: list = []
-    for lo, hi in {tuple(r) for r in syllable_spec}:
-        by_key: dict = {}
-        for r in pool:
-            syl = r.get("syllables")
-            key = r.get("rhyme")
-            if syl is not None and key and lo <= syl <= hi:
-                by_key.setdefault(key, []).append(r)
-        for members in by_key.values():
-            members.sort(key=lambda r: r["score"], reverse=True)
-            out.extend(members[:per_bucket])
-    return out
-
+# НАДГРОБИЕ: `_ensure_forced` — ГАРАНТИЯ СЛОВА «!слово» (2026-08-29).
+# Он дожимал обязательное слово ПОСЛЕ отбора: искал строку с этим словом,
+# ставил её в свободный слот и следил, чтобы она не порвала рифмо-группу.
+# Обязательное слово вырезано вместе с темой по слову владельца («вырезать всё
+# вместе с темой»). Поле `forced_notice` в ответе осталось пустым словарём —
+# форма ответа не меняется ради сноса.
 
 def _classic_pool(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clausula, cap,
                   гсч=random, семя=None):
@@ -1327,25 +1031,23 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     # as rhyme_scheme/normalizeScheme; drifting apart doesn't break anything,
     # it just makes "≈1 literal match per stanza" less accurate (this is a
     # soft cap over the whole returned buffer, not a per-window guarantee).
-    # theme_similarities does ONE batched matmul for the whole vocabulary
-    # here (sub-10ms) instead of _nl_scored recomputing a fresh dot product
-    # per word per fragment — measured ~300-450ms slower per themed request
-    # the first way (~150k fragments × ~4 words each), see embeddings.py.
-    theme_sims = embeddings.theme_similarities(embeddings.theme_vector(tags)) if tags else None
+    # ТЕМА ВЫРЕЗАНА ЦЕЛИКОМ (2026-08-29, слово владельца: «вообще тему стоит
+    # вырезать как функцию, она глупа и сложна в реализации», «вырезать всё
+    # вместе с темой»). Здесь стояли: векторный замер близости всего словаря к
+    # теме (`embeddings.theme_similarities`), предел «одна буквальная строка на
+    # строфу» (`literal_cap`), нормализация обязательных слов `!слово`,
+    # перцентиль-таргет связности (`cohesion`) и флаг тематического якоря.
+    #
+    # ЗАМЕР, КОТОРЫЙ РЕШИЛ ДЕЛО: из 8 116 прогонов журнала тема стояла в 255
+    # (3.1%), и почти половина из них — «деньги», то есть прогоны тестов.
+    # При этом ТОЛЬКО тема включала старый сборщик с пачкой в 320 кандидатов
+    # из 2.3 млн строк — то есть 3% работы держали архитектурную стену для
+    # остальных 97%. Со сносом темы стены нет: путь один и он по всему корпусу.
+    #
+    # Связность соседних строк (единственный механизм «строфа как целое») жила
+    # на тех же векторах и уходит вместе с ними — это его осознанный выбор
+    # («вырезать всё»), а не побочный ущерб: разбор был перед решением.
     stanza_size = len(rhyme) if rhyme != "none" else 4
-    literal_cap = max(1, round(knobs["shortlist"] / stanza_size)) if tags else None
-    forced = set(forced) if forced else set()   # normalize: caller may pass a list/None
-    # Связность — перцентиль-таргет, не множитель (2026-07-18, ТРЕТЬЯ версия
-    # этого механизма — см. _nl_scored для полной истории двух предыдущих и
-    # измерений, поймавших баг: 0.55 и 1.00 давали 7/8 одинаковых строк).
-    # `knobs["cohesion"]` идёт в _nl_scored НАПРЯМУЮ, без знакового
-    # преобразования — сам перцентиль-таргет и есть искомое поведение.
-    cohesion = knobs["cohesion"]
-    # Якорная строка (2026-07-18, требование: при диссонансе обязана быть строка точно в тему, а созвучные — не
-    # идентичные основной, но рядом. — см. _select_with_rhyme). Только
-    # когда есть и тема, и nl-контент, из которого можно выбрать якорь —
-    # обычные (не-nl) строки не несут `_pctl` вообще, см. _nl_scored.
-    use_theme_anchor = bool(tags) and knobs["nl_mix"] > 0
     # Строфа-конструктор (2026-07-18, PLAN.md 0.7) — параллельный `rhyme`'s
     # буквам список (min_syl, max_syl) на позицию, или None у всех вызовов,
     # что шлют только строку схемы (см. _select_with_rhyme's syllable_spec).
@@ -1454,34 +1156,23 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     ступени: dict = {}
     _idx = _index_for_current_cache() if nl_fragments else None
 
-    # МОЖНО ЛИ ОБОЙТИСЬ БЕЗ СБОРЩИКА (2026-08-20). Прямая тяга держит слоги,
-    # рифму, полосу темы, долю мата и запрет близнецов — то есть всё, что нужно
-    # обычной строфе из корпуса. Остальные обязанности сборщика она НЕ несёт, и
-    # список честный, а не «на всякий случай»:
-    #   · строки грамматического генератора в той же строфе (`Источники` < 1) —
-    #     их тянуть неоткуда, они не в индексе;
-    #   · обязательное слово `!слово` — своя гарантия показа;
-    #   · тематический якорь — отдельная строка-зацепка.
-    # Ни одно из этих условий не выполняется в обычном прогоне владельца:
-    # Источники 1.0, слов нет. Четвёртым тут стояла связность — с её
-    # удалением 2026-08-21 исключений стало три вместо четырёх.
-    _прямая_тяга = bool(
-        _idx is not None and syllable_spec and rhyme != "none"
-        and not forced and not use_theme_anchor
-        and round(float(knobs["nl_mix"]), 6) >= 1.0)
+    # ПРЯМАЯ ТЯГА — ЕДИНСТВЕННЫЙ ПУТЬ (2026-08-29). Прежде она включалась при
+    # четырёх условиях: есть индекс, есть слоговая вилка, есть рифмовка, нет
+    # обязательного слова, нет тематического якоря и «Источники = корпус».
+    # Три последних исчезли вместе с темой, словом и генератором — осталось
+    # то, без чего строфу колонками не собрать физически.
+    _прямая_тяга = bool(_idx is not None and syllable_spec and rhyme != "none")
 
     if _idx is not None:
         nl_survivors, n_nl_survived, forced_candidates, ступени = nlindex.select(
             _idx,
             pool_mask=nlindex.pool_mask(_idx, nl_fragments),
             hidden_mask=nlindex.mask_of(_idx, hidden),
-            tags=set(tags or ()), forced=set(forced or ()),
             no_mat=no_mat, only_mat=only_mat,
-            clausula=clausula, cohesion=cohesion,
-            pctl_scale=_PCTL_SCALE, literal_cap=literal_cap,
+            clausula=clausula,
             cap=NL_SELECT_CAP, reserve_n=min(1_000_000, max(30, n_blocks * 5)),
-            use_theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
-            per_bucket=1, sims=theme_sims, seed=семя, схема=rhyme or "",
+            syllable_spec=syllable_spec,
+            per_bucket=1, seed=семя, схема=rhyme or "",
             тянуть_сразу=(int(knobs["shortlist"]) if _прямая_тяга else 0),
             mat_share=knobs.get("mat_share", -1.0), repeat_ok=repeat_ok,
             # ПОЛОСЫ РЕДКОСТИ РАЗБИРАЮТСЯ ЗДЕСЬ, А НЕ В СЕРВЕРЕ: так у ручки
@@ -1489,51 +1180,25 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
             редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")),
             внутр_рифма=внутр_рифма,
-            # прямая тяга сводит пары сама — ей нужна та же маска ярусов,
-            # какой режет _rhymes, иначе она вернёт «точные» на любом ярусе
             ярусы_рифмы=int(knobs["rhyme_tiers"]))
         nl_survivors_full = nl_survivors      # резервы уже внутри; ниже они не досчитываются
     else:
-        nl_survivors, forced_candidates = _nl_scored(nl_fragments or [], corpus, hidden, гсч=гсч,
-                                                     tags=tags, theme_sims=theme_sims,
-                                                     literal_cap=literal_cap, forced=forced,
-                                                     cohesion=cohesion, no_mat=no_mat, only_mat=only_mat,
-                                                     clausula=clausula,
-                                                     внутр_рифма=внутр_рифма)
-        гсч.shuffle(nl_survivors)                      # break ties (mostly bias=0) before a stable sort
+        # ИНДЕКСА НЕТ — ЧЕСТНЫЙ СВЕТЛЫЙ ПУТЬ, А НЕ ВТОРОЙ ДВИЖОК (2026-08-29).
+        # Здесь стоял строгий безиндексный ярус (`_nl_scored` со всей темой и
+        # `_score_strict_table`) — он умер вместе с темой. Остаётся дешёвый
+        # разбор без колонок: ворота по мату, клаузуле и внутренней рифме.
+        # Индекса не бывает только до первой выпечки; строфа в этот момент
+        # собирается грубее, и это честнее, чем держать ради пяти минут в
+        # жизни установки вторую машину отбора.
+        nl_survivors, forced_candidates = _nl_scored(
+            nl_fragments or [], corpus, hidden, гсч=гсч, light=True,
+            no_mat=no_mat, only_mat=only_mat, clausula=clausula,
+            внутр_рифма=внутр_рифма)
+        гсч.shuffle(nl_survivors)
         nl_survivors.sort(key=lambda r: r["score"], reverse=True)
-        n_nl_survived = len(nl_survivors)               # TRUE count, captured before the selection cap below
-        nl_survivors_full = nl_survivors                # pre-cap reference — the reserves below search THIS
-    if _idx is not None:
-        pass                                            # усечение и резервы сделаны в nlindex.select
-    elif use_theme_anchor:
-        # NL_SELECT_CAP below truncates by the COHESION-DRIVEN `score` — at
-        # "диссонанс" that score deliberately favors LOW-relevance fragments
-        # (see _nl_scored's docstring), so without this, truncation throws
-        # away every genuinely on-theme fragment before _select_with_rhyme's
-        # theme-anchor position ever gets to see them. Found live (2026-07-18):
-        # anchors picked at cohesion=0.0 came out completely unrelated to the
-        # theme ("Тарас заволновался и мы" for theme «секс») — «точно в тему»
-        # needs SOME true-relevance survivors regardless of where the
-        # score-sort truncation lands. Reserve the top-percentile fragments
-        # unconditionally, on TOP of (not instead of) the score-based cap —
-        # `reserve_n` sized generously per stanza block so the anchor
-        # position has real choice (rhyme/repeat constraints still apply),
-        # not just one single option that might not even fit.
-        reserve_n = min(len(nl_survivors_full), max(30, n_blocks * 5))
-        reserved = sorted(nl_survivors_full, key=lambda r: r.get("_pctl", 0.0), reverse=True)[:reserve_n]
-        capped = nl_survivors_full[:NL_SELECT_CAP]
-        capped_ids = {id(r) for r in capped}
-        nl_survivors = capped + [r for r in reserved if id(r) not in capped_ids]
-    else:
+        n_nl_survived = len(nl_survivors)
+        nl_survivors_full = nl_survivors
         nl_survivors = nl_survivors_full[:NL_SELECT_CAP]
-    if syllable_spec and _idx is None:
-        # Same shape as the theme-anchor reserve just above, for LENGTH
-        # instead of relevance — see _syllable_reserve's own docstring for
-        # the live case that motivated it (859 hidden "ом" matches).
-        have = {id(r) for r in nl_survivors}
-        nl_survivors = nl_survivors + [r for r in _syllable_reserve(nl_survivors_full, syllable_spec)
-                                        if id(r) not in have]
 
     # -- stage 3c: «Классика» здесь БОЛЬШЕ НЕ СТРОИТСЯ (Раунд 50) ------------
     # До этого раунда рядом со строгим ярусом собирался второй, светлый пул, и
@@ -1553,108 +1218,40 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     гсч.shuffle(scored)
     scored.sort(key=lambda r: r["score"], reverse=True)
     size = min(knobs["shortlist"], len(scored) + len(nl_survivors))
-    div = 0.3 + 0.5 * knobs["explore"]              # explore knob = how hard to spread neighbours
+    # РАЗНОС СОСЕДЕЙ — КОНСТАНТА (2026-08-29). Он считался от ручки «Диссонанс»
+    # (`explore` = связность), а она вырезана вместе с темой. 0.55 — середина
+    # прежнего хода 0.3..0.8, то есть поведение при связности 0.5.
+    div = 0.55
 
-    if knobs["nl_mix"] >= 1.0:
-        # Hard contract: real_text at max → EVERY line is nakedlunch, never
-        # padded with generated ones. Supply-limited themes shrink the
-        # shortlist instead of being diluted (found 2026-07-14: the old
-        # min(len(nl_survivors), ...) quota silently backfilled the shortfall
-        # with grammar lines — the user's "5 nakedlunch lines scattered among
-        # generated ones at max real_text" report).
-        size = min(knobs["shortlist"], len(nl_survivors))
-        if rhyme != "none":
-            shortlist = _select_with_rhyme(nl_survivors, rhyme, size, set(range(size)),
-                                                ярусы=int(knobs["rhyme_tiers"]),
-                                                mat_share=knobs.get("mat_share", 0.0),
-                                                repeat_ok=repeat_ok,
-                                                theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
-                                                гсч=гсч,
-                                                тема=set(tags or ()), обязательные=set(forced or ()))
-        else:
-            shortlist = _diversify_с_долей_мата(
-                nl_survivors, size, div, knobs.get("mat_share", -1.0))
-    elif knobs["nl_mix"] <= 0.0:
-        # Hard contract: real_text at min → NEVER a nakedlunch line, not even
-        # as a rhyme-slot filler (found 2026-07-14: _select_with_rhyme's slot
-        # relaxation could let an nl fragment fill a rhyme slot no grammar
-        # candidate could satisfy). Excluding nl_survivors from the candidate
-        # pool entirely — not just zeroing its quota — is what makes that
-        # impossible rather than merely unlikely.
-        size = min(knobs["shortlist"], len(scored))
-        if rhyme != "none":
-            shortlist = _select_with_rhyme(scored, rhyme, size, ярусы=int(knobs["rhyme_tiers"]),
-                                            mat_share=knobs.get("mat_share", 0.0),
-                                            repeat_ok=repeat_ok,
-                                            syllable_spec=syllable_spec, гсч=гсч,
-                                            тема=set(tags or ()), обязательные=set(forced or ()))
-        else:
-            # ТА ЖЕ ПАЧКА, ЧТО У ПУТИ СО СХЕМОЙ. Здесь стояло своё
-            # `max(300, size * 8)` — дословный близнец NL_SELECT_CAP выше.
-            # Два списка одного и того же в этом проекте расходятся с
-            # гарантией, поэтому число одно и живёт в константах.
-            # [П] замер делался на пути СО схемой; здесь выбор проще (нет ни
-            # рифмы, ни партнёров), значит запас тем более достаточен.
-            shortlist = _diversify_с_долей_мата(
-                scored[: max(_ПАЧКА_МИН, size * _ПАЧКА_НА_СТРОКУ)], size, div,
-                knobs.get("mat_share", -1.0))
+    # ОДИН ПУТЬ ВМЕСТО ТРЁХ (2026-08-29, снос по слову владельца: «тему стоит
+    # вырезать как функцию», «генератор — вырезать»).
+    #
+    # ЗДЕСЬ СТОЯЛА РАЗВИЛКА ПО `nl_mix` (ручка «Источники»): только корпус ·
+    # только генератор · смесь. Генератор грамматических строк вырезан целиком,
+    # источник остался один — корпус, и развилке нечего разводить.
+    #
+    # И ЭТО ЗАОДНО ПОЧИНКА, А НЕ ТОЛЬКО УБОРКА. Прямая тяга требовала
+    # `nl_mix >= 1.0`, а её короткое замыкание стояло в ветке СМЕСИ (0 < nl_mix
+    # < 1) — то есть при обычных настройках владельца (только корпус, 95.3%
+    # прогонов) `nlindex.select` собирал строфу прямой тягой, а потом сборщик
+    # пересобирал её заново. Работа делалась дважды, и второй проход мог
+    # выбросить строки первого.
+    size = min(knobs["shortlist"], len(nl_survivors))
+    if _прямая_тяга:
+        # Строфа УЖЕ собрана колонками: слоги, ярусы рифмы, доля мата, запрет
+        # близнецов — всё сделано в `nlindex.тянуть_строфы`. Искать нечего.
+        shortlist = nl_survivors[:size]
     else:
-        nl_quota = min(len(nl_survivors), round(size * knobs["nl_mix"]))
-        if rhyme != "none":
-            # Merge grammar + nakedlunch into ONE pool and pick POSITION BY
-            # POSITION, so the rhyme scheme and the nl_mix quota are honored on
-            # the SAME sequence. Searching the full `scored` list (not an MMR-
-            # sized top-300 pool) matters here: rhyme needs a match on ENDING,
-            # not on rank — see _select_with_rhyme's own docstring for measurements.
-            if _прямая_тяга:
-                # СБОРЩИК НЕ ЗОВЁТСЯ ВОВСЕ: `nlindex.select` уже вернул готовую
-                # строфу прямой тягой — со слогами, рифмой, полосой темы, долей
-                # мата и запретом близнецов. Искать в ней нечего.
-                shortlist = nl_survivors[:size]
-            else:
-                nl_positions = _nl_slot_plan(size, nl_quota)
-                shortlist = _select_with_rhyme(scored + nl_survivors, rhyme, size, nl_positions,
-                                            ярусы=int(knobs["rhyme_tiers"]),
-                                            mat_share=knobs.get("mat_share", 0.0),
-                                            repeat_ok=repeat_ok,
-                                            theme_anchor=use_theme_anchor, syllable_spec=syllable_spec,
-                                            гсч=гсч,
-                                            тема=set(tags or ()), обязательные=set(forced or ()))
-        else:
-            grammar_size = size - nl_quota
-            pool = scored[: max(300, grammar_size * 8)]     # diversify among the best candidates
-            grammar_picks = _diversify_с_долей_мата(
-                pool, grammar_size, div, knobs.get("mat_share", -1.0))
+        # Схемы рифмы нет (или нет слоговой вилки/индекса) — собирать пару
+        # нечем и незачем: берём разнообразную выборку с той же долей мата.
+        shortlist = _diversify_с_долей_мата(
+            nl_survivors, size, div, knobs.get("mat_share", -1.0))
 
-            # nl_survivors need the SAME diversity pass among themselves: cutter.py's
-            # sliding windows produce overlapping near-duplicate cuts of one sentence
-            # ('...ХОЛОД. Но Холод ему' / '...ХОЛОД. Но Холод ему нужен так'), all
-            # scoring similarly — a naive top-N by score let 3 of them into one
-            # shortlist together. A raw top-N is fine for grammar candidates (they're
-            # independently generated, rarely near-duplicates of each other), but not here.
-            nl_take = _diversify_с_долей_мата(
-                nl_survivors, nl_quota, div, knobs.get("mat_share", -1.0))
-
-            # Spread the reserved nl_take through the sequence (every `stride`-th slot)
-            # instead of clumping it at one end — keeps the "reads as one flowing
-            # draft" property from the diversity pass even though nl_take bypassed it.
-            shortlist = []
-            stride = max(1, len(grammar_picks) // max(1, len(nl_take)))
-            ni = 0
-            for i, item in enumerate(grammar_picks):
-                shortlist.append(item)
-                if ni < len(nl_take) and (i + 1) % stride == 0:
-                    shortlist.append(nl_take[ni]); ni += 1
-            while ni < len(nl_take):
-                shortlist.append(nl_take[ni]); ni += 1
-
-    # !слово — hard guarantee, AFTER selection is final (see _ensure_forced's
-    # own docstring for why this can't fold into the scoring/selection
-    # machinery above). Runs on the pre-pop shape (rows still carry `_lem`,
-    # same as every other shortlist item at this point) so an inserted
-    # candidate goes through the SAME lemmas/classic normalization below.
-    forced_notice = _ensure_forced(shortlist, forced, forced_candidates, rhyme,
-                                   int(knobs["rhyme_tiers"]), hidden)
+    # `forced_notice` остаётся ПУСТЫМ СЛОВАРЁМ, а не исчезает: форма ответа
+    # /api/generate не меняется ради сноса — старый бандл в браузере владельца
+    # читает это поле. НАДГРОБИЕ: здесь звался `_ensure_forced` — гарантия
+    # показа обязательного слова «!слово» (снято 2026-08-29 вместе с темой).
+    forced_notice = {}
 
     nl_in_shortlist = sum(1 for r in shortlist if r["template"] == "nakedlunch")
     # СКОЛЬКО КАНДИДАТОВ ВООБЩЕ МОГУТ ВСТАТЬ В ПАРУ (Раунд 62).
@@ -1946,886 +1543,22 @@ def закрепить_разброс(семя: int | None) -> None:
     _РАЗБРОС_СЕМЯ = семя
 
 
-def _select_with_rhyme(candidates: list, scheme: str, size: int, nl_positions: set | None = None,
-                        ярусы: int = 3, theme_anchor: bool = False,
-                        syllable_spec: list | None = None, mat_share: float = 0.0,
-                        repeat_ok: bool = False,
-                        гсч=None, тема: set | None = None,
-                        обязательные: set | None = None) -> list:
-    """Select `size` lines from candidates while respecting a rhyme scheme,
-    applied per STANZA (a repeating block of len(scheme) lines) rather than
-    once for the whole shortlist — a 40-line shortlist with "абаб" is 10
-    independent abab stanzas, not one 40-line scheme (the letters don't
-    extend past position 3). Each position's earlier group-mates are looked
-    up within its own stanza (block_start + local_pos), not by global index.
-
-    `candidates` may mix grammar lines and nakedlunch fragments — both carry
-    a real "rhyme" key once tools/build_nl_rhyme.py has run (see _nl_scored).
-    `nl_positions` reserves specific slots for a nakedlunch pick (the same
-    share the "real_text" knob promises elsewhere), tried first but relaxed
-    before the rhyme constraint itself is relaxed — an unfilled quota slot is
-    a smaller defect than a broken rhyme. `precision` is the user's "Точность
-    рифм" knob — see _rhymes for what it does to matching.
-
-    «КЛАССИКИ» ЗДЕСЬ БОЛЬШЕ НЕТ (Раунд 50). Пока «Отбор» был долей 0..1, сюда
-    приходил `classic_quota`: он резервировал подмножество nl_позиций под
-    строки светлого яруса и освобождал их от рифмы, от вилки слогов, от
-    сужения по рифмо-корзине и от роли тематического якоря. Переключатель
-    стал бинарным, классика ушла отдельным путём (filters._run_classic) и
-    сюда не доходит вовсе — освобождать от рифмы стало нечего, и все четыре
-    исключения вместе с раскладкой позиций вырезаны.
-
-    `used_texts` (рядом с индексным `used_indices`) остаётся: два пула больше
-    не пересекаются по тексту, но защита от буквального дубля в одной выдаче
-    стоит дёшево и переживает будущие правки состава кандидатов.
-
-    Also refuses to repeat a LEMMA across the same stanza (2026-07-18 —
-    user's screenshot: "чек" landed in 2 of 4 lines of one абаб stanza; a
-    live check right after found at least one lemma clash in every one of 10
-    consecutive stanzas, because this function's selection loop only ever
-    knew about rhyme and score, never content overlap — unlike _diversify,
-    which already had this guard but isn't even called on this path, the
-    DEFAULT one, since a rhyme scheme is active by default). Priority order
-    when a position can't get everything: syllable length (see
-    `syllable_spec` below) is softest of all, giving way first; slot kind
-    (grammar/nl) next; a lemma repeat is tried after that, ONLY as a
-    last resort BEFORE the rhyme constraint itself gets broken — see the
-    scan_for() tier cascade below. Never silently drops a position.
-
-    `syllable_spec` (2026-07-18, PLAN.md 0.7 — the stanza constructor):
-    optional list of (min_syl, max_syl) tuples, one per position in
-    `scheme` (same length, `syllable_spec[local_pos]`). When given, each
-    position PREFERS a candidate whose `syllables` falls in range, but this
-    is the softest constraint in the whole cascade — user's explicit call
-    when asked "if no candidate of the right LENGTH exists for a position,
-    what gives first": "рифма важнее" (rhyme matters more). A length
-    mismatch never breaks rhyme, slot kind, or the no-repeat rule; it only
-    decides which of several otherwise-equal candidates wins. `None` (the
-    default, and what every scheme-string-only caller still passes) means
-    no length opinion at all — behavior is byte-for-byte what it was before
-    this parameter existed.
-
-    `theme_anchor` (2026-07-18 — user: «даже при диссонансе должна быть
-    строка которая точно в тему по запросу... а консонирующие ни в коем
-    случае не должны быть идентичными основной но быть рядом... ни одна
-    строка не должна быть похожа на константную запрашиваемую»). Two
-    DIFFERENT mechanisms, both scoped to `local_pos == 0` of each stanza
-    block:
-      1. That position becomes a THEME anchor — required to be an
-         nl-sourced, algorithm-tier candidate (only those carry `_pctl`,
-         see _nl_scored) ranked by RAW relevance percentile, not by `score`
-         (whose cohesion-driven target may currently favor LOW relevance —
-         wrong signal for "точно в тему", which must hold regardless of
-         where the cohesion slider sits). Falls through to the ordinary
-         (non-anchor) selection tiers if no such candidate is available for
-         that stanza — an honest degrade (`anchor` just stays False for
-         that block), never a crash or a broken stanza.
-      2. Once an anchor is chosen, EVERY other candidate for the REST of
-         that block is checked against it via `embeddings.lemma_centroid`
-         cosine similarity (`_ANCHOR_SIM_CEILING`) — independent of, and in
-         ADDITION to, the lemma-overlap no-repeat rule above (that rule
-         catches exact word reuse; a near-paraphrase can share zero lemmas
-         and still be "the same line again" in meaning, which is what the
-         user's «не должны быть идентичными» is actually about). This
-         applies to EVERY other position regardless of whether cohesion is
-         pushing it toward or away from the theme — "near/far from the
-         theme" and "a copy of THIS specific line" are orthogonal, and only
-         the second one is being policed here.
-    Deliberately scoped to `local_pos == 0` only (not randomized, not
-    per-group) — simple, deterministic, and the frontend can always find
-    "the anchor" at a fixed spot. Only activated when the caller detected a
-    theme AND nl-eligible content exist (see `run()`'s `use_theme_anchor`);
-    candidates from the grammar generator never carry `_pctl` and can't
-    serve as an anchor, but they're still checked against a stanza's anchor
-    similarity ceiling like anyone else."""
-    if scheme == "none" or not scheme or size == 0:
-        # Без схемы позиции ничем не связаны — доля мата всё равно обязана
-        # соблюдаться (Раунд 39): иначе «80% мата» молча не работало бы на
-        # единственном пути, где рифмы нет вовсе.
-        план = _mat_slot_plan(mat_share, size)
-        if not план:
-            return candidates[:size]
-        нужно_мата = sum(1 for v in план.values() if v)
-        с_матом = [c for c in candidates if c.get("mat")]
-        без_мата = [c for c in candidates if not c.get("mat")]
-        взято = с_матом[:нужно_мата] + без_мата[:size - нужно_мата]
-        # не хватило одной из корзин — добираем чем есть, строка важнее доли
-        if len(взято) < size:
-            есть = {id(c) for c in взято}
-            взято += [c for c in candidates if id(c) not in есть][:size - len(взято)]
-        return взято[:size]
-
-    nl_positions = nl_positions or set()
-    groups = _rhyme_scheme_groups(scheme)
-    L = len(scheme)
-    mat_positions = _mat_slot_plan(mat_share, L, groups)
-    selected: list = []
-    used_indices: set = set()
-    used_texts: set = set()
-    plen = nlindex.корзина_яруса(int(ярусы))
-
-    def bucket(k: str | None) -> str | None:
-        """Groups candidates for the O(1) anchor partner-count check below —
-        must agree with _rhymes' own notion of "same rhyme" at this precision
-        (a fixed prefix length, not min()'d against the OTHER key's length —
-        see _rhymes' docstring for why: keeping both sides of this comparison
-        on the same rule is what makes the cheap bucket count and the exact
-        pairwise check agree)."""
-        if not k:
-            return None
-        return k if plen is None else k[:plen]
-
-    # Live count of not-yet-used candidates per rhyme bucket. Without this,
-    # the ANCHOR of a pair (its first line) gets picked by score alone — which
-    # regularly locks in a rare/unique ending with zero partners anywhere in
-    # the pool, silently breaking that pair for the rest of the run (measured:
-    # ~half of abab stanzas had a broken group before this check existed).
-    #
-    # `bucket_members`/`bucket_lemma_index` (2026-07-18) — the anchor branch
-    # below used to answer "does this bucket have an unused, lemma-distinct
-    # partner for `cand`" with a scan over ALL candidates, run for every
-    # candidate scan_for considers at an anchor position. User reported the
-    # editor's normal buffer fetch (100 lines / 25 "абаб" stanzas → ~800
-    # candidates once NL_SELECT_CAP applies) taking 5-10s; profiling
-    # (cProfile) pinned >80% of that on this exact scan — a 45-MILLION-call
-    # genexpr, O(anchor positions × candidates × candidates). Isolated:
-    # disabling just this check dropped a measured 16.0s run to 2.6s.
-    # Fix: index each bucket's members by the LEMMAS they contain
-    # (`bucket_lemma_index[bucket][lemma] = {member indices}`) once, up
-    # front; `has_distinct_bucket_partner` then only touches the postings
-    # for `cand`'s OWN (few) lemmas — bounded by bucket size, not by the
-    # whole candidate pool — instead of rescanning everything per query.
-    # `bucket_members` is the live "not yet used" set per bucket, discarded
-    # from in `take()`, exactly mirroring what `key_count` already tracked
-    # (kept alongside it, not replacing it, since key_count's cheap raw
-    # count is still what the `< 2` gate above reads). Produces the IDENTICAL
-    # true/false per query as the old scan (same j≠i / unused-by-index /
-    # unused-by-text / same-bucket / no-shared-lemma conditions) — this is a
-    # complexity fix, not a behavior or quality change.
-    # `bucket_lemma_index` УБРАН (волна A, 2026-08-14). Он существовал ради
-    # одного вопроса — «есть ли у кандидата непересекающийся сосед по корзине»,
-    # — а тот вопрос теперь отвечается обходом самой корзины с выходом на
-    # первом же подошедшем. Строился он на КАЖДЫЙ прогон по всем кандидатам и
-    # всем их леммам, и был чистой платой за ответ, который больше не нужен.
-    key_count: dict = {}
-    bucket_members: dict = {}
-    # Корзина кандидата — срез его рифмо-ключа, величина неизменная. Считалась
-    # заново в каждом скане на якорной позиции, то есть десятки тысяч срезов
-    # строк на позицию; здесь она считается один раз и живёт списком.
-    корзина: list = []
-    for idx, c in enumerate(candidates):
-        b = bucket(c.get("rhyme"))
-        корзина.append(b)
-        if b:
-            key_count[b] = key_count.get(b, 0) + 1
-            bucket_members.setdefault(b, set()).add(idx)
-
-    # ПОРЯДОК ПО РАНГУ — то, что превращает полный перебор в ранний выход
-    # (Раунд 56).
-    #
-    # ЗАЧЕМ. Замер на цепочке пользователя: один текст — 777 секунд, и 688 из них
-    # уходит на ОДНО звено, Одическую строфу в десять строк. Разбор: пул после
-    # слогового резерва — 41-74 тысячи кандидатов (по 4 строки на каждый из
-    # 18 489 рифмо-ключей в вилке), а `scan_for` на якорной позиции честно
-    # обходит их ВСЕ, чтобы найти максимум ранга. Якорных позиций в оде пять на
-    # блок плюс тематическая, блоков пятьдесят — то есть триста полных
-    # проходов по семидесяти тысячам за один пул.
-    #
-    # А максимум искать перебором незачем: ранг кандидата — это его собственный
-    # `score` (или `_pctl` у тематического якоря), и от позиции он не зависит
-    # вовсе. Значит достаточно идти по заранее отсортированному порядку и взять
-    # ПЕРВОГО подходящего: он и есть argmax.
-    #
-    # РАНЬШЕ ЭТО БЫЛО УСЛОВНО: единственным, что делало ранг зависимым от
-    # позиции, была связность (прибавка за близость к предыдущей строке), и
-    # ранний выход проверял `flow_target is None`. С её удалением 2026-08-21
-    # условие отпало — ранний выход верен всегда при полном обходе.
-    #
-    # ЭКВИВАЛЕНТНОСТЬ, включая ничьи. Старый цикл берёт кандидата по строгому
-    # `rank > best_rank`, то есть при равных рангах побеждает ВСТРЕЧЕННЫЙ
-    # ПЕРВЫМ — а встречались они в порядке номеров. Поэтому ключ сортировки
-    # здесь `(-ранг, номер)`: при равных рангах впереди меньший номер, ровно
-    # тот же победитель. Обход по корзине (позиция-последователь) оставлен
-    # старым циклом НАРОЧНО: там порядок обхода — это порядок множества
-    # `bucket_members`, воспроизвести его сортировкой нельзя, а искать там и
-    # нечего — корзина это десятки строк, а не десятки тысяч.
-    #
-    # Кандидат без `_pctl` тематическим якорем быть не может (см. scan_for), и
-    # в порядок по перцентилю не попадает — это не сужение, а тот же отсев.
-    # РАВНЫЕ ПО БАЛЛУ — В СЛУЧАЙНОМ ПОРЯДКЕ (Раунд 57).
-    #
-    # Тай-брейком был индекс, то есть порядок кандидатов в пуле. Порядок этот
-    # стабилен, балл округлён до четырёх знаков и совпадает у сотен строк —
-    # значит при одних и тех же настройках выдача шла по одному и тому же
-    # списку сверху вниз. История вычитает только ТОЧНЫЕ повторы, поэтому
-    # следующий прогон брал соседей: та же книга, та же сцена. в отчёте: двенадцать реплик одной пьесы подряд, выдача повторялась почти дословно.. И добавил, что темы при
-    # этом не было вовсе: дело не в привязке к теме, а в самом порядке.
-    #
-    # Случайность идёт ТОЛЬКО между равными: у кого балл выше, тот и выше.
-    # Качество отбора не меняется ни на шаг — меняется, кого из одинаково
-    # хороших мы возьмём сегодня.
-    # `гсч` — общий поток прогона (см. «СЕМЯ — ОДНО НА ПРОГОН»). Его нет только
-    # у прямых вызовов из тестов: там остаётся прежнее поведение, своё семя на
-    # вызов через `закрепить_разброс`.
-    _мешок = гсч if гсч is not None else random.Random(_разброс_семя())
-    порядок_score = sorted(range(len(candidates)),
-                           key=lambda i: (-candidates[i]["score"], _мешок.random()))
-    _леммы_темы = {л for t in (тема or ()) for л in lemmatize(t)}
-    _леммы_обяз = {л for t in (обязательные or ()) for л in lemmatize(t)}
-    _леммы_темы -= _леммы_обяз      # у `!слова` своя гарантия, предел его не касается
-
-    def буквальная(cand: dict) -> bool:
-        return bool(_леммы_темы) and bool(cand.get("_lem") and (cand["_lem"] & _леммы_темы))
-
-    def блок_уже_с_темой(block_start: int) -> bool:
-        return any(буквальная(r) for r in selected[block_start:])
-
-    # ЯКОРЬ ИЩЕТ СНАЧАЛА СРЕДИ БУКВАЛЬНЫХ (волна B, 2026-08-14).
-    #
-    # Обещание якоря — «строка точно в тему», и для человека это значит, что
-    # слово в строке ВИДНО. Ранжир по релевантности это не даёт: релевантность
-    # — среднее косинуса по леммам фрагмента, то есть она РАЗБАВЛЯЕТСЯ длиной.
-    # Замерено: у темы «деньги» среди 27 119 кандидатов 45 буквальных, и лучший
-    # из них стоит по перцентилю на 34-м месте — в полосу из двенадцати он не
-    # попадает никогда. Отсюда «„деньги“ не появились ни разу в 25 прогонах».
-    #
-    # Раньше так делать было НЕЛЬЗЯ: предпочтение буквальных и дало ту самую
-    # жалобу 2026-07-17 — слово в 19 строках из 20. Теперь можно, потому что
-    # предел «одна буквальная на строфу» стоит ниже и держится по лемме.
-    порядок_pctl = sorted((i for i in range(len(candidates)) if "_pctl" in candidates[i]),
-                          key=lambda i: (not буквальная(candidates[i]),
-                                         -candidates[i]["_pctl"], _мешок.random()))
-
-    def has_distinct_bucket_partner(i: int, cand: dict, b: str) -> bool:
-        """Есть ли в корзине `b` ещё не занятый сосед, не делящий с `cand` ни
-        одной леммы.
-
-        ОТВЕЧАЕМ, НЕ СТРОЯ ОТВЕТ ЦЕЛИКОМ (волна A, 2026-08-14). Здесь сначала
-        собиралось множество ВСЕХ пересекающихся (объединение постингов по
-        каждой лемме кандидата), потом из корзины вычиталось это множество, и
-        только потом искался первый незанятый. То есть на каждый вопрос
-        «есть ли хоть один» строились два новых множества размером с корзину.
-
-        Замер на реальном пуле (800 000 фрагментов, тема, схема абаб):
-        **233 746 вызовов за ОДИН прогон** и 0.84 с из 2.48 — то есть 42%
-        всего времени генерации уходило сюда, а не в сортировки, на которые
-        указывал план.
-
-        Достаточно идти по корзине и вернуть первого же подошедшего: вопрос
-        задан про существование. Ответ ТОТ ЖЕ по построению — `j` лежит в
-        постингах леммы ровно тогда, когда эта лемма есть у `j`, значит
-        «j в объединении постингов» и «леммы пересекаются» — одно и то же
-        условие, записанное с двух сторон."""
-        лем = cand["_lem"]
-        for j in bucket_members.get(b, ()):
-            if j == i:
-                continue
-            другой = candidates[j]
-            if другой["_lem"] & лем:
-                continue
-            # Ярусы исключающие (2026-08-28): корзина режется широким префиксом
-            # и потому ШИРЕ настоящих партнёров — на «близкой» в ней лежат и
-            # тождественные ключи, которые больше не пара. Без этой проверки
-            # якорь запирался бы в корзину, где все соседи — «слишком точные»,
-            # и пара молча ломалась.
-            if not _rhymes(cand, другой, ярусы):
-                continue
-            if другой["text"] not in used_texts:
-                return True
-        return False
-
-    def consume(i: int) -> None:
-        """Mark candidate `i` used without adding it to `selected` — for a
-        source fragment absorbed into a synthetic splice/trim row (see
-        `take_synthetic`) rather than appearing on its own."""
-        used_indices.add(i)
-        used_texts.add(candidates[i]["text"])
-        b = корзина[i]
-        if b:
-            key_count[b] -= 1
-            bucket_members[b].discard(i)
-
-    def take(i: int) -> None:
-        selected.append(candidates[i])
-        consume(i)
-
-    def take_synthetic(row: dict, *idxs: int) -> None:
-        """Same bookkeeping as `take`, for a row built out of one or more
-        existing candidates (splice: 2 sources; trim: 1) instead of a
-        candidate taken as-is."""
-        selected.append(row)
-        for i in idxs:
-            consume(i)
-
-    def kind_of(cand: dict) -> str:
-        if cand.get("template") != "nakedlunch":
-            return "grammar"
-        return "nl"
-
-    # НЕ БОЛЬШЕ ОДНОЙ БУКВАЛЬНОЙ НА СТРОФУ (волна B, 2026-08-14).
-    #
-    # Обещание старое — оно появилось после живой жалобы 2026-07-17: тема
-    # «деньги» дала слово буквально в 19 строках из 20. Держали его срезом по
-    # ВСЕМУ пулу (`literal_cap`), и держал он его плохо в обе стороны:
-    # выбрасывал из пула сотни строк (728 из 730 на «ночи») и при этом ловил
-    # только точную словоформу, пропуская «войны», «войне», «войну».
-    #
-    # Здесь есть то, чего нет в пуле, — САМА СТРОФА. Значит обещание можно
-    # выполнить буквально: в одном блоке не больше одной строки со словом темы.
-    # Считаем по ЛЕММЕ: для человека «ночь» и «ночью» — одно слово, и держать
-    # разное мнение об этом на двух этажах отбора нельзя.
-    #
-    # Исключения ровно два, и оба обязаны быть: тематический якорь (он и есть
-    # та самая одна строка) и `!слово` (у него отдельная жёсткая гарантия).
-
-    # Per-candidate meaning vectors for the theme-anchor similarity check —
-    # computed ONCE up front (not per scan_for query, which would reintroduce
-    # the exact O(candidates²) shape the perf note above just fixed), and
-    # only when `theme_anchor` is actually in play (no cost for themeless or
-    # nl_mix=0 runs, the overwhelmingly common case for this branch to skip).
-    # `None` for a candidate whose lemmas the embeddings model has nothing
-    # for — `has_anchor_conflict` below treats that as "no opinion", never
-    # as "similar" or "distinct" (see embeddings.lemma_centroid's docstring).
-    # Центроиды нужны и тематическому якорю, и связности соседних строк.
-    #
-    # СЧИТАЕМ ПО ТРЕБОВАНИЮ, А НЕ ВСЕ СРАЗУ (волна A, 2026-08-14). Здесь стоял
-    # список по ВСЕМ кандидатам, и на умолчаниях приложения это 12 608
-    # центроидов за прогон — 0.21 с из 0.48, то есть **44% времени генерации**,
-    # при том что спрашивают у считанных единиц: `has_anchor_conflict` молчит,
-    # пока у строфы нет якоря, а ранний выход досматривает пул лишь до конца
-    # полосы.
-    #
-    # Это НЕ ослабление проверки: у кого спросят, тот и посчитается, значение
-    # то же самое до последнего бита. Память — тот же список, просто заполняется
-    # он по мере надобности.
-    # Только ради ЯКОРЯ ТЕМЫ: связность, вторая потребительница, удалена.
-    _центроиды: list = [_НЕ_СЧИТАН] * len(candidates) if theme_anchor else []
-
-    class _Центроиды:
-        """Список наизнанку: индексируется как список, считает при первом
-        обращении. Отдельный класс, а не `dict.setdefault` в двух местах, —
-        чтобы обращений `cand_centroids[i]` в каскаде не пришлось трогать
-        вовсе, и чтобы `cand_centroids is None` осталось тем же признаком
-        «центроиды в этом прогоне не нужны»."""
-        __slots__ = ()
-
-        def __getitem__(self, i):
-            v = _центроиды[i]
-            if v is _НЕ_СЧИТАН:
-                v = _центроиды[i] = embeddings.lemma_centroid(candidates[i]["_lem"])
-            return v
-
-    cand_centroids = _Центроиды() if _центроиды else None
-    stanza_anchor_centroid: dict = {}   # block_start -> centroid vector | None
-    # Ответ «похож ли кандидат на якорь ЭТОЙ строфы» зависит только от пары
-    # (кандидат, блок), а спрашивается он у одного и того же кандидата много
-    # раз: каскад зовёт scan_for до шести раз на позицию, а позиций в блоке
-    # десять. Считаем скалярное произведение один раз на пару и запоминаем —
-    # арифметика та же самая до последнего бита (это memo, а не векторизация:
-    # матричное умножение могло бы дать другой порядок суммирования и другой
-    # последний разряд, а значит другой ответ ровно на пороге).
-    _конфликт: dict = {}
-
-    def has_anchor_conflict(i: int, block_start: int) -> bool:
-        ac = stanza_anchor_centroid.get(block_start)
-        if ac is None or cand_centroids is None:
-            return False
-        ключ = (block_start, i)
-        ответ = _конфликт.get(ключ)
-        if ответ is None:
-            cc = cand_centroids[i]
-            ответ = cc is not None and float(cc @ ac) > _ANCHOR_SIM_CEILING
-            _конфликт[ключ] = ответ
-        return ответ
-
-    for pos in range(size):
-        # НАДГРОБИЕ 2026-08-18: здесь стояла проверка остановки серии (Раунд 55) — единственная в горячем цикле; ушла вместе с проводом `стоп`, см. надгробие у `ПОЛОСА`.
-        block_start = (pos // L) * L
-        local_pos = pos % L
-        target_group = next((g for g in groups if local_pos in g), None)
-        is_rhyme_anchor = bool(target_group) and len(target_group) > 1 and local_pos == min(target_group)
-        is_theme_anchor = theme_anchor and local_pos == 0
-        want_kind = "nl" if pos in nl_positions else "grammar"
-        # Не повторять лемму с уже выбранными строками ЭТОЙ ЖЕ строфы — hard
-        # floor (2026-07-18, пользователь, скриншот: «Два гонорара» / «получил
-        # два чека» / «Вот два чека» — «чек» дважды в одной строфе абаб, и
-        # это НЕ единичный случай: живая проверка после первой попытки фикса
-        # показала пересечение лемм в КАЖДОЙ из 10 проверенных строф). Эта
-        # функция раньше вообще не знала о повторах — только score и рифма;
-        # _diversify получил такой же барьер раньше, но _select_with_rhyme
-        # (АКТИВНЫЙ путь при схеме "абаб" — дефолт приложения) им не
-        # пользуется вообще, свой независимый цикл выбора. Строфа — не
-        # «последние 3», а ВСЕ уже поставленные строки текущего блока
-        # (block_start..pos): при показе «одна строфа = один взгляд»
-        # (PLAN.md 0.3) именно это и есть окно, которое видит пользователь разом.
-        # `repeat_ok` (Раунд 52, крутилка «Повтор») снимает барьер целиком:
-        # пустой `recent` означает «повторять нечего запрещать». требование: повтор запрещён только при соответствующей настройке; если повтор
-        # нужен — он должен работать. — хуковый припев строится
-        # именно на возвращающемся слове. Снимаем ЗДЕСЬ, а не флагом внутри
-        # scan_for: барьер читается из `recent` в трёх местах каскада, и
-        # четвёртое условие в каждом из них было бы четырьмя шансами
-        # разойтись.
-        recent = [] if repeat_ok else [selected[j]["_lem"] for j in range(block_start, pos)]
-        # Барьер повтора спрашивается «пересекается ли кандидат хоть с одной из
-        # уже поставленных строк блока» — а это в точности «пересекается ли он с
-        # их ОБЪЕДИНЕНИЕМ». Тождество, а не приближение: A∩s≠∅ хоть для одной
-        # s ⟺ A∩(∪s)≠∅. В оде поставленных строк к концу блока девять, то есть
-        # девять пересечений множеств на КАЖДОГО кандидата в КАЖДОМ скане
-        # превращаются в одно.
-        recent_union: set = set()
-        for s in recent:
-            recent_union |= s
-        syl_range = syllable_spec[local_pos] if syllable_spec else None
-
-        def scan_for(require_slot: bool, allow_repeat: bool = False, theme_anchor_mode: bool = False,
-                     require_length: bool = False, length_range: tuple | None = None,
-                     want_mat: bool | None = None) -> int:
-            best_idx, best_rank = -1, -999.0
-            # `length_range` overrides the position's own `syl_range` — used by
-            # the splice/trim repair below to ask "is there a VALID (rhyme/slot/
-            # repeat-correct) candidate specifically in the too-short or
-            # too-long band," reusing this same validity logic instead of
-            # duplicating it.
-            lr = length_range if length_range is not None else syl_range
-            # A FOLLOW position in an already-established rhyme group (the
-            # group's first member is already `selected`) only ever accepts
-            # candidates from that ONE bucket — `bucket()` mirrors `_rhymes()`'s
-            # own notion of "same rhyme" at this precision (see `bucket`'s own
-            # docstring), so nothing outside it could pass the `_rhymes()` check
-            # below anyway. Narrowing the SOURCE we iterate to
-            # `bucket_members[that bucket]` (2026-07-19 — this is what makes
-            # widening `candidates` past the old NL_SELECT_CAP score-slice safe:
-            # without it, a follow position would linearly re-scan the WHOLE
-            # pool, reintroducing the O(size×pool) shape #42/#43 already fixed
-            # once). Anchor-establishing positions (is_rhyme_anchor) still need
-            # the full range — they're choosing WHICH bucket to commit to, not
-            # matching an already-fixed one. Same for classic/theme-anchor
-            # positions, which aren't bucket-constrained at all.
-            search_space = range(len(candidates))
-            полный = True            # обходим ВЕСЬ пул, а не одну корзину
-            if not theme_anchor_mode and target_group and not is_rhyme_anchor:
-                first_global = block_start + min(target_group)
-                if first_global < len(selected):
-                    tb = bucket(selected[first_global].get("rhyme"))
-                    if tb:
-                        search_space = bucket_members.get(tb, ())
-                        полный = False
-
-            # ЕДИНСТВЕННЫЙ цикл на оба режима — быстрый и обычный. Правила
-            # отбора существуют в одной копии (две разошлись бы при первой же
-            # правке каскада), а различаются только источник обхода и то, что
-            # делать с подошедшим: вернуть сразу или продолжить искать лучшего.
-            #
-            # Отдельной функцией-предикатом это писать нельзя: замерено на
-            # обычной одиночной генерации (35 919 кандидатов) — вызов Python-
-            # функции на КАЖДОГО кандидата съедал весь выигрыш и уводил в минус,
-            # 15.8 с → 20.6 с. Там, где ранний выход не срабатывает (якорь в
-            # мелкой рифмо-корзине), остаётся чистая накладная плата.
-            # `and flow_target is None` снято 2026-08-21 вместе со связностью:
-            # без неё ранг кандидата не зависит от позиции НИКОГДА, и ранний
-            # выход по отсортированному порядку верен при любом полном обходе.
-            ранний = полный
-            обход = (порядок_pctl if theme_anchor_mode else порядок_score) if ранний else search_space
-            полоса: list[int] = []
-            best_idx, best_rank = -1, -999.0
-            for i in обход:
-                cand = candidates[i]
-                if i in used_indices or cand["text"] in used_texts:
-                    continue
-                if theme_anchor_mode:
-                    # only algorithm-tier nl rows carry `_pctl` (see
-                    # _nl_scored) — nothing else can serve as a theme anchor
-                    if "_pctl" not in cand:
-                        continue
-                elif require_slot and kind_of(cand) != want_kind:
-                    continue
-                # Вилка слогов — тоже настройка, а значит «классике» она не
-                # указ (Раунд 35). Рифмо-схему она не соблюдала с самого
-                # начала (см. ниже), и держать её длиной было
-                # непоследовательно: режим обещает сырьё как есть, а сырьё
-                # бывает любой длины.
-                if require_length and lr is not None:
-                    syl = cand.get("syllables")
-                    if syl is None or not (lr[0] <= syl <= lr[1]):
-                        continue
-                # Доля мата (Раунд 39). Предпочтение, а не инвариант: ниже по
-                # каскаду оно снимается ПЕРВЫМ — раньше слоговой вилки и
-                # задолго до рифмы. Порванная строфа ради процента была бы
-                # худшей сделкой, чем недобранный процент.
-                if want_mat is not None and bool(cand.get("mat")) != want_mat:
-                    continue
-                if not allow_repeat and (cand["_lem"] & recent_union):
-                    continue
-                valid = True
-                # Предел «одна буквальная на строфу» — см. `буквальная` выше.
-                # Якорь темы и `!слово` не считаются: якорь и есть эта одна, а
-                # у принудительного слова своя гарантия.
-                if (not theme_anchor_mode and _леммы_темы
-                        and буквальная(cand) and блок_уже_с_темой(block_start)):
-                    valid = False
-                if valid and not is_theme_anchor and has_anchor_conflict(i, block_start):
-                    # "too similar to this stanza's anchor line" — see the
-                    # function's own docstring; independent of rhyme/slot/
-                    # repeat checks below, applies to grammar lines too.
-                    valid = False
-                # "классика" positions are exempt from the rhyme scheme
-                # entirely (user's explicit choice 2026-07-14) — never
-                # checked as a group match or an anchor needing a partner.
-                if valid:
-                    if target_group and not is_rhyme_anchor:
-                        for other_local in target_group:
-                            if other_local < local_pos:
-                                other_global = block_start + other_local
-                                if other_global < len(selected) and not _rhymes(cand, selected[other_global], ярусы):
-                                    valid = False
-                                    break
-                    elif is_rhyme_anchor and not theme_anchor_mode:
-                        # ЯКОРЬ ТЕМЫ ОСВОБОЖДЁН ОТ ВЕТО ПАРТНЁРА (2026-08-28).
-                        # С исключающими ярусами проверка партнёра стала строже,
-                        # и на «близкой» тематический пул («деньги…» кончается
-                        # словом темы у половины буквальных строк) не находил
-                        # якорю НИ ОДНОГО годного соседа — буквальная строка не
-                        # вставала вовсе: 0 из 15 прогонов против обещанных 12
-                        # (тест test_yakor_predpochitaet_bukvalnuyu, найдено
-                        # бисекцией). Якорь — обещание «слово видно», оно
-                        # старше гарантии пары: без партнёра группа честно
-                        # распадётся ниже по каскаду, а не украдёт тему молча.
-                        #
-                        # needs itself + at least one more unused candidate sharing
-                        # its bucket, or the partner slot later in this stanza is doomed
-                        b = корзина[i]
-                        if not b or key_count.get(b, 0) < 2:
-                            valid = False
-                        elif not allow_repeat:
-                            # count>=2 alone isn't enough (2026-07-18, found
-                            # live: still repeating after the recent-lemma
-                            # filter above) — nakedlunch rhyme buckets are
-                            # often DOMINATED by near-duplicate cuts of the
-                            # SAME source sentence (cutter.py's sliding
-                            # windows), all sharing the anchor's own lemmas.
-                            # An anchor with 5 same-bucket "partners" that are
-                            # all just other slices of "...два чека..." isn't
-                            # actually rhyme-safe for the no-repeat rule — the
-                            # partner slot is doomed to repeat regardless of
-                            # count. Need at least one bucket-mate that's
-                            # ACTUALLY lemma-distinct from this anchor (see
-                            # has_distinct_bucket_partner's own perf note —
-                            # this used to be an inline O(candidates) scan).
-                            if not has_distinct_bucket_partner(i, cand, b):
-                                valid = False
-                if not valid:
-                    continue
-                # РАННИЙ ВЫХОД С РАЗБРОСОМ (Раунд 57).
-                #
-                # Здесь стояло `return i` — первый подошедший по убыванию ранга,
-                # то есть жадный максимум. И это оказалось уязвимостью, а не
-                # оптимизацией. Банальность считается по САМОМУ РЕДКОМУ слову
-                # строки: чем реже, тем выше балл. Имя собственное — «СЕНТ-АНЖ»,
-                # «ДОЛЬМАНСЕ» — в языке почти не встречается, значит любая
-                # строка с ним получает лучший балл по редкости и забирает
-                # первый слот строфы. в работе: имя персонажа из пьесы занимало первый слот при двух миллионах
-                # фрагментов..
-                #
-                # Копим ПОЛОСУ лучших и берём из неё случайного. Полоса узкая,
-                # поэтому качество то же: все её члены прошли те же проверки и
-                # стоят рядом по рангу. Ранний выход сохраняется — мы не
-                # досматриваем пул до конца, а лишь до конца полосы.
-                #
-                # ЯКОРЬ ТЕМЫ — БЕЗ РАЗБРОСА. `theme_anchor_mode` — это обещание
-                # «строка точно в тему», и оно должно выполняться буквально:
-                # лучший по перцентилю, а не случайный из полосы лучших. Полоса
-                # нужна обычным слотам, где «лучший» определён с точностью до
-                # четвёртого знака и потому произволен.
-                # ЯКОРЬ ТЕМЫ — ТОЖЕ С РАЗБРОСОМ (волна B, 2026-08-14).
-                #
-                # Здесь стояло `return i` с объяснением: «обещание „строка
-                # точно в тему“ должно выполняться буквально — лучший по
-                # перцентилю, а не случайный из полосы». Объяснение звучит
-                # верно, а следствие оказалось таким:
-                #
-                #   тема «ночь», 25 прогонов с РАЗНЫМИ семенами → 25 строк с
-                #   темой, и все двадцать пять — ОДНА И ТА ЖЕ строка. То же на
-                #   «войне». В корпусе при этом 2 989 и 1 059 подходящих.
-                #
-                # Причина: перцентиль — ранг, значения РАЗНЫЕ по построению,
-                # ничьих нет. Значит случайный тай-брейк в `порядок_pctl` не
-                # срабатывает никогда, и «лучший» — всегда один и тот же
-                # фрагмент корпуса, сколько семян ни меняй.
-                #
-                # ПОЛОСА МЕРИТСЯ БЛИЗОСТЬЮ, А НЕ ЧИСЛОМ. Первая версия брала
-                # двенадцать лучших, как у обычных слотов, — и тест на
-                # синтетическом пуле поймал её правым: там кандидатов всего
-                # десяток, двенадцать лучших это ВЕСЬ пул, и якорь становился
-                # случайной строкой вместо тематической. Число кандидатов —
-                # свойство пула, а обещание «точно в тему» свойством пула быть
-                # не должно.
-                #
-                # Поэтому полоса — те, кто не дальше `ПОЛОСА_ТЕМЫ` от лучшего
-                # по перцентилю: та же величина, которой уже определено
-                # «внутри полосы все равны по теме» (nlindex). На реальном пуле
-                # в 27 тысяч кандидатов это полсотни строк, на десятке
-                # синтетических — ровно одна, лучшая. Сверху предел ПОЛОСА:
-                # он про цену обхода, а не про качество.
-                if ранний and theme_anchor_mode:
-                    свой = буквальная(cand)
-                    if not полоса:
-                        _полоса_букв, _верх_pctl = свой, cand["_pctl"]
-                    elif _полоса_букв:
-                        # Полоса набрана из буквальных — кончились буквальные,
-                        # кончилась и полоса. Ширина здесь не число и не ранг,
-                        # а само обещание: «точно в тему» — это те, у кого
-                        # слово темы есть.
-                        if not свой:
-                            return _мешок.choice(полоса)
-                    elif cand["_pctl"] < _верх_pctl - nlindex.ПОЛОСА_ТЕМЫ:
-                        # Буквальных нет вовсе (бывает: слово темы редкое) —
-                        # тогда полоса по близости, как у пула.
-                        return _мешок.choice(полоса)
-                    полоса.append(i)
-                    if len(полоса) >= ПОЛОСА:
-                        return _мешок.choice(полоса)
-                    continue
-                if ранний:
-                    полоса.append(i)
-                    if len(полоса) >= ПОЛОСА:
-                        return _мешок.choice(полоса)
-                    continue
-                # theme-anchor selection ranks by RAW relevance percentile,
-                # not by `score` — `score` reflects the COHESION TARGET
-                # (could favor low relevance at "диссонанс"), the wrong
-                # signal for "точно в тему по запросу" (see docstring).
-                rank = cand["_pctl"] if theme_anchor_mode else cand["score"]
-                if rank > best_rank:
-                    best_rank, best_idx = rank, i
-            # Полоса не добралась до полной ширины — пул кончился раньше. Берём
-            # случайного из того, что набралось: это те же лучшие, просто их
-            # оказалось меньше двенадцати.
-            if полоса:
-                return _мешок.choice(полоса)
-            return best_idx
-
-        def _find_filler(lo: int, hi: int, exclude_idx: set, exclude_lem: set) -> int:
-            """A short, otherwise-unconstrained candidate to prepend ahead of a
-            too-short TAIL (see `_repair_length`) — any kind, any rhyme; only
-            length, no-repeat, and anchor-conflict apply. Reused for both nl
-            and grammar rows — this is what lets the SAME splice repair also
-            cover the generator's own too-short-target case, not just
-            nakedlunch's (2026-07-19, user's own connection between the two)."""
-            # Тот же ранний выход, что в scan_for, и по той же причине: ранг
-            # здесь — чистый `score`, связность в него не входит вовсе, значит
-            # первый подходящий в порядке (-score, номер) и есть максимум.
-            for i in порядок_score:
-                cand = candidates[i]
-                if i in used_indices or i in exclude_idx or cand["text"] in used_texts:
-                    continue
-                syl = cand.get("syllables")
-                if syl is None or not (lo <= syl <= hi):
-                    continue
-                if cand["_lem"] & exclude_lem or (cand["_lem"] & recent_union):
-                    continue
-                if not is_theme_anchor and has_anchor_conflict(i, block_start):
-                    continue
-                return i
-            return -1
-
-        def _splice_row(head_idx: int, tail_idx: int) -> dict:
-            head, tail = candidates[head_idx], candidates[tail_idx]
-            text = f'{head["text"]} {tail["text"]}'
-            offset = len(head["text"]) + 1
-            tail_span = tail.get("rhyme_span")
-            span = [tail_span[0] + offset, tail_span[1] + offset] if tail_span else None
-            return {"text": text, "template": tail["template"], "meter": tail.get("meter"),
-                    "rhyme": tail.get("rhyme"), "rhyme_span": span,
-                    "syllables": head["syllables"] + tail["syllables"],
-                    "score": round((head["score"] + tail["score"]) / 2, 4),
-                    "_lem": head["_lem"] | tail["_lem"],
-                    "classic": bool(head.get("classic")) or bool(tail.get("classic")),
-                    "spliced": True}
-
-        def _trim_row(idx: int) -> dict | None:
-            """Drop whole leading words from an overlong nl fragment until it
-            fits `syl_range`, never touching the LAST word — `rhyme_span`
-            (see nl_rhyme.json / tools/build_nl_rhyme.py) always lands inside
-            it, so the rhyme itself is untouched by construction. NL-sourced
-            only (2026-07-19): a grammar Line's per-word lemma structure
-            doesn't survive to this layer's flattened `_lem` set (see stage
-            3's row construction in run()), so there's no safe way to shrink
-            it after trimming a word away — out of scope for this pass;
-            overlong grammar candidates keep today's as-is behavior."""
-            cand = candidates[idx]
-            if cand.get("template") != "nakedlunch":
-                return None
-            entry = _NL_RHYME.get(cand["text"])
-            if not entry:
-                return None
-            words = cand["text"].split()
-            if len(words) < 2:
-                return None
-            lo, hi = syl_range
-            best_cut, best_dist = None, None
-            for cut in range(1, len(words)):
-                text = " ".join(words[cut:])
-                syl = sum(1 for ch in text.lower() if ch in VOWELS)
-                if syl < 1:
-                    break
-                dist = 0 if lo <= syl <= hi else min(abs(syl - lo), abs(syl - hi))
-                if best_dist is None or dist < best_dist:
-                    best_cut, best_dist = cut, dist
-                if syl <= lo:
-                    break   # further cuts only remove more — strictly worse past this point
-            if best_cut is None:
-                return None
-            kept = words[best_cut:]
-            text = " ".join(kept)
-            removed = len(cand["text"]) - len(text)
-            span = cand.get("rhyme_span")
-            new_span = [span[0] - removed, span[1] - removed] if span else None
-            # Леммы обрезанного куска считаем ПО НЕМУ САМОМУ (Раунд 34).
-            # Раньше они собирались из записи кэша nl_rhyme.json: там
-            # `tokens` и `lemmas` — параллельные списки по СЛОВОФОРМАМ, и zip
-            # давал карту слово→лемма. С переездом на колоночный индекс кэш
-            # больше не грузится, а в индексе леммы лежат МНОЖЕСТВОМ (так
-            # нужно релевантности), и параллельность потеряна. Прямой вызов
-            # честнее и не дороже: обрезка случается на единицы кандидатов за
-            # запрос, а не на миллионы фрагментов.
-            lem = set(lemmatize(text))
-            return {"text": text, "template": "nakedlunch", "meter": None,
-                    "rhyme": cand.get("rhyme"), "rhyme_span": new_span,
-                    "syllables": sum(1 for ch in text.lower() if ch in VOWELS),
-                    "score": cand["score"], "_lem": lem, "classic": cand.get("classic", False),
-                    "trimmed": True}
-
-        def _repair_length(tail_idx: int) -> tuple:
-            """Try to make `tail_idx` — already the position's best
-            rhyme/slot/repeat-VALID pick, chosen ignoring length — FIT
-            `syl_range` instead of accepting it (or a worse fallback)
-            out-of-range as-is. The user's own proposal, 2026-07-19, after
-            the Онегинская строфа bug report (859 correct-rhyme
-            correct-length "ом" survivors existed, hidden by the score cap
-            — see `_syllable_reserve` — but the SPECIFIC candidate
-            scan_for(True) picked was an 11 or a 27-syllable one regardless).
-
-            Splice (too short): `tail_idx` already carries the position's
-            correct rhyme (scan_for's own `valid` check enforces that
-            regardless of `require_length` — true for an ordinary rhyme
-            group AND for a theme-anchor pick, since both go through the
-            same `valid` computation), so it becomes the line's TAIL;
-            prepend a short, otherwise-unconstrained HEAD to reach the
-            range. Trim (too long): drop leading words from `tail_idx`; the
-            rhyme-bearing LAST word is never touched — see `_trim_row`.
-            Returns (None, ()) if the length already fits, or neither repair
-            finds a workable pair — the caller then falls through to the
-            pre-existing "accept it out-of-range" behavior unchanged, so
-            this is purely additive: it can only IMPROVE the outcome, never
-            worse than before this existed. A single shared entry point for
-            BOTH the theme-anchor's own pick and the ordinary tier-2 pick
-            (2026-07-19 — found live: an EARLIER version of this only
-            covered the ordinary path, and the Онегинская строфа's own
-            anchor line — position 0, badged ◆ — still came out at 10
-            syllables against an 8-9 spec)."""
-            if syl_range is None or tail_idx < 0:
-                return None, ()
-            lo, hi = syl_range
-            tail = candidates[tail_idx]
-            syl = tail["syllables"]
-            if lo <= syl <= hi:
-                return None, ()
-            if syl < lo and hi >= 2:
-                shortfall_hi = hi - syl
-                shortfall_lo = max(1, lo - syl)
-                if shortfall_hi >= 1:
-                    head_idx = _find_filler(shortfall_lo, shortfall_hi, {tail_idx}, tail["_lem"])
-                    if head_idx >= 0:
-                        return _splice_row(head_idx, tail_idx), (head_idx, tail_idx)
-            elif syl > hi:
-                trimmed = _trim_row(tail_idx)
-                if trimmed is not None:
-                    return trimmed, (tail_idx,)
-            return None, ()
-
-        best_idx = -1
-        synthetic, synthetic_sources = None, ()
-        anchor_pick = False   # was the (possibly since-repaired) pick made via theme_anchor_mode?
-        if is_theme_anchor:
-            best_idx = scan_for(True, theme_anchor_mode=True)
-            if best_idx < 0:
-                best_idx = scan_for(False, theme_anchor_mode=True)
-            if best_idx >= 0:
-                anchor_pick = True
-                synthetic, synthetic_sources = _repair_length(best_idx)
-                if synthetic is not None:
-                    best_idx = -1   # the repaired row replaces it, not the raw pick
-        # Length is the SOFTEST constraint (user: «рифма важнее» — see
-        # syllable_spec's own docstring) — tried first, given up first. A
-        # scheme with no syllable_spec at all (every pre-constructor caller)
-        # makes `require_length=True` and `=False` behave IDENTICALLY (no
-        # syl_range to check against), so these two extra tiers are a no-op
-        # exactly when no spec was ever passed — zero behavior change for
-        # any existing scheme-string-only call site.
-        # Проход «с учётом мата» — до всего остального. Не нашлось — идём
-        # обычным каскадом, и доля просто не добирается на этой позиции.
-        want_mat = mat_positions.get(local_pos)
-        if want_mat is not None and best_idx < 0 and synthetic is None and not anchor_pick:
-            for _треб_слот, _треб_длина in ((True, True), (True, False), (False, True), (False, False)):
-                best_idx = scan_for(_треб_слот, require_length=_треб_длина, want_mat=want_mat)
-                if best_idx >= 0:
-                    break
-        if best_idx < 0 and synthetic is None and not anchor_pick:
-            best_idx = scan_for(True, require_length=True)
-        if best_idx < 0 and synthetic is None and not anchor_pick:
-            # Before giving up on length entirely (next tier), try to REPAIR
-            # tier-2's own pick into one that fits — see _repair_length.
-            candidate_idx = scan_for(True)
-            synthetic, synthetic_sources = _repair_length(candidate_idx)
-            if synthetic is None:
-                best_idx = candidate_idx
-        if best_idx < 0 and synthetic is None:
-            best_idx = scan_for(False, require_length=True)
-        if best_idx < 0 and synthetic is None:
-            best_idx = scan_for(False)   # slot quota is the softer constraint
-        if best_idx < 0 and synthetic is None:
-            # Рифма важнее повтора (пользователь 2026-07-14: сломанная рифма —
-            # больший дефект, чем незаполненная квота слота), НО повтор всё
-            # ещё хуже, чем незаполненный слот kind — пробуем разрешить
-            # повтор, ПРЕЖДЕ чем сдаваться и ломать саму рифмо-схему ниже.
-            best_idx = scan_for(False, allow_repeat=True)
-
-        if synthetic is not None:
-            take_synthetic(synthetic, *synthetic_sources)
-            if anchor_pick:
-                selected[-1]["anchor"] = True
-                # `synthetic_sources[-1]` is the tail — the piece that was
-                # already theme_anchor_mode-valid, so ITS centroid (not the
-                # spliced/trimmed row's, which mixes in an unrelated head)
-                # is what later positions' has_anchor_conflict should compare
-                # against — see that function's own docstring.
-                stanza_anchor_centroid[block_start] = cand_centroids[synthetic_sources[-1]]
-        elif best_idx >= 0:
-            take(best_idx)
-            if is_theme_anchor and "_pctl" in candidates[best_idx]:
-                selected[-1]["anchor"] = True
-                stanza_anchor_centroid[block_start] = cand_centroids[best_idx]
-        else:
-            # No candidate satisfies the rhyme constraint at all — best
-            # remaining by score (preferring the intended slot type), so a
-            # broken rhyme slot at least keeps output quality rather than
-            # degrading it further.
-            # Тот же ранний выход. `max(..., key=score)` возвращает ПЕРВЫЙ
-            # максимум в порядке списка, а список строился по номерам — то
-            # есть «лучший по оценке, при ничьей меньший номер». Обход по
-            # `порядок_score` даёт ровно того же победителя, но не строит
-            # список на десятки тысяч элементов ради одного из них.
-            лучший_слот = лучший_любой = -1
-            for i in порядок_score:
-                if i in used_indices or candidates[i]["text"] in used_texts:
-                    continue
-                if лучший_любой < 0:
-                    лучший_любой = i
-                if kind_of(candidates[i]) == want_kind:
-                    лучший_слот = i
-                    break
-            if лучший_любой < 0:
-                break
-            take(лучший_слот if лучший_слот >= 0 else лучший_любой)
-
-    return selected
+# НАДГРОБИЕ: `_select_with_rhyme` — СБОРЩИК СТРОФЫ, 884 строки (2026-08-29).
+#
+# Он собирал строфу из ПАЧКИ кандидатов: строил корзины по рифмо-ключу, шёл по
+# рангу, держал схему, слоги, долю мата, запрет повтора лемм, тематический
+# якорь и обязательное слово. Всё это теперь делает прямая тяга по колонкам
+# (`nlindex.тянуть_строфы`) — без пачки, по всему корпусу.
+#
+# ПОЧЕМУ УМЕР. Сборщик существовал ради того, чего больше нет: смешивания строк
+# генератора с корпусными, тематического якоря и `!слова`. Владелец вырезал все
+# три (2026-08-29). А ПАЧКА была его ценой: 320 кандидатов из 2 307 826 строк —
+# та самая стена, из-за которой на теме беднели рифмы, редкость и книги.
+#
+# И ОН ЖЕ БЫЛ ЛИШНЕЙ РАБОТОЙ. Прямая тяга требовала «только корпус», а её
+# короткое замыкание стояло в ветке СМЕСИ: при обычных настройках владельца
+# строфа собиралась колонками, а потом сборщик пересобирал её заново.
+#
+# Вместе с ним ушли: `_rhymes` (правило пары — переехало в `nlindex.ярус_пары`),
+# `_rhyme_scheme_groups`, `_nl_slot_plan`, `has_distinct_bucket_partner`,
+# `bucket`, `_разброс_семя`/`закрепить_разброс`, `ПОЛОСА`.

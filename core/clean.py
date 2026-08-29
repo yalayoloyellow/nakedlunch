@@ -1,5 +1,5 @@
 # extendo — the single validation layer (PRINCIPLES §6: one source of truth).
-# Everything that enters the domain — a theme string, a run request, a line the
+# Everything that enters the domain — a run request, a stanza spec, a line the
 # user marks — passes through here first. Bad input fails fast with ONE human
 # sentence (PRINCIPLES §7), never a half-built object and never a traceback.
 
@@ -12,7 +12,6 @@ class BadInput(ValueError):
     """Raised with a single human-readable sentence. The caller prints str(e)."""
 
 
-_THEME_RE = re.compile(r"[^\wёЁа-яА-Я\s,\-]", re.UNICODE)
 _SCHEME_RE = re.compile(r"^[а-яё]{2,16}$")
 _SCHEME_JUNK_RE = re.compile(r"[^а-яёa-z0-9]")
 _SCHEME_CYRILLIC_RE = re.compile(r"^[а-яё]+$")
@@ -124,64 +123,36 @@ def stanza_letters(spec: list[dict]) -> str:
     return "".join(row["letter"] for row in spec)
 
 
-def _clean_tag(part: str) -> str:
-    """One comma/newline-separated theme part → one clean tag. Shared by
-    theme() and theme_forced() so a forced word's cleaned form always matches
-    byte-for-byte what theme() puts in tags (needed for the set-membership
-    checks downstream — a mismatch would make a real word silently look
-    'not in the base'). Collapses INTERNAL whitespace too, not just the ends
-    (found 2026-07-17 while adding theme_forced: `_THEME_RE` allows `\\s`
-    through, so a stray '!  деньги' — bang, double space — cleaned to '
-    деньги' with leading spaces still attached, which then never matches any
-    real fragment's cleanly-tokenized 'деньги'. Pre-existing latent gap in
-    theme() too, for any tag typed with odd internal spacing — fixed here at
-    the shared source rather than patched twice."""
-    return "".join(_THEME_RE.sub("", part).split())
-
-
-def theme(raw: str) -> list[str]:
-    """A run theme is a comma/newline list of tag words. Returns clean lowercase
-    tags. Empty or garbage-only input is a hard stop, not an empty run.
-    `!слово` (see theme_forced) also lands here as a normal tag — `_THEME_RE`
-    already strips the leading `!` since it isn't in the allowed character
-    class, so a forced word gets the SAME ordinary semantic/literal theme
-    treatment (PLAN.md 0.2a) as any other tag, on top of its own hard
-    guarantee (0.2b)."""
-    if not isinstance(raw, str):
-        raise BadInput("тема должна быть строкой")
-    parts = [p.strip().lower() for p in re.split(r"[,\n]", raw)]
-    tags = [_clean_tag(p) for p in parts if p.strip()]
-    tags = [t for t in tags if t]
-    if not tags:
-        raise BadInput("пустая тема — напиши хотя бы одно слово")
-    return tags
-
-
-def theme_forced(raw: str) -> set[str]:
-    """Words typed with a leading '!' (2026-07-17, PLAN.md 0.2b — user:
-    «!слово... это обязательный показ именно этого слова в одной из строк
-    если в базе есть это слово»). Unlike an ordinary theme word (0.2a: ranked
-    up via meaning + capped literal occurrence, still probabilistic), a
-    forced word gets a HARD guarantee — see core/filters.py: run()'s
-    forced_notice. Never raises — an all-'!'-typo input just yields an empty
-    set, theme()'s own validation is what still guards overall emptiness."""
-    if not isinstance(raw, str):
-        return set()
-    out = set()
-    for p in re.split(r"[,\n]", raw):
-        p = p.strip().lower()
-        if not p.startswith("!"):
-            continue
-        word = _clean_tag(p)
-        if word:
-            out.add(word)
-    return out
+# НАДГРОБИЕ 2026-08-29: ТЕМА ПРОГОНА ВЫРЕЗАНА ЦЕЛИКОМ ----------------------
+#
+# Отсюда ушли ТРИ вещи: `_THEME_RE` (набор разрешённых в теге символов),
+# `_clean_tag` (кусок темы → чистый тег) и обе разборки — `theme(raw)`
+# (строка «ночь, город» → список тегов, пустая тема = BadInput) и
+# `theme_forced(raw)` (слова с восклицательным знаком, `!деньги` — жёсткая
+# гарантия показа слова, PLAN.md 0.2b, заведена 2026-07-17).
+#
+# ЧТО БЫЛО ЗАВЯЗАНО. Теги ехали в `filters.run(tags=...)` и поднимали
+# тематически близкие строки (векторная близость navec + ограниченное
+# буквальное совпадение), `forced` — в `run(forced=...)` за жёсткой
+# гарантией. Полем темы кормились полоса темы и «Диссонанс» в интерфейсе,
+# `/api/history/restore_theme` возвращал по теме показанное, а журнал писал
+# её отдельной колонкой.
+#
+# ПОЧЕМУ СНЯТО. Решение владельца, 2026-08-29, дословно: «тему стоит вырезать
+# как функцию она глупа и сложна», «вырезать всё вместе с темой». Обязательное
+# слово `!слово` — тем же решением и в том же списке (вместе с ним снята и
+# клавиша ⌥↵, которой оно набиралось).
+#
+# ГДЕ ЕЩЁ. `theme=` в журнале и живой сбор темы — core/stats.py и
+# api/server.py (роут /api/generate, /api/history/mark_shown, вырезанный
+# роут /api/history/restore_theme). Колонка `theme` в выгрузке CSV ОСТАВЛЕНА
+# нарочно — по правилу core/stats.py мёртвые колонки живут ради истории.
+# `Corpus.restore_by_theme` осиротел и режется не здесь.
 
 
 def knobs(raw: dict | None) -> dict:
-    """Sliders for unified mode: cohesion, real_text (melody и banality
-    удалены — см. надгробия ниже). Backward compatible with old names
-    (explore, nl_mix).
+    """Sliders for unified mode: real_text (melody, banality и cohesion
+    удалены — см. надгробия). Backward compatible with old names (nl_mix).
     Missing keys fall back to defaults; out-of-range values are clamped.
 
     No "novelty"/λ knob anymore (removed 2026-07-14, user: "всё что отвечает
@@ -225,16 +196,30 @@ def knobs(raw: dict | None) -> dict:
     # НАДГРОБИЕ: `melody` (алиас `meter`) УДАЛЁН 2026-08-21 — ручка
     # «Мелодичность» снесена целиком по двум замерам, разбор в надгробии
     # core/filters.py у МЕТР_ПОРОГ. Профили со старым ключом читаются.
-    cohesion = num("cohesion", 0.0, 1.0, 0.5, "explore")  # диссонанс → консонанс
+    # НАДГРОБИЕ 2026-08-29: `cohesion` (алиас `explore`) БОЛЬШЕ НЕ СЧИТАЕТСЯ.
+    # Ручка «Диссонанс» вырезана вместе с темой — она мерила тематическую
+    # связность строки с тегами прогона, а тегов больше нет. Решение
+    # владельца: «вырезать всё вместе с темой».
+    #
+    # ПЕРЕХОДНОЕ: ключи "cohesion" и "explore" ниже остаются КОНСТАНТОЙ 0.5 —
+    # core/filters.py их ещё читает, и снимет их ТОТ, КТО РЕЖЕТ filters.py.
+    # Убрать ключи здесь раньше, чем там, значит уронить приложение между
+    # двумя правками. Значение выбрано серединой прежней шкалы: ни один конец
+    # не «включён», пока читатель ещё жив.
+    cohesion = 0.5
     # НАДГРОБИЕ: `banality` (алиас `banal`) УДАЛЁН 2026-08-20 — ручка снесена
     # целиком по замеру, разбор в надгробии core/nlindex.py. Старые настройки и
     # профили с этим ключом читаются как раньше: неизвестные ключи здесь просто
     # не спрашиваются, а `raw` не проверяется на лишнее.
-    real_text = num("real_text", 0.0, 1.0, 0.9, "nl_mix") # extendo → nakedlunch
+    # ИСТОЧНИК ОДИН — КОРПУС (2026-08-29). Ручка «Источники» делила выдачу
+    # между корпусом и грамматическим генератором; генератор вырезан, делить
+    # нечего. Ключи `real_text`/`nl_mix` оставлены КОНСТАНТОЙ, а не удалены:
+    # их читают статистика, журнал и старые записи — пусть везде честная 1.0.
+    real_text = 1.0
 
     # Map new sliders to old domain names for now (will gradually adapt internals)
     return {
-        "explore": cohesion,                    # cohesion is the new explore
+        "explore": cohesion,                    # переходное, см. надгробие выше
         # Lower bound is 1, not the earlier 5: freestyle generates exactly ONE
         # scheme-length at a time (found 2026-07-14 — a 4-letter scheme like
         # "абаб" was silently padded to 5 lines by this floor). Upper bound
@@ -243,7 +228,7 @@ def knobs(raw: dict | None) -> dict:
         # scheme × many stanzas can run past 200 too).
         "shortlist": whole("shortlist", 1, 400, 40),
         "nl_mix": real_text,                    # real_text is the new nl_mix
-        "cohesion": cohesion,
+        "cohesion": cohesion,                   # переходное, см. надгробие выше
         "real_text": real_text,
         # 0.25 (2026-07-17) — ИЗМЕРЕННОЕ среднее пользователя по 125 прогонам, не
         # догадка. Прежний дефолт 0.0 стоял по осторожной причине: ползунок был
@@ -350,25 +335,29 @@ def knobs(raw: dict | None) -> dict:
 # ОДНИМ объектом (stanza_profiles.save с параметром `params`), и выбор формы
 # молча двигал ползунки — то самое смешение, которое он и разделяет.
 #
-# Координаты ИНТЕРФЕЙСНЫЕ («Банальность», «Диссонанс»), а не ядерные
-# (banality, cohesion): часть шкал инвертирована, и переводить туда-обратно
-# при каждом чтении значит однажды ошибиться знаком. Та же причина, по
+# Координаты ИНТЕРФЕЙСНЫЕ («Мат», «Ярусы рифмы»), а не ядерные (mat_share,
+# rhyme_tiers): имена на экране и имена в ядре — разные словари, и держать их
+# одним значит однажды переименовать одно, забыв другое. Та же причина, по
 # которой settings.py держит `nl_params` отдельно от `knobs` — см. его
-# комментарий.
+# комментарий. Инвертированных шкал в проекте больше нет: последняя,
+# «Диссонанс», ушла 2026-08-29 вместе с темой.
 #
 # ДВЕ ГРУППЫ, и это не оформление, а свойство кода. «Классика»
 # (nlindex.select_light) отключает все МНЕНИЯ о строке — банальность,
-# тавтологию, клише, тему, метр, рифму, слоги, — но подчиняется ВОРОТАМ:
+# тавтологию, клише, метр, рифму, слоги, — но подчиняется ВОРОТАМ:
 # какие книги в пуле, история показов, мат, клаузула. Поэтому профиль в
 # режиме классики хранит только ворота, а мнения в нём не значат ничего.
 
 # ключ → (низ, верх, дефолт, целое?). Единственный источник правды об именах
 # и диапазонах крутилок; фронт зеркалит его в PARAM_DEFAULTS.
 KNOB_GATES = {
-    # 0 — генератор extendo, 1 — корпус nakedlunch. Режет пул, а не ранжир,
-    # поэтому ворота. В КЛАССИКЕ неприменимо: классика по определению нарезка
-    # корпуса, генератора в ней нет — см. KNOB_CLASSIC.
-    "Источники": (0.0, 1.0, 1.0, False),
+    # НАДГРОБИЕ 2026-08-29: «Источники» (0.0, 1.0, 1.0) УДАЛЕНА. Ручка делила
+    # пул между генератором грамматических строк (0) и корпусом nakedlunch (1).
+    # Генератор вырезан целиком — решение владельца: «генератор — вырезать», —
+    # и делить стало нечего: источник остался ровно один, корпус. У ядра это
+    # теперь константа `real_text = 1.0` (см. `knobs_from_profile`).
+    # Старые настройки и профили с этим ключом читаются: `knob_params` берёт
+    # ключи по канону, лишнее в `params` молча отбрасывается.
     # −1 «как есть» (мат живёт в строках как в корпусе) · 0 «без мата» (жёсткий
     # фильтр) · 0..1 доля строк, обязанных быть с матом · 1 «только мат».
     # ДЕФОЛТ −1, и это ПОЧИНКА: интерфейс по умолчанию слал 0, то есть молча
@@ -414,7 +403,12 @@ KNOB_OPINIONS = {
     # убивало живую строку на 1.7 снятых. Полный разбор — надгробие в
     # core/nlindex.py. Профили со старым ключом читаются: `knobs_from_profile`
     # берёт ключи по одному, лишние в `params` не мешают.
-    "Диссонанс": (0.0, 1.0, 0.7, False),        # у ядра cohesion = 1 − это
+    # НАДГРОБИЕ 2026-08-29: «Диссонанс» (0.0, 1.0, 0.7) УДАЛЕНА. У ядра она
+    # была `cohesion = 1 − Диссонанс` и мерила ровно одно — насколько строка
+    # держится ТЕМЫ прогона. Тема вырезана целиком, и мерить стало нечего:
+    # ручка осталась бы ползунком без шкалы. Решение владельца, 2026-08-29:
+    # «тему стоит вырезать как функцию она глупа и сложна», «вырезать всё
+    # вместе с темой». Единственная инвертированная шкала проекта ушла с ней.
     # НАДГРОБИЕ: «Связность» (-1.0, 1.0, -1.0) УДАЛЕНА 2026-08-21. Механизм
     # был ЖИВОЙ (замер подтвердил: косинус соседних строк 0.0 → +0.008,
     # 1.0 → +0.292, P < 0.0001), но управлял тем, что владелец выбрасывает: он
@@ -427,11 +421,13 @@ KNOB_OPINIONS = {
 
 KNOB_SPEC = {**KNOB_GATES, **KNOB_OPINIONS}
 
-# Что ПЕРЕЖИВАЕТ классику. Не «ворота минус что-то», а свой короткий список,
-# потому что «Источники» — ворота, но в классике неприменимы: классика это
-# нарезка корпуса, генератора extendo в ней нет по определению режима
-# (filters._run_classic пришпиливает real_text к 1). Показывать ручку, у
-# которой в этом режиме нет смысла, — то же враньё, что показывать мнения.
+# Что ПЕРЕЖИВАЕТ классику. Свой короткий список, а не «все ворота»: список
+# держится сам по себе с тех пор, как в нём перестала числиться «Источники»
+# (ворота, неприменимые в классике; ручка вырезана 2026-08-29 вместе с
+# генератором). Показывать ручку, у которой в режиме нет смысла, — то же
+# враньё, что показывать мнения. Сейчас список совпадает с KNOB_GATES, и это
+# совпадение, а не правило: заведут ворота, мёртвые в классике, — впишутся
+# сюда, а не вычтутся отсюда.
 KNOB_CLASSIC = ("Мат", "Клаузула", "Внутренняя рифма")
 
 # Режимы отбора. Бинарно (Раунд 50, требование: бинарный переключатель «алгоритм — классика», либо одно, либо другое.). Прежняя
@@ -511,19 +507,24 @@ def knob_profile(raw) -> dict | None:
 
 def knobs_from_profile(profile: dict | None) -> dict:
     """Профиль настроек → knobs ядра. ЕДИНСТВЕННОЕ место перевода интерфейсных
-    координат в ядерные: инверсии («Банальность», «Диссонанс») живут здесь и
-    больше нигде. Раньше тот же перевод дублировался на фронте (genKnobs) и в
-    methods.panels.js (paramKnobs) — два места, где можно перепутать знак, и
-    они уже расходились."""
+    координат в ядерные. Раньше тот же перевод дублировался на фронте
+    (genKnobs) и в methods.panels.js (paramKnobs) — два места, где можно
+    перепутать знак, и они уже расходились.
+
+    Инверсий здесь больше нет: последняя, «Диссонанс» → `1 − cohesion`, ушла
+    2026-08-29 вместе с темой."""
     prof = knob_profile(profile) or {"mode": MODE_ALGO, "params": knob_params(None)}
     p = knob_params(prof["params"])       # классика хранит не всё — добьём дефолтами
     классика = prof["mode"] == MODE_CLASSIC
     return knobs({
-        # В классике источник один — корпус: генератора extendo в режиме нет
-        # по определению. Пришпиливаем здесь, а не полагаемся на дефолт: иначе
-        # «Источники 0 + классика» дала бы пустую выдачу без единого признака,
-        # почему (карта Раунда 50 поймала это как молчаливую ловушку).
-        "real_text": 1.0 if классика else p["Источники"],
+        # ИСТОЧНИК ОДИН — КОРПУС, И ЭТО БОЛЬШЕ НЕ ВЫБОР (2026-08-29).
+        # Здесь стояло `1.0 if классика else p["Источники"]`: в классике
+        # источник пришпиливался, в алгоритме его выбирала ручка. Генератор
+        # грамматических строк вырезан целиком (решение владельца: «генератор —
+        # вырезать»), ручка «Источники» ушла вместе с ним, и обе ветки сошлись
+        # в одну константу. Ключ остаётся: `nl_mix` по нему читает api/server.py
+        # (есть ли что брать из корпуса), а filters.py — доля реального текста.
+        "real_text": 1.0,
         "classic": 1.0 if классика else 0.0,
         "mat_share": p["Мат"],
         "clausula": p["Клаузула"],
@@ -532,7 +533,9 @@ def knobs_from_profile(profile: dict | None) -> dict:
         "rhyme_tiers": p["Ярусы рифмы"],
         # `"melody": p["Мелодичность"]` снято 2026-08-21 вместе с ручкой.
         # `"banality": p["Банальность"]` снято 2026-08-20 вместе с ручкой.
-        "cohesion": 1.0 - p["Диссонанс"],     # у ядра консонанс, у ползунка диссонанс
+        # `"cohesion": 1.0 - p["Диссонанс"]` снято 2026-08-29 вместе с темой.
+        # Сам ключ `cohesion` ядро пока отдаёт константой 0.5 — переходное,
+        # снимет тот, кто режет filters.py (см. надгробие в `knobs`).
         "repeat": p["Повтор"],
         # Полосы редкости — не число, поэтому идут мимо `knob_params`: см.
         # разбор у ключа "rare_word" в knobs() и в `core/редкость.py`.
@@ -555,9 +558,10 @@ def knobs_from_profile(profile: dict | None) -> dict:
 # решение, а не замер.
 #
 # ЧТО ОСТАЛОСЬ И ПОЧЕМУ. `stanza_spec`, `knobs`, `knobs_from_profile`,
-# `knob_profile`, `knob_params`, `theme`/`theme_forced` — это контракт САМОЙ
-# строфы, единственного оставшегося режима, и цепь ими только пользовалась.
-# Их не трогали.
+# `knob_profile`, `knob_params` — это контракт САМОЙ строфы, единственного
+# оставшегося режима, и цепь ими только пользовалась. Их не трогали.
+# (`theme`/`theme_forced` стояли в этом же списке и ушли 2026-08-29 — своё
+# надгробие у них выше по файлу.)
 
 
 

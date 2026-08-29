@@ -26,9 +26,18 @@ from flask import Flask, Response, request, send_from_directory  # noqa: E402
 
 import blacklist      # noqa: E402  (чёрный список слов, Раунд 57)
 import clean          # noqa: E402  (the single validation layer — all input goes through it)
-import embeddings     # noqa: E402  (navec theme relevance, see core/embeddings.py)
+# `embeddings` ОСТАЁТСЯ, ХОТЯ ТЕМЫ БОЛЬШЕ НЕТ (2026-08-29). Он стоял здесь
+# ради тематической близости navec — она вырезана вместе с темой. Но модуль
+# требует `core/wordsuggest.py` (слой «близкое» в попапе по слову: см.
+# `_navec_neighbors`), а попап владелец оставил. Импорт здесь нужен ровно для
+# прогрева строкой ниже — сам роут /api/word/suggest ходит в navec через
+# wordsuggest.
+import embeddings     # noqa: E402  (navec — слой «близкое», см. core/wordsuggest.py)
 import filters        # noqa: E402
-import generate       # noqa: E402
+# НАДГРОБИЕ 2026-08-29: `import generate` СНЯТ. Грамматический генератор строк
+# (core/generate.py) вырезан решением владельца: «генератор — вырезать». Здесь
+# он давал `generate.warm_caches()` на старте и `generate.generate(tags, ...)`
+# в /api/generate; оба ушли, разбор — в надгробиях по месту.
 import nlbridge       # noqa: E402  (read-only bridge into ~/nakedlunch, see core/nlbridge.py)
 import recorder       # noqa: E402  (каталог записей фристайла, см. core/recorder.py)
 import corpus as corpus_mod  # noqa: E402  (RETENTION_PRESETS)
@@ -118,8 +127,11 @@ def _записать_итог(ответ):
 # заметит. Опасна была запись, а не чтение; её и убрали.
 CORPUS = Corpus.load()
 
-# Load the forms table + wordfreq's frequency data once at startup so every
-# /api/generate request is fast from the first one, not just the second.
+# Прогревы, чтобы первый запрос был так же быстр, как второй.
+#
+# НАДГРОБИЕ 2026-08-29: `generate.warm_caches()` СНЯТ. Он грузил таблицу форм
+# и частоты wordfreq ради грамматического генератора; генератор вырезан
+# решением владельца («генератор — вырезать»), и греть стало нечего.
 #
 # «СТАРТ СЕРВЕРА» ПИШЕТ ТОТ, КТО ЕГО СТАРТУЕТ (2026-08-18). Строка стояла
 # ровно здесь, на уровне модуля, — и в журнал пользователя её дописывал ЛЮБОЙ
@@ -129,9 +141,13 @@ CORPUS = Corpus.load()
 # `main()` — там, где действительно открывается порт. Ровно то же правило, что
 # у сайдкара сборщика: «пишет только программа, а не импорт» (см.
 # tools/build_nl_rhyme.py, `_ПИШЕМ_СТАТУС`).
-generate.warm_caches()
 filters.warm_caches()
-embeddings.warm_caches()   # navec (~0.3s) — see core/embeddings.py
+# navec (~0.3 с). ОСТАВЛЕН ПОСЛЕ ВЫРЕЗАНИЯ ТЕМЫ (2026-08-29): грел он не только
+# тематическую близость, но и слой «близкое» попапа по слову
+# (wordsuggest._navec_neighbors), а попап владелец оставил. Без прогрева попап
+# не сломается — `embeddings._ensure_loaded()` дозагрузит лениво, — но первый
+# клик заплатит те же 0.3 с на виду у человека.
+embeddings.warm_caches()
 # СЛОВАРЬ УДАРЕНИЙ БОЛЬШЕ НЕ ГРЕЕТСЯ НА ИМПОРТЕ (2026-08-18) — см.
 # `_прогреть_словарь` ниже, там же цена числом.
 # Карта «текст → номер» колоночного индекса: 9.8с на 2.87 млн записей. Раньше
@@ -1820,16 +1836,12 @@ def api_generate():
     t0 = time.time()
     payload = request.get_json(force=True, silent=True) or {}
 
-    # Theme is optional now (can generate without one)
-    theme_raw = payload.get("theme", "").strip()
-    tags = []
-    forced = set()
-    if theme_raw:
-        try:
-            tags = clean.theme(theme_raw)
-        except clean.BadInput as e:
-            return {"error": str(e)}, 400
-        forced = clean.theme_forced(theme_raw)   # !слово — see PLAN.md 0.2b
+    # НАДГРОБИЕ 2026-08-29: ЗДЕСЬ ПРИНИМАЛАСЬ ТЕМА. Поле `theme` разбиралось
+    # `clean.theme` в список тегов и `clean.theme_forced` в обязательные слова
+    # `!слово`. Тема вырезана целиком по слову владельца («вообще тему стоит
+    # вырезать как функцию, она глупа и сложна в реализации»); поле в теле
+    # запроса просто игнорируется — старый бандл в браузере не падает.
+    theme_raw = ""
 
     # Bias and rhyme from unified mode (new params)
     bias = (payload.get("bias", "") or "").strip()
@@ -1883,14 +1895,13 @@ def api_generate():
     семя = filters.семя_прогона(clean.семя(payload.get("seed")))
 
     lines = []
-    if gen_active:
+    if False:   # НАДГРОБИЕ 2026-08-29: генератор грамматических строк вырезан
         # n scales with the SHORTLIST, not the dictionary (see DECISIONS.md
         # Round 13 — measured: rhyme-pair completion and shortlist fill rate
         # don't improve past a few thousand raw candidates regardless of the
         # 32k-lemma vocab; the old vocab-scaled formula only bought 10-40x
         # slower requests, not better output).
-        n = max(2000, int(knobs["shortlist"]) * 50)
-        lines = generate.generate(tags, n=n, seed=семя)
+        pass
 
     nl_frags = []
     if nl_active:
@@ -1916,7 +1927,7 @@ def api_generate():
     # начала до конца прогона, и перепечка, доехавшая в середину, оставляла
     # запрос со старыми колонками и новой маской чёрного списка — та самая
     # пятисотка. Обязанность, о которой можно забыть здесь, — не починка.
-    result = filters.run(lines, knobs, CORPUS, nl_fragments=nl_frags, rhyme=rhyme, tags=tags, forced=forced,
+    result = filters.run(lines, knobs, CORPUS, nl_fragments=nl_frags, rhyme=rhyme,
                          stanza=stanza, семя=семя)
     _подписать_источники(result.get("shortlist") or [])
     # NOT marked into history here (2026-07-14 — was `CORPUS.mark_seen(...)`
@@ -1970,8 +1981,10 @@ def api_generate():
     # `classic` не крутилка, а РЕЖИМ (алгоритм/классика), и пишется он не
     # вместо остальных, а вдобавок: без него неясно, к какому режиму относятся
     # остальные числа.
-    ui_knobs = {k: knobs[k] for k in ("cohesion", "real_text",
-                                       "rhyme_tiers", "classic",
+    # `cohesion` и `real_text` сняты из журнала 2026-08-29: ручек «Диссонанс» и
+    # «Источники» больше нет, а ядро держит их константами — писать константу в
+    # журнал значит делать вид, что человек ею крутил.
+    ui_knobs = {k: knobs[k] for k in ("rhyme_tiers", "classic",
                                        "mat_share", "clausula", "repeat",
                                        "inner_rhyme")
                 if k in knobs}
@@ -2103,17 +2116,13 @@ def api_history_restore():
     return {"restored": n, "stats": CORPUS.stats()}
 
 
-@app.post("/api/history/restore_theme")
-def api_history_restore_theme():
-    payload = request.get_json(force=True, silent=True) or {}
-    theme = (payload.get("theme") or "").strip()
-    if not theme:
-        return {"error": "пустая тема"}, 400
-    n = CORPUS.restore_by_theme(theme)
-    CORPUS.save()
-    stats_mod.log("restore_theme", theme=theme, count=n)
-    return {"restored": n, "stats": CORPUS.stats()}
-
+# НАДГРОБИЕ 2026-08-29: РОУТ `/api/history/restore_theme` — «вернуть в пул
+# по теме». Он возвращал в выдачу всё показанное, что было выдано под
+# заданной темой. Тема вырезана целиком (решение владельца), поэтому и
+# отбирать по ней нечего. Поштучное «вернуть» из истории живо.
+# `Corpus.restore_by_theme` остаётся в core/corpus.py: поле `tags` у 2 178
+# записей истории никуда не делось, и метод — единственное, чем их можно
+# прочесть, если владелец когда-нибудь спросит «что я делал по слову X».
 
 @app.post("/api/history/clear")
 def api_history_clear():

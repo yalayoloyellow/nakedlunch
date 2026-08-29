@@ -30,7 +30,6 @@ import clean  # noqa: E402
 # `clean.knobs_from_profile`, и здесь он повторён НАРОЧНО — сторож обязан
 # ловить и то, что перевод молча переименовали.
 ЭКРАН_В_ЯДРО = {
-    "Источники": "real_text",
     "Мат": "mat_share",
     "Клаузула": "clausula",
     "Ярусы рифмы": "rhyme_tiers",
@@ -38,7 +37,6 @@ import clean  # noqa: E402
     # «Банальность» → "banality" УДАЛЕНА 2026-08-20 вместе с ручкой (надгробие
     # в core/nlindex.py). Карта обязана сойтись с `clean.KNOB_SPEC` — этот
     # сторож и ловит, если ключ забудут снять на одной из сторон.
-    "Диссонанс": "cohesion",        # у ядра консонанс, у ползунка диссонанс
     # «Связность» → "flow" УДАЛЕНА 2026-08-21 (надгробие в filters.py).
     "Повтор": "repeat",
     # «Внутренняя рифма» → inner_rhyme (2026-08-27) — ворота, как клаузула.
@@ -71,18 +69,17 @@ def запись_прогона(tmp_path, monkeypatch):
     Проверять сам словарь `ui_knobs` было бы проверкой двойника: он собирается
     внутри роута, и промах был именно там. Поэтому зовём роут и читаем, что
     он положил в журнал."""
+    # `generate` удалён 2026-08-29 вместе с грамматическим генератором.
     import embeddings
     import filters
-    import generate
-    было = (filters.warm_caches, generate.warm_caches, embeddings.warm_caches)
+    было = (filters.warm_caches, embeddings.warm_caches)
     filters.warm_caches = lambda: None
-    generate.warm_caches = lambda: None
     embeddings.warm_caches = lambda: None
     sys.path.insert(0, str(КОРЕНЬ / "api"))
     try:
         import server
     finally:
-        (filters.warm_caches, generate.warm_caches, embeddings.warm_caches) = было
+        (filters.warm_caches, embeddings.warm_caches) = было
 
     import stats as stats_mod
     monkeypatch.setattr(stats_mod, "DATA_DIR", tmp_path)

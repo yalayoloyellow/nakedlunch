@@ -196,8 +196,13 @@ from pathlib import Path
 # относятся (тот же приём, что в test_живость_сборки.py). ПУСТОЙ кэш рифм —
 # это не «не совпало», а нормальный боевой режим: filters тогда берёт индекс
 # как есть (см. `_index_for_current_cache`).
-import embeddings, filters, generate, wordsuggest
-for м in (embeddings, filters, generate, wordsuggest):
+#
+# `generate` из списка убран 2026-08-29: грамматический генератор вырезан
+# целиком, файла core/generate.py больше нет, и стенд падал на импорте ещё до
+# первого запроса — то есть шесть сторожей этого файла молчали не потому, что
+# всё в порядке. Сторожат они перепечку индекса, а не источник строк.
+import embeddings, filters, wordsuggest
+for м in (embeddings, filters, wordsuggest):
     м.warm_caches = lambda: None
 import nlindex, server
 
@@ -558,20 +563,22 @@ print("ВЕРДИКТ", 1 if filters._index_for_current_cache() is not None else
 @pytest.fixture(scope="module")
 def сервер():
     """`api/server.py` с заглушенными тяжёлыми прогревами — судья
-    устарелости чистая функция, ни корпус, ни навек ему не нужны."""
+    устарелости чистая функция, ни корпус, ни навек ему не нужны.
+
+    `generate` из списка убран 2026-08-29 вместе с самим модулем (генератор
+    грамматических строк вырезан): фикстура падала на импорте, и оба теста про
+    судью устарелости не выполнялись вовсе."""
     import embeddings
     import filters
-    import generate
     import wordsuggest
-    было = (filters.warm_caches, generate.warm_caches, embeddings.warm_caches,
-            wordsuggest.warm_caches)
-    for м in (filters, generate, embeddings, wordsuggest):
+    было = (filters.warm_caches, embeddings.warm_caches, wordsuggest.warm_caches)
+    for м in (filters, embeddings, wordsuggest):
         м.warm_caches = lambda: None
     sys.path.insert(0, str(КОРЕНЬ / "api"))
     try:
         import server
     finally:
-        (filters.warm_caches, generate.warm_caches, embeddings.warm_caches,
+        (filters.warm_caches, embeddings.warm_caches,
          wordsuggest.warm_caches) = было
     return server
 

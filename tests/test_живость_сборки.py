@@ -31,7 +31,18 @@ import pytest
 
 КОРЕНЬ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(КОРЕНЬ / "core"))
-sys.path.insert(0, str(КОРЕНЬ / "tools"))
+# `tools` — В ХВОСТ, А НЕ В ГОЛОВУ (починка 2026-08-29). Здесь стоял второй
+# `insert(0, ...)`, и он ставил `tools/` ВПЕРЕДИ `core/` на весь прогон. Имена
+# там пересекаются: `tools/редкость.py` — это прогон-разглядыватель, а формула
+# и `разобрать_полосы` живут в `core/редкость.py`. Кто импортировал `редкость`
+# ПОСЛЕ этой строки, получал инструмент вместо ядра — и падал не здесь, а у
+# соседа: `AttributeError: module 'редкость' has no attribute 'разобрать_полосы'`
+# в `filters._run` (поймано на tests/test_classic_binary.py, который сам ни в
+# чём не виноват и в одиночку зелен). Мина заряжалась порядком сбора файлов,
+# поэтому в одном прогоне её было видно, а в другом нет — худший сорт.
+# `append` даёт этому файлу его `build_nl_rhyme` (он есть только в tools) и
+# не отбирает у ядра его собственные имена.
+sys.path.append(str(КОРЕНЬ / "tools"))
 
 import nlindex
 
@@ -51,19 +62,19 @@ def сервер():
     # чего больше не происходит. Оставить её значило бы уверять следующего
     # читателя, что `open_store` зовётся на импорте; сторож этого обратного
     # утверждения — `test_boot.py::test_korpus_ne_gruzitsya_na_urovne_modulya`.
+    # `generate` из этого списка ушёл 2026-08-29 вместе с самим файлом
+    # core/generate.py: глушить прогрев модуля, которого нет, — это
+    # ModuleNotFoundError на импорте фикстуры, а не защита.
     import embeddings
     import filters
-    import generate
-    было = (filters.warm_caches, generate.warm_caches, embeddings.warm_caches)
+    было = (filters.warm_caches, embeddings.warm_caches)
     filters.warm_caches = lambda: None
-    generate.warm_caches = lambda: None
     embeddings.warm_caches = lambda: None
     sys.path.insert(0, str(КОРЕНЬ / "api"))
     try:
         import server
     finally:
-        (filters.warm_caches, generate.warm_caches,
-         embeddings.warm_caches) = было
+        (filters.warm_caches, embeddings.warm_caches) = было
     return server
 
 
