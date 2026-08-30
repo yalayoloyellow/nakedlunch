@@ -312,6 +312,14 @@ def build() -> int:
     lem_off = np.zeros(n + 1, dtype=np.int64)
     tok_vocab: dict[str, int] = {}
     tok_pairs: list[tuple[int, int]] = []
+    # РИФМО-КЛЮЧИ ВСЕХ СЛОВ СТРОКИ (2026-08-30) — переменной длины, тем же
+    # приёмом, что леммы: плоский массив плюс смещения на строку. Рядом с
+    # каждым ключом его ПОЗИЦИЯ ОТ КОНЦА в словах (uint8: дальше 255 слов от
+    # конца рифма не слышна ни при каком воображении, а байт против int32 —
+    # это 8 МБ против 32).
+    wk_flat: list[int] = []
+    wk_pos_flat: list[int] = []
+    wk_off = np.zeros(n + 1, dtype=np.int64)
     pos = 0
 
     # КОЛОНКА ИСТОЧНИКА (Раунд 57). Индекс не знал, из какой книги строка —
@@ -375,6 +383,18 @@ def build() -> int:
                 lem_vocab[w] = lid
             lem_flat.append(lid)
         lem_off[i + 1] = len(lem_flat)
+        # ключи слов идут в ТОТ ЖЕ словарь `keys`, что и рифмо-хвост строки:
+        # ключ «олу» у последнего слова одной строки и у второго с конца
+        # другой — один и тот же ключ, и разводить их по двум словарям значило
+        # бы держать две правды об одном звуке.
+        for w, поз in sorted((e.get("wk") or {}).items(), key=lambda x: x[1]):
+            kid = keys.get(w)
+            if kid is None:
+                kid = len(keys)
+                keys[w] = kid
+            wk_flat.append(kid)
+            wk_pos_flat.append(min(255, int(поз)))
+        wk_off[i + 1] = len(wk_flat)
         for w in (e.get("tokens") or []):
             tid = tok_vocab.get(w)
             if tid is None:
@@ -392,6 +412,9 @@ def build() -> int:
     t = time.time()
     lem_ids = np.array(lem_flat, dtype=np.int32)
     del lem_flat
+    wk_ids = np.array(wk_flat, dtype=np.int32)
+    wk_pos = np.array(wk_pos_flat, dtype=np.uint8)
+    del wk_flat, wk_pos_flat
     lem_list = [""] * len(lem_vocab)
     lem2navec = np.full(len(lem_vocab), -1, dtype=np.int32)
     for w, i2 in lem_vocab.items():
@@ -434,6 +457,7 @@ def build() -> int:
     for name, arr in (("banal", banal), ("taut", taut), ("bind", bind), ("mat", mat),
                       ("syl", syl), ("key_id", key_id), ("span_a", span_a), ("span_b", span_b),
                       ("lem_ids", lem_ids), ("lem_off", lem_off), ("lem2navec", lem2navec),
+                      ("wk_ids", wk_ids), ("wk_pos", wk_pos), ("wk_off", wk_off),
                       ("tokpost", tokpost), ("tokoff", tokoff), ("text_off", text_off),
                       ("src", src), ("content", content),
                       ("rare_word", rare_word), ("rare_pair", rare_pair),
