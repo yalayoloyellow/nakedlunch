@@ -1191,7 +1191,9 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             # прежнее поведение (рифмует последнее слово), и тогда ось не
             # разворачивает пул в пары «строка+ключ» вовсе.
             позиции_рифмы=(0 if int(knobs.get("rhyme_pos", 1) or 1) == 1
-                           else int(knobs["rhyme_pos"])))
+                           else int(knobs["rhyme_pos"])),
+            доли_позиций=_доли.разобрать(knobs.get("pos_shares"),
+                                         int(knobs.get("rhyme_pos", 1) or 1) & 7))
         nl_survivors_full = nl_survivors      # резервы уже внутри; ниже они не досчитываются
     else:
         # ИНДЕКСА НЕТ — ЧЕСТНЫЙ СВЕТЛЫЙ ПУТЬ, А НЕ ВТОРОЙ ДВИЖОК (2026-08-29).

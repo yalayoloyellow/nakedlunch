@@ -306,6 +306,7 @@ def knobs(raw: dict | None) -> dict:
         # Пустая строка значит «поровну по маске», то есть прежнее поведение.
         "rhyme_pos": max(1, min(7, int(float(raw.get("rhyme_pos", 1) or 1)))),
         "clausula_shares": str(raw.get("clausula_shares") or "")[:200],
+        "pos_shares": str(raw.get("pos_shares") or "")[:200],
         "rhyme_shares": str(raw.get("rhyme_shares") or "")[:200],
         "rare_pair": str(raw.get("rare_pair") or "")[:200],
         # НАДГРОБИЕ: `flow` (связность соседних строк, Раунд 44) УДАЛЁН
@@ -521,7 +522,8 @@ def knob_profile(raw) -> dict | None:
             "полосы": {"слова": str(полосы.get("слова") or "")[:200],
                        "пара": str(полосы.get("пара") or "")[:200]},
             "доли": {"клаузула": str(доли_.get("клаузула") or "")[:200],
-                     "рифма": str(доли_.get("рифма") or "")[:200]}}
+                     "рифма": str(доли_.get("рифма") or "")[:200],
+                     "позиция": str(доли_.get("позиция") or "")[:200]}}
 
 
 def knobs_from_profile(profile: dict | None) -> dict:
@@ -563,6 +565,7 @@ def knobs_from_profile(profile: dict | None) -> dict:
         "rare_pair": (prof.get("полосы") or {}).get("пара", ""),
         # доли — тем же путём, что полосы: строкой, разбирает `core/доли.py`
         "clausula_shares": (prof.get("доли") or {}).get("клаузула", ""),
+        "pos_shares": (prof.get("доли") or {}).get("позиция", ""),
         "rhyme_shares": (prof.get("доли") or {}).get("рифма", ""),
     })
 
