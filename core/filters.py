@@ -9,10 +9,14 @@
 #
 # The remaining knobs (clean.knobs) parameterise everything here — nothing is a
 # hard constant (that's the product, not cosmetics):
-#   meter     — metric strictness (formal-validity gate)
-#   banal     — banality cutoff
-#   explore   — share of the shortlist reserved for deliberately-novel lines
 #   shortlist — how many lines to surface
+#   mat_share / clausula / rhyme_tiers / rhyme_pos / inner_rhyme / echo — ворота
+#   rare_word / rare_pair / dens — полосы шкал (строкой, разбор в core/редкость.py)
+#   *_shares — доли сортов внутри масок (строкой, разбор в core/доли.py)
+#
+# ЭТОТ СПИСОК ПЕРЕЧИСЛЯЛ meter, banal и explore — ключи, которых `clean.knobs`
+# не отдаёт ни одного: «Мелодичность» и «Банальность» вырезаны 2026-08-20/21,
+# `explore` снят 2026-08-30. Поправлено в тот день, когда обнаружилось.
 
 from __future__ import annotations
 
@@ -334,7 +338,7 @@ _НЕ_СЧИТАН = object()
 
 
 def _nl_scored(fragments, corpus, hidden, tags=None, light=False,
-               theme_sims=None, literal_cap=None, forced=None, cohesion=0.5,
+               theme_sims=None, literal_cap=None, forced=None,
                no_mat=False, only_mat=False, clausula=0, внутр_рифма=0,
                гсч=random):
     """Score raw nakedlunch fragments (real cut-up text, no Word/stress
@@ -767,7 +771,9 @@ def _classic_pool(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clau
             no_mat=no_mat, only_mat=only_mat, clausula=clausula, cap=cap, seed=семя,
             редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
             редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")),
-            внутр_рифма=int(knobs.get("inner_rhyme", 0) or 0))
+            внутр_рифма=int(knobs.get("inner_rhyme", 0) or 0),
+            перекличка=int(knobs.get("echo", 0) or 0),
+            плотность=_редкость.разобрать_полосы(knobs.get("dens")))
         return pool, survived, ступени
     # Позиционный `9.0` (потолок банальности «пропускать всё») снят 2026-08-20:
     # ворота удалены целиком, а на «светлом» пути их и так не было.
@@ -1181,6 +1187,10 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
             редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")),
             внутр_рифма=внутр_рифма,
+            # ЗВУКОПИСЬ: ворота переклички и полосы плотности — тем же путём,
+            # что редкость. Полосы разбираются здесь: один разбор на всех.
+            перекличка=int(knobs.get("echo", 0) or 0),
+            плотность=_редкость.разобрать_полосы(knobs.get("dens")),
             ярусы_рифмы=int(knobs["rhyme_tiers"]),
             # ДОЛИ КОНЦОВОК — разбираются здесь, как и полосы редкости: один
             # разбор на всех вызывающих (маска нужна разборщику, чтобы
@@ -1193,7 +1203,12 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
             позиции_рифмы=(0 if int(knobs.get("rhyme_pos", 1) or 1) == 1
                            else int(knobs["rhyme_pos"])),
             доли_позиций=_доли.разобрать(knobs.get("pos_shares"),
-                                         int(knobs.get("rhyme_pos", 1) or 1) & 7))
+                                         int(knobs.get("rhyme_pos", 1) or 1) & 7),
+            # ДОЛИ ЯРУСОВ — третья ось долей: «какими ярусами рифмуем и в
+            # какой пропорции». Маска ярусов и здесь главнее: доля не может
+            # воскресить ярус, погашенный чипом (см. nlindex._годные_к).
+            доли_ярусов=_доли.разобрать(knobs.get("rhyme_shares"),
+                                        int(knobs["rhyme_tiers"]) & 15))
         nl_survivors_full = nl_survivors      # резервы уже внутри; ниже они не досчитываются
     else:
         # ИНДЕКСА НЕТ — ЧЕСТНЫЙ СВЕТЛЫЙ ПУТЬ, А НЕ ВТОРОЙ ДВИЖОК (2026-08-29).

@@ -224,3 +224,38 @@ def test_polki_hodyat_cherez_sklad():
         assert "PROFILES_PATH.write_text" not in текст, (
             f"{имя} пишет полку сама, минуя склад — три правила надёжности обойдены")
         assert "склад.писать" in текст, f"{имя} не пишет через склад вовсе"
+
+
+# ОСИ, КОТОРЫЕ НЕ ЧИСЛА (2026-08-30) — полосы шкал и доли сортов.
+#
+# ЛОВУШКА, НА КОТОРОЙ ПРОЕКТ ГОРЕЛ ТРИЖДЫ: перечень этих осей лежал в трёх
+# местах сразу (clean.knob_profile, core/settings.py, роут /api/settings), и
+# каждый новый список молча съедал ось, которую в него забыли вписать. Так
+# терялись полосы редкости (2026-08-26) и полоса плотности звука (сегодня, и
+# поймана она живым кругом настроек, а не тестом). Теперь список один —
+# `clean.ОСИ_ПОЛОС` / `clean.ОСИ_ДОЛЕЙ`, — и сторож ниже проверяет, что круг
+# «записал → прочитал» проходят ВСЕ оси канона, а не те, что кто-то помнил.
+
+def test_kazhdaya_os_polos_perezhivaet_krug(файл):
+    полосы = {ось: f"{i}-{i + 5}" for i, ось in enumerate(clean.ОСИ_ПОЛОС, start=10)}
+    settings_mod.write({"nl_params": {"mode": clean.MODE_ALGO, "params": {},
+                                      "полосы": полосы, "доли": {}}})
+    прочли = settings_mod.read()["nl_params"]["полосы"]
+    assert прочли == полосы, f"круг настроек потерял оси: {set(полосы) - set(прочли)}"
+
+
+def test_kazhdaya_os_doley_perezhivaet_krug(файл):
+    доли = {ось: f"1:{20 + i}" for i, ось in enumerate(clean.ОСИ_ДОЛЕЙ)}
+    settings_mod.write({"nl_params": {"mode": clean.MODE_ALGO, "params": {},
+                                      "полосы": {}, "доли": доли}})
+    прочли = settings_mod.read()["nl_params"]["доли"]
+    assert прочли == доли, f"круг настроек потерял оси: {set(доли) - set(прочли)}"
+
+
+def test_profil_i_nastroyki_znayut_odni_i_te_zhe_osi():
+    """Именованный профиль и последние положения панели обязаны сходиться в
+    осях: разойдутся — и профиль будет терять то, что панель помнит."""
+    проф = clean.knob_profile({"name": "x", "mode": clean.MODE_ALGO, "params": {},
+                              "полосы": {}, "доли": {}})
+    assert set(проф["полосы"]) == set(clean.ОСИ_ПОЛОС)
+    assert set(проф["доли"]) == set(clean.ОСИ_ДОЛЕЙ)

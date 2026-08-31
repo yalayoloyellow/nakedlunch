@@ -433,12 +433,9 @@ export const fsMethods = {
       mode: проф.mode, params: проф.params,
       полосы: проф.полосы || {},
     };
-    // тема — СВОЯ, из поля «темы сцены» (Раунд 57). Здесь стоял `_lastKey` —
-    // ключ последней генерации в редакторе, и объяснялось это как «фристайл
-    // продолжает начатую мысль». На деле означало «ходит по чужой теме и
-    // меняется, когда пользователь работает с текстом».
-    var theme = this.fsТема();
-    if (theme) payload.theme = theme;
+    // НАДГРОБИЕ 2026-08-30: `payload.theme` из поля «темы сцены». Тема
+    // вырезана 2026-08-29, сервер это поле игнорирует — слать его значило
+    // держать на экране ручку, которая ничего не делает.
     var spec = проф.spec;
     if (spec) payload.stanza = spec;
     var res = await api.generate(payload);
@@ -490,7 +487,10 @@ export const fsMethods = {
         // пополнялся, строка не менялась, объяснения не было.
         if (!self._fsEmptyFlashed) {
           self._fsEmptyFlashed = true;
-          self.flash(self.почемуПусто ? self.почемуПусто(self._fsLastRes) : 'генератор не вернул строк');
+          // причина пустоты — ПО СВОИМ настройкам сцены, а не по редакторским
+          self.flash(self.почемуПусто
+            ? self.почемуПусто(self._fsLastRes, self.fsНастройки())
+            : 'сервер не вернул строк');
         }
         return;
       }
@@ -641,7 +641,7 @@ export const fsMethods = {
   // наоборот, выбрасывал буфер, набранный не по ней.
   fsGenKey() {
     var проф = this.fsНастройки();
-    return JSON.stringify([this.knobsOfProfile(проф), проф.spec, this.fsТема(),
+    return JSON.stringify([this.knobsOfProfile(проф), проф.spec,
                            проф.полосы || {}]);
   },
 
@@ -712,7 +712,7 @@ export const fsMethods = {
         fsParams: st.fsParams == null ? JSON.parse(JSON.stringify(st.params || {})) : st.fsParams,
         fsSpec: st.fsSpec === null ? (this.curSpec ? this.curSpec() : null) : st.fsSpec,
         fsПолосы: st.fsПолосы == null
-          ? Object.assign({ слова: '', пара: '' }, st.полосы || {}) : st.fsПолосы,
+          ? Object.assign({ слова: '', пара: '', плотность: '' }, st.полосы || {}) : st.fsПолосы,
       };
       // правим состояние молча: это не выбор пользователя, а первое отделение
       this.setState(своё);
@@ -743,17 +743,15 @@ export const fsMethods = {
   /** Полосы редкости сцены — свои, как и всё остальное в ней. */
   fsSetПолосы(ось, строка) {
     var проф = this.fsНастройки();
-    var п = Object.assign({ слова: '', пара: '' }, проф.полосы);
+    var п = Object.assign({ слова: '', пара: '', плотность: '' }, проф.полосы);
     п[ось] = строка;
     this._fsBuf = []; this._fsQ = [];
     this.setState({ fsПолосы: п });
   },
   // Тема сцены — своё поле, а не ключ последней генерации в редакторе.
-  fsТема() {
-    return String(this.state.fsTheme || '')
-      .split(',').map(function (s) { return s.replace(/\s+/g, ' ').trim(); })
-      .filter(Boolean).join(', ');
-  },
+  // НАДГРОБИЕ 2026-08-30: `fsТема` — разбор поля «темы сцены» в список тегов.
+  // Ушла вместе с самим полем и ключом `theme` в запросе: темы в проекте нет
+  // с 2026-08-29, и разбирать было нечего.
   // Явный перенос настроек строфы из редактора — по кнопке, а не молча.
   fsВзятьИзРедактора() {
     var st = this.state;
@@ -761,7 +759,7 @@ export const fsMethods = {
       fsKnobMode: st.knobMode || null,
       fsParams: JSON.parse(JSON.stringify(st.params || {})),
       fsSpec: this.curSpec ? this.curSpec() : null,
-      fsПолосы: Object.assign({ слова: '', пара: '' }, st.полосы || {}),
+      fsПолосы: Object.assign({ слова: '', пара: '', плотность: '' }, st.полосы || {}),
     });
     this._fsBuf = []; this._fsQ = [];
     this.flash('настройки строфы перенесены в сцену');

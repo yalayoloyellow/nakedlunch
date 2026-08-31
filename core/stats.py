@@ -350,6 +350,11 @@ _CSV_FIELDS = [
     "gen_used", "nl_used", "nl_classic_used", "latency_ms",
     "melody", "cohesion", "banality", "real_text", "rhyme_precision", "rhyme_tiers", "classic",
     "mat_share", "clausula", "repeat", "rare_word", "rare_pair", "inner_rhyme",
+    # 2026-08-30: журнал начал писать эти ручки, а выгрузка их молча теряла —
+    # то есть колонки в CSV были у мёртвых ручек и не было у живых. Списка два
+    # (заголовок и копирование ниже), и разойтись им нельзя: ключ, попавший в
+    # один и не попавший в другой, пропадает без следа.
+    "rhyme_pos", "echo", "dens", "clausula_shares", "pos_shares", "rhyme_shares",
     "text", "template", "lemmas", "count", "days",
 ]
 
@@ -367,7 +372,8 @@ def export_csv() -> str:
         knobs = row.pop("knobs", None) or {}
         for k in ("melody", "cohesion", "banality", "real_text", "rhyme_precision", "rhyme_tiers",
                   "classic", "mat_share", "clausula", "repeat", "rare_word",
-                  "rare_pair", "inner_rhyme"):
+                  "rare_pair", "inner_rhyme", "rhyme_pos", "echo", "dens",
+                  "clausula_shares", "pos_shares", "rhyme_shares"):
             if k in knobs:
                 row[k] = knobs[k]
         if isinstance(row.get("lemmas"), list):

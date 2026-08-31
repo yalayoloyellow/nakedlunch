@@ -38,8 +38,18 @@ import { s, hov } from './style.js';
 import { icoBtn } from './icons.js';
 import { pickStyle, PARAM_DEFAULTS } from './methods.panels.js';
 import { ВОРОТА, МНЕНИЯ, В_КЛАССИКЕ, ШКАЛЫ, подпись, имяКрутилки } from './methods.shelves.js';
+
+// Ручки, ходящие по ЦЕЛЫМ. Маски — до своего потолка (клаузула 1..7, ярусы
+// рифмы 1..15, позиция 1..7), переключатели — 0/1. Канон тот же, что у
+// `core/clean.py: KNOB_SPEC`; здесь он только для ползунка фристайла.
+// Карта индексируется ЭКРАННОЙ подписью (`p.name` приходит из `имяКрутилки`),
+// поэтому ключ у ярусов один и он экранный — «Рифма». Ключа «Ярусы рифмы»
+// здесь стоять не может: под этим именем ручка на экран не попадает, и он был
+// бы мёртвым (снят 2026-08-30, в тот же день, когда и заведён).
+var ЦЕЛЫЕ_МАСКИ = { 'Клаузула': '7', 'Рифма': '15', 'Позиция рифмы': '7' };
+var ЦЕЛЫЕ_ВОРОТА = { 'Внутренняя рифма': 1, 'Перекличка': 1, 'Повтор': 1 };
 import { BLENDS, BLEND_DEF } from './methods.fsglue.js';
-import { полосаРедкости } from './render.gen.jsx';
+import { полосаРедкости, безЗвукописи } from './render.gen.jsx';
 
 // ---- рецепты стилей (renderVals 3395..3607) ----
 const ROW = 'display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 12px; padding: 9px 0; min-height: 34px;';
@@ -621,14 +631,13 @@ export function renderFsLinePanel(c) {
 
   return (
     <div data-pa="down" data-po={st.closing === 'fsline' ? '1' : null} onInput={(e) => call(c, 'onCardInput', e)} style={s(fsPanel(st.fsLineOpen))}>
-      {/* СВОЯ ТЕМА У СЦЕНЫ (Раунд 57). Раньше её не было вовсе: фристайл брал
-          `_lastKey` — ключ последней генерации в редакторе, то есть ходил по
-          чужой теме и молча менялся, когда пользователь работал с текстом. */}
-      <div style={s(CAP)}>темы сцены</div>
-      <input type="text" value={st.fsTheme || ''} placeholder="через запятую"
-        onChange={(e) => c.setState({ fsTheme: e.target.value }, function () { c._fsBuf = []; c._fsQ = []; })}
-        style={s('width: 100%; background: none; border: none; border-bottom: 1px solid var(--border-subtle);'
-          + ' color: var(--ink); font-family: inherit; font-size: 11px; padding: 3px 0; margin-bottom: 4px; outline: none;')} />
+      {/* НАДГРОБИЕ 2026-08-30: ПОЛЕ «ТЕМЫ СЦЕНЫ». Заведено Раундом 57, чтобы
+          у фристайла была своя тема, а не ключ последней генерации в
+          редакторе. Тема вырезана из проекта целиком 2026-08-29 (решение
+          владельца), сервер поле `theme` в запросе игнорирует — и поле на
+          экране осталось стоять: человек печатал в него слова, а выдача не
+          менялась. Ручка без читателя в ядре — контрол-обманка, худший класс
+          бага в этом проекте; поймано разбором правок, а не жалобой. */}
       <button onClick={() => call(c, 'fsВзятьИзРедактора')}
         style={s('appearance: none; border: none; background: none; color: var(--muted-soft);'
           + ' font-family: inherit; font-size: 9px; padding: 2px 0; margin-bottom: 12px; cursor: pointer;')}>
@@ -661,10 +670,17 @@ export function renderFsLinePanel(c) {
                   {/* Маски (клаузула 1..7, рифма 1..15) ходят ползунком по
                       целым: каждое положение — сочетание полос, подпись
                       справа называет его словами (имяМаскиКлаузул/Рифмы). */}
+                  {/* ЦЕЛЫЕ РУЧКИ ХОДЯТ ПО ЦЕЛЫМ, И СПИСОК ЗДЕСЬ ОБЩИЙ (2026-08-30).
+                      Раньше он перечислялся трижды подряд и уже разошёлся:
+                      «Позиция рифмы» — маска 1..7, а ползунок кончался на 1,
+                      то есть внутреннюю и начальную рифму во фристайле выбрать
+                      было нечем. Ручка, которая на экране есть, а до значения
+                      не доходит, — контрол-обманка, худший класс бага в этом
+                      проекте. Один список против трёх. */}
                   <input type="range"
-                         min={p.name === 'Мат' ? '-1' : (p.name === 'Клаузула' || p.name === 'Рифма' ? '1' : '0')}
-                         max={p.name === 'Клаузула' ? '7' : (p.name === 'Рифма' ? '15' : '1')}
-                         step={p.name === 'Клаузула' || p.name === 'Рифма' || p.name === 'Внутренняя рифма' ? '1' : '0.05'}
+                         min={p.name === 'Мат' ? '-1' : (ЦЕЛЫЕ_МАСКИ[p.name] ? '1' : '0')}
+                         max={ЦЕЛЫЕ_МАСКИ[p.name] || '1'}
+                         step={ЦЕЛЫЕ_МАСКИ[p.name] || ЦЕЛЫЕ_ВОРОТА[p.name] ? '1' : '0.05'}
                          value={p.val} disabled={p.dead} onChange={p.onIn} />
                   <span style={s(VAL)}>{p.show}</span>
                 </span>
@@ -680,6 +696,10 @@ export function renderFsLinePanel(c) {
                         function (ось, строка) { call(c, 'fsSetПолосы', ось, строка); })}
         {полосаРедкости(c, 'пара', 'редкость сочетаний', 'как они стоят рядом',
                         ((st.fsПолосы || st.полосы || {}).пара),
+                        function (ось, строка) { call(c, 'fsSetПолосы', ось, строка); })}
+        {полосаРедкости(c, 'плотность', 'плотность звука',
+                        безЗвукописи(st) || 'один согласный на всю строку',
+                        ((st.fsПолосы || st.полосы || {}).плотность),
                         function (ось, строка) { call(c, 'fsSetПолосы', ось, строка); })}
         {stanzaNote
           ? <p style={s('margin: 15px 0 0; font-size: 9px; line-height: 1.6; color: var(--muted-soft); white-space: pre-line;')}>{stanzaNote}</p>

@@ -1,0 +1,111 @@
+# ЗВУКОПИСЬ В ОТБОРЕ: ворота переклички и полосы плотности (2026-08-30).
+#
+# Измеритель проверен отдельно (test_звукопись.py). Здесь — стык: ворота
+# действительно сужают пул, полосы работают как у редкости, а индекс БЕЗ этих
+# колонок не врёт и не режет.
+#
+# КОЛОНКИ ПОДКЛАДЫВАЮТСЯ ЖИВОМУ ИНДЕКСУ, а не строится игрушечный: ворота
+# проходят через чёрный список и отпечаток корпуса, которым нужен настоящий
+# индекс целиком. Подложка снимается в `finally` — иначе она утекла бы в
+# соседние тесты через общий кэш загрузчика.
+import sys
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "core"))
+import nlindex  # noqa: E402
+import звукопись as з  # noqa: E402
+
+
+@pytest.fixture()
+def стенд():
+    idx = nlindex.load()
+    if idx is None:
+        pytest.skip("нет живого индекса")
+    было = (getattr(idx, "echo", None), getattr(idx, "dens", None))
+    порог = int(з.БАЛЛ_МИН * 10)
+    n = idx.n
+    # перекличка: у каждой пятой строки — «есть», у остальных ноль
+    echo = np.zeros(n, dtype=np.uint8)
+    echo[::5] = порог + 3
+    # плотность: ровный процентиль 0..99 по кругу, у каждой седьмой шкалы нет
+    dens = (np.arange(n) % 100).astype(np.float32)
+    dens[::7] = -1.0
+    idx.echo, idx.dens = echo, dens
+    try:
+        yield idx, echo, dens
+    finally:
+        idx.echo, idx.dens = было
+        nlindex.забыть_таблицу()
+
+
+def test_ворота_переклички_сужают_пул(стенд):
+    idx, echo, _ = стенд
+    без = idx.gate_mask(False)
+    с = idx.gate_mask(False, перекличка=1)
+    assert 0 < с.sum() < без.sum()
+    # ровно те строки, у которых балл дотянул до порога, и ни одной сверх
+    assert not (с & (echo < з.БАЛЛ_МИН * 10)).any()
+
+
+def test_полосы_плотности_как_у_редкости(стенд):
+    idx, _, dens = стенд
+    верх = idx.gate_mask(False, плотность=[(90, 100)])
+    низ = idx.gate_mask(False, плотность=[(0, 10)])
+    две = idx.gate_mask(False, плотность=[(0, 10), (90, 100)])
+    assert верх.sum() and низ.sum()
+    assert not (верх & низ).any(), "полосы не должны пересекаться"
+    assert две.sum() == верх.sum() + низ.sum(), "несмежные полосы обязаны складываться"
+    # строка без шкалы (−1) не попадает даже в полосу «вся шкала» — как у редкости
+    любая = idx.gate_mask(False, плотность=[(0, 100)])
+    assert not любая[np.flatnonzero(dens < 0)].any()
+
+
+def test_классика_подчиняется_воротам_звукописи(стенд):
+    """Ручка, которую экран показывает в классике, обязана в классике и
+    действовать: иначе это контрол-обманка (то же правило, что у мата)."""
+    idx, _, _ = стенд
+    пул, нет = np.ones(idx.n, dtype=bool), np.zeros(idx.n, dtype=bool)
+    _, всех, _ = nlindex.select_light(idx, pool_mask=пул, hidden_mask=нет,
+                                      no_mat=False, only_mat=False, clausula=0,
+                                      cap=3, seed=1)
+    _, узко, _ = nlindex.select_light(idx, pool_mask=пул, hidden_mask=нет,
+                                      no_mat=False, only_mat=False, clausula=0,
+                                      cap=3, seed=1, перекличка=1)
+    assert 0 < узко < всех
+
+
+def test_воронка_называет_ступень(стенд):
+    """Цена ручки — числом и по имени: воронка обязана назвать, КТО закрыл
+    ворота, иначе «дожило» безымянно."""
+    idx, _, _ = стенд
+    д = nlindex.воронка(перекличка=1, плотность=[(90, 100)])
+    имена = [ш["шаг"] for ш in д["ступени"]]
+    assert "перекличка согласных" in имена
+    assert any(ш.startswith("плотность звука") for ш in имена)
+
+
+def test_индекс_без_колонок_не_врёт_а_молчит():
+    """Ручка на экране есть всегда, колонки — только после перепечки.
+
+    Пока колонок нет, ворота обязаны НИЧЕГО не отбирать (иначе пустая выдача
+    без причины), а форма пула — сказать об этом прямо: панель по этому полю
+    подписывает ручку «индекс без колонок звукописи»."""
+    idx = nlindex.load()
+    if idx is None:
+        pytest.skip("нет живого индекса")
+    было = (getattr(idx, "echo", None), getattr(idx, "dens", None))
+    idx.echo = idx.dens = None
+    try:
+        nlindex.забыть_таблицу()
+        без = idx.gate_mask(False)
+        с = idx.gate_mask(False, перекличка=1, плотность=[(90, 100)])
+        assert int(с.sum()) == int(без.sum()), "без колонок ворота не смеют резать пул"
+        форма = nlindex.форма_пула(idx, pool_mask=np.ones(idx.n, dtype=bool),
+                                   hidden_mask=np.zeros(idx.n, dtype=bool))
+        assert форма["звукопись"] is False
+    finally:
+        idx.echo, idx.dens = было
+        nlindex.забыть_таблицу()

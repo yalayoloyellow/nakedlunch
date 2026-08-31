@@ -1797,6 +1797,8 @@ def api_nl_funnel():
         редкость_слова=_редкость.разобрать_полосы(request.args.get("rare_word")),
         редкость_пары=_редкость.разобрать_полосы(request.args.get("rare_pair")),
         внутр_рифма=int(request.args.get("inner_rhyme") or 0),
+        перекличка=int(request.args.get("echo") or 0),
+        плотность=_редкость.разобрать_полосы(request.args.get("dens")),
     )
     if данные is None:
         return {"ready": False, "detail": "индекс не испечён"}
@@ -1848,6 +1850,8 @@ def api_pool_shape():
             редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
             редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")),
             внутр_рифма=int(knobs.get("inner_rhyme", 0) or 0),
+            перекличка=int(knobs.get("echo", 0) or 0),
+            плотность=_редкость.разобрать_полосы(knobs.get("dens")),
             # корзины «разных рифм» — широчайшим горящим ярусом маски, тем
             # же, каким отбор строит корзины кандидатов (nlindex.корзина_яруса)
             рифма_префикс=nlindex.корзина_яруса(int(knobs.get("rhyme_tiers", 3) or 3)))
@@ -1897,17 +1901,17 @@ def api_generate():
     else:
         knobs = clean.knobs(payload.get("knobs"))
 
-    # When there's a bias input, treat it as an additional context (not used yet,
-    # but preserved for future use when we wire it into generation/scoring)
-
-    # Two independent pipelines feed the shortlist; each is only run when it
-    # can actually REACH the shortlist. real_text=1.0 → 100% nakedlunch, so
-    # the grammar generator is skipped entirely instead of making 2000 lines
-    # that get filtered and then discarded (2026-07-14 — that wasted work was
-    # also what made the "кандидатов 2000" counter lie: it showed a pipeline
-    # that contributed nothing). real_text=0.0 → the nl fetch is skipped, same
-    # reasoning (already guarded below by nl_mix > 0).
-    gen_active = knobs["nl_mix"] < 1.0
+    # КОНВЕЙЕР ОДИН — КОРПУС. Здесь объяснялось, как `real_text` делит прогон
+    # между грамматическим генератором и корпусом: 1.0 — генератор пропускаем,
+    # 0.0 — не ходим в корпус. Генератор вырезан 2026-08-29, ключ `real_text`
+    # снят 2026-08-30 (у него не осталось читателей), и делить стало нечего.
+    # `nl_mix` держится константой 1.0 и отвечает ровно на один вопрос: есть ли
+    # вообще откуда брать строки.
+    # НАДГРОБИЕ 2026-08-30: `gen_active = knobs["nl_mix"] < 1.0`. Переменная
+    # присваивалась и не читалась НИ РАЗУ с тех пор, как вырезан грамматический
+    # генератор (2026-08-29): она включала его половину прогона, а половины
+    # больше нет. `nl_mix` остаётся константой 1.0 — по ней проверяется, что
+    # источник вообще есть.
     nl_active = knobs["nl_mix"] > 0 and _nl() is not None
 
     # СЕМЯ ВЫБИРАЕТСЯ ЗДЕСЬ, ДО ОБОИХ КОНВЕЙЕРОВ (Раунд 62). Их два, и оба
@@ -2010,7 +2014,7 @@ def api_generate():
     # журнал значит делать вид, что человек ею крутил.
     ui_knobs = {k: knobs[k] for k in ("rhyme_tiers", "classic",
                                        "mat_share", "clausula", "repeat",
-                                       "inner_rhyme")
+                                       "inner_rhyme", "rhyme_pos", "echo")
                 if k in knobs}
     # ПОЛОСЫ РЕДКОСТИ - В ЖУРНАЛ, КАК И ВСЁ, ЧЕМ КРУТЯТ ВЫДАЧУ (2026-08-27).
     # «Ручка, о которой журнал молчит, невидима ровно тогда, когда решают,
@@ -2018,7 +2022,8 @@ def api_generate():
     # KNOB_SPEC - они выбор, а не число, - поэтому сторож test_stats_knobs их
     # не потребовал; добавляем руками и только непустые: пустая строка это
     # «ворота не закрыты», шум в журнале от неё один.
-    for _ключ in ("rare_word", "rare_pair"):
+    for _ключ in ("rare_word", "rare_pair", "dens",
+                  "clausula_shares", "pos_shares", "rhyme_shares"):
         if knobs.get(_ключ):
             ui_knobs[_ключ] = knobs[_ключ]
     # ПОЧИНКА: воронка ПЛОСКАЯ, как её отдаёт filters.run. Здесь стояли три
@@ -2295,10 +2300,10 @@ def api_settings_post():
         # крутилок, и полосы (несколько несмежных отрезков шкалы) он отбросил
         # бы молча — как когда-то молча терялись «Отбор» и «Мат».
         проф = clean.knob_profile({"name": "x", **raw}) or {}
-        entry["полосы"] = проф.get("полосы", {"слова": "", "пара": ""})
+        entry["полосы"] = проф.get("полосы") or clean.полосы_из({})
         # ДОЛИ — по той же причине и тем же путём (2026-08-29): строка вида
         # «1:20,2:50,4:30» в числовой канон не влезает.
-        entry["доли"] = проф.get("доли", {"клаузула": "", "рифма": "", "позиция": ""})
+        entry["доли"] = проф.get("доли") or clean.доли_из({})
         to_save["nl_params"] = entry
     if "stanza" in payload:
         to_save["stanza"] = clean.stanza_spec(payload["stanza"])
