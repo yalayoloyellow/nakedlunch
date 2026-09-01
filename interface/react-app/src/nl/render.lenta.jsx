@@ -132,6 +132,25 @@ export function renderLenta(c) {
                   tabIndex=-1 — потому что клавиатурного пути в избранное нет
                   вовсе (пробел вырезан как неоднозначный без курсора по
                   строкам), а фокус, который никуда не ведёт, — обещание. */}
+              {/* РЕЗ СЛЕВА, КНОПКА СПРАВА (2026-09-01). Кнопка стоит в той же
+                  правой рейке, что звезда, — левый край строк остаётся чистым,
+                  как и требовал владелец. Знак «−» режет первое слово, «↺»
+                  возвращает исходный вид; второе появляется только когда есть
+                  что возвращать, поэтому мёртвой кнопки на экране не бывает.
+                  Почему режем голову, а не хвост — замер в methods.lenta.js. */}
+              <button type="button" tabIndex={-1}
+                      onMouseDown={function (e) { e.preventDefault(); }}
+                      onClick={function () { r._было ? c.вернутьСтроку(i) : c.урезатьСтроку(i); }}
+                      title={r._было ? 'вернуть как было' : 'короче на слово (режет первое)'}
+                      aria-label={r._было ? 'вернуть как было' : 'короче на слово'}
+                      className={hov('opacity: 1 !important;')}
+                      style={s('appearance: none; border: none; background: none; padding: 0; '
+                             + 'flex: 0 0 auto; width: ' + H + 'px; height: ' + H + 'px; '
+                             + 'display: flex; align-items: center; justify-content: center; '
+                             + 'font-family: inherit; font-size: .85em; line-height: 1; '
+                             + 'color: var(--ink); cursor: pointer; '
+                             + 'transition: opacity 140ms var(--ease); '
+                             + 'opacity: ' + (r._было ? '.8' : '.16') + ';')}>{r._было ? '↺' : '−'}</button>
               <button type="button" tabIndex={-1}
                       onMouseDown={function (e) { e.preventDefault(); }}
                       onClick={function () { c.сохранитьСтроку(i); }}

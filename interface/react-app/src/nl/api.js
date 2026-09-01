@@ -62,6 +62,8 @@ export const markShown = (payload) => post('/api/history/mark_shown', payload);
 // 2.3–9.7 мс на полном индексе, то есть укладывается в движение ползунка,
 // в отличие от самого прогона (185 мс без темы, 878 с темой).
 export const poolShape = (payload) => post('/api/pool/shape', payload);
+// рез строки на слово слева — ворота проверяет ядро (core/сдвиг.py)
+export const lineTrim = (payload) => post('/api/line/trim', payload);
 // {text, lemmas?, rhyme?, template?} — леммы эхом из выдачи /api/generate
 export const favAdd = (payload) => post('/api/favorite', payload);
 export const favRemove = (text) => post('/api/favorite/remove', { text });
