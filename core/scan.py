@@ -1,6 +1,11 @@
 # extendo — scan a line's sound: syllables, meter, rhyme. Reads the stress each
-# Word already carries (authored in the lexicon), so no external stress engine is
-# needed for this controlled vocabulary. Pure, no I/O, no external data.
+# Word already carries, so no external stress engine is needed here. Pure, no
+# I/O, no external data.
+#
+# «Controlled vocabulary», под который это писалось, — словарь грамматического
+# генератора (`core/generate.py`, вырезан 2026-08-29). Живой звавший теперь
+# один: `tools/build_nl_rhyme.py` на настоящей прозе корпуса, и ударение ему
+# даёт ruaccent.
 #
 # Russian syllabo-tonic verse: a line reads "metrical" when its stresses fall at
 # a regular interval (binary = iamb/trochee, ternary = dactyl/amphibrach/anapest).
@@ -97,11 +102,11 @@ def _metricality(total: int, stressed: list[int], flex: list[int]) -> float:
 def rhyme_key(surface: str, stress_vowel_idx: int) -> str:
     """Rhyme key for a single word: from its stressed vowel to the end, with
     unstressed vowels reduced and the final consonant devoiced. Two words
-    rhyme when keys match. Shared by _rhyme_tail (generated Word objects,
-    stress known from core/data/forms.json) and tools/build_nl_rhyme.py
-    (real nakedlunch text, stress from ruaccent — the generator's own lexicon
-    never covers arbitrary prose, so that path needs its own stress source,
-    but the key FORMAT must stay identical or the two would never match)."""
+    rhyme when keys match. Писалось общим на два пути: `_rhyme_tail` над
+    словами генератора (ударение знал его словарь) и `tools/build_nl_rhyme.py`
+    над настоящей прозой (ударение от ruaccent). Генератор вырезан 2026-08-29
+    вместе со словарём, живым остался второй путь — но формат ключа менять всё
+    равно нельзя: на нём стоит колонка рифм всего индекса."""
     vp = _vowel_positions(surface)
     if not vp or stress_vowel_idx < 0 or stress_vowel_idx >= len(vp):
         return _no_yo(surface[-3:])

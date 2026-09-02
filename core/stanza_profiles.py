@@ -29,8 +29,7 @@ _builtin_cache: list[dict] | None = None
 
 def builtin() -> list[dict]:
     """The 24 shipped verse forms — loaded once, cached for the process
-    lifetime (a build artifact like forms.json/nl_rhyme.json, never changes
-    at runtime)."""
+    lifetime (a build artifact like nl_rhyme, never changes at runtime)."""
     global _builtin_cache
     if _builtin_cache is None:
         try:

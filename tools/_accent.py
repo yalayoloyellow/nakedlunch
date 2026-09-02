@@ -1,7 +1,8 @@
-# extendo — shared ruaccent output parsing, used by both build_forms.py
-# (generator's own lexicon) and build_nl_rhyme.py (nakedlunch fragments).
-# One function, not two copies (PRINCIPLES.md #6) — the '+'-marker convention
-# only needs to be right in one place.
+# extendo — разбор вывода ruaccent. Писался общим на две печки: build_forms.py
+# (словарь генератора) и build_nl_rhyme.py (фрагменты корпуса). Первая снесена
+# 2026-09-02 вместе с генератором, и звавший остался один — но правило разбора
+# метки «+» от этого не изменилось, а перенос его внутрь единственного
+# читателя стоил бы правки без выигрыша.
 
 VOWELS = "аеёиоуыэюя"
 

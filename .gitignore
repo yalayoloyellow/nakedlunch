@@ -68,9 +68,9 @@ project-notes/
 core/data/blacklist.json
 
 # --- АРТЕФАКТЫ СБОРКИ (≈1.6 ГБ) ----------------------------------------------
-# Пересобираются из tools/ — порядок и время в README. Мелкие входные таблицы
-# (lexicon.json, forms.json, stanza_forms.json) КОММИТЯТСЯ: они входные данные,
-# а не результат, и без них программа не стартует вовсе.
+# Пересобираются из tools/ — порядок и время в README. Мелкая входная таблица
+# stanza_forms.json КОММИТИТСЯ: она входные данные, а не результат.
+# (forms.json и lexicon.json снесены 2026-09-02 — надгробие в nakedlunch.spec.)
 core/data/nl_rhyme.json
 core/data/nl_rhyme.jsonl
 core/data/nl_index/

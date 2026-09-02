@@ -16,7 +16,7 @@
 # same reasoning applies here: word-level cosine is the right-shaped tool for
 # "which words belong near this theme," not a heavier one.
 #
-# Model file is a build artifact like core/data/forms.json/nl_rhyme.json —
+# Model file is a build artifact like core/data/nl_rhyme —
 # committed, loaded once at server startup (see warm_caches, called from
 # api/server.py). Re-fetch if missing: the official natasha release,
 # navec_hudlit_v1_12B_500K_300d_100q.tar (~51MB, MIT), from

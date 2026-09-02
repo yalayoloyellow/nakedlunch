@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 # extendo — precompute rhyme keys for nakedlunch fragments (OFFLINE, one-time;
 # ~0.16ms/fragment measured 2026-07-14 — see below — so ≈8 min of compute for
-# the 2 868 100-fragment pool of 2026-08-01). Mirrors build_forms.py's pattern:
+# the 2 868 100-fragment pool of 2026-08-01). Тот же приём, что у снесённой
+# печки словаря генератора:
 # run the accentuator ONCE at build time, write a plain dict-lookup cache, so
 # the runtime generate path never touches ruaccent.
 #
 # WHY this exists at all: the user explicitly rejected exempting nakedlunch
 # fragments from rhyme (2026-07-13) — "база нейкедланча одинаково подвержена
 # фильтрам всем должна быть". But a rhyme key needs to know which syllable is
-# STRESSED, and that's only known for the generator's OWN lexicon (baked into
-# core/data/forms.json at generation time) — arbitrary nakedlunch prose has no
-# such data. ruaccent is the same Apache-2.0/CPU/onnxruntime tool already used
-# for that lexicon (NOT the heavy CC-BY-NC-SA accentuator excluded in Round 1)
-# — reusing it here for nakedlunch text, once, offline, is the same trade-off
-# already accepted, not a new one.
+# STRESSED, а произвольная проза корпуса такого знания не несёт. Ударение даёт
+# ruaccent — Apache-2.0, CPU, onnxruntime, — и это тот же размен, что был
+# принят раньше (НЕ тяжёлый акцентуатор под CC-BY-NC-SA, отвергнутый в Раунде
+# 1), а не новый. Раньше здесь стояла оговорка «ударение известно для СОБСТВЕННОГО
+# словаря генератора (core/data/forms.json)»: генератор вырезан 2026-08-29,
+# словарь снесён 2026-09-02, и путь остался ровно один — этот.
 #
 # WHY per-word, not ruaccent's own process_all(): the first version ran the
 # full sentence pipeline (stress-usage prediction, yo-homograph model,
@@ -62,7 +63,7 @@ import scan  # noqa: E402  (rhyme_key — must match generated lines' key format
 import nlbridge  # noqa: E402  (read-only bridge into ~/nakedlunch, see core/nlbridge.py)
 import filters  # noqa: E402  (_text_tautology — single source of truth for that check)
 from corpus import lemmatize, lemmatize_pairs, содержательных  # noqa: E402
-from _accent import stress_index  # noqa: E402  (shared with build_forms.py)
+from _accent import stress_index  # noqa: E402  (разбор метки «+», см. tools/_accent.py)
 
 import пути  # noqa: E402  (где что лежит, см. core/пути.py)
 
