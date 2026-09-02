@@ -1,13 +1,20 @@
-# extendo — semantic theme relevance via static Russian word vectors (navec,
-# natasha project, MIT: https://github.com/natasha/navec). Built 2026-07-17 to
-# fix theme stuffing: user typed "деньги" and got it back literally in 19 of
-# 20 lines (core/filters.py._nl_scored used to score a fragment 0.6+1 for
-# containing the LITERAL theme word and 0.6+0 for everything else — with
-# hundreds of literal matches in a 274k-fragment pool, they filled the
-# shortlist almost entirely). User: "может не встречаться напрямую даже, но
-# всё равно явно захватывать запрошенную тему" — a fragment should rank by
-# whether it carries the theme's MEANING, not whether it contains its exact
-# spelling. See PLAN.md 0.2 for the full decision record.
+# nakedlunch — русские векторы слов (navec, natasha project, MIT:
+# https://github.com/natasha/navec). ЧТО ЭТОТ МОДУЛЬ ДЕЛАЕТ СЕГОДНЯ: поднимает
+# модель и отдаёт две вещи — словарь `_index` («слово → номер») и матрицу
+# нормированных векторов `_vectors`. Всё остальное живёт у читателей: слой
+# «близкое» во вкладке подсказок по слову (`core/wordsuggest.py`) и печка
+# индекса (`tools/build_nl_index.py`).
+#
+# ЗАЧЕМ ОН ЗАВОДИЛСЯ (2026-07-17) — ради ТЕМЫ, вырезанной 2026-08-29. Владелец
+# набирал «деньги» и получал это слово буквально в 19 строках из 20: отбор
+# давал фрагменту 0.6+1 за БУКВАЛЬНОЕ вхождение слова темы и 0.6+0 за всё
+# прочее, а буквальных совпадений в пуле хватало, чтобы занять всю выдачу.
+# Слово владельца: «может не встречаться напрямую даже, но всё равно явно
+# захватывать запрошенную тему». Отсюда и векторы: строка должна ранжироваться
+# по СМЫСЛУ темы, а не по её написанию.
+#
+# Сама тема ушла, а векторы остались — они оказались нужнее там, где их не
+# заводили. Четыре функции темы снесены 2026-09-02, надгробие ниже.
 #
 # ONE dependency: numpy (already transitive via pymorphy3/wordfreq) — no
 # torch. A spike (PLAN.md, "torch проверен и отвергнут ПО ИЗМЕРЕНИЮ") found a
@@ -65,93 +72,30 @@ def _ensure_loaded() -> bool:
         return False
 
 
-def theme_vector(tags: list[str]) -> np.ndarray | None:
-    """Normalized centroid of the theme's own word vectors — the 'meaning' a
-    fragment gets scored against. Tries each tag as TYPED first (navec's
-    vocab already carries common inflected/plural forms — 'деньги' hits
-    directly and gives a better-centered vector than its pymorphy3 lemma
-    'деньга', a rarer singular), lemma as fallback for anything typed in an
-    unusual form. None if the model isn't loaded or no tag word is known —
-    an unfamiliar theme just gets no semantic boost, not an error (see
-    filters._nl_scored's literal-only fallback when this is None)."""
-    if not _ensure_loaded() or not tags:
-        return None
-    from corpus import lemmatize
-    vecs = []
-    for t in tags:
-        t = t.strip().lower()
-        if t in _index:
-            vecs.append(_vectors[_index[t]])
-            continue
-        for lemma in lemmatize(t):
-            if lemma in _index:
-                vecs.append(_vectors[_index[lemma]])
-                break
-    if not vecs:
-        return None
-    centroid = np.mean(vecs, axis=0)
-    norm = np.linalg.norm(centroid)
-    return centroid / norm if norm > 1e-9 else None
-
-
-def theme_similarities(theme_vec):
-    """cosine(word, theme) for the WHOLE vocabulary, ONE batched matmul — call
-    once per request (see filters.run), not once per fragment. The first cut
-    of `relevance()` computed a fresh 300-dim dot product per WORD inside
-    core/filters.py:_nl_scored's per-fragment loop — ~150k fragments × ~4
-    content words each is ~600k individual numpy calls, measured costing
-    ~300-450ms on top of the historical ~700ms baseline (an unthemed request
-    doesn't touch this path at all and stayed at baseline, isolating the
-    cost). A single (500k×300)·(300,) matmul is sub-10ms; `relevance()` then
-    does cheap array indexing instead of recomputing anything."""
-    if theme_vec is None or _vectors is None:
-        return None
-    return _vectors @ theme_vec
-
-
-def lemma_centroid(lemmas):
-    """Normalized centroid of a LINE's own content-word vectors — the line's
-    'meaning point', comparable to another line's via a plain dot product
-    (both unit-length). Built 2026-07-18 for the anchor mechanism
-    (core/filters.py: _select_with_rhyme): the no-repeat rule already bans
-    sharing a LEMMA with the stanza's anchor line, but two lines can be
-    near-copies without sharing a single lemma ('деньги пропали' / 'бабки
-    исчезли') — the user's rule is "ни одна строка не должна быть похожа на
-    константную", and 'похожа' needs a meaning-level check, not a
-    spelling-level one. None if the model isn't loaded or no lemma is in
-    vocabulary — callers must treat that as 'no opinion', never as
-    'similar' or 'distinct'."""
-    if not _ensure_loaded() or not lemmas:
-        return None
-    vecs = [_vectors[_index[w]] for w in lemmas if w in _index]
-    if not vecs:
-        return None
-    c = np.mean(vecs, axis=0)
-    n = np.linalg.norm(c)
-    return c / n if n > 1e-9 else None
-
-
-def relevance(sims, lemmas) -> float:
-    """How much of the theme's MEANING a line's content words carry — MEAN
-    precomputed cosine similarity (see theme_similarities) over words
-    actually in vocabulary, in [-1, 1]. Mean rather than max: a line needs
-    more than one coincidentally-close word to read as on-theme (user's own
-    complaint was about matches that don't feel related despite word overlap
-    — a single lucky cosine shouldn't buy the same trust as it would for
-    max). 0.0 if the model, theme, or line has nothing usable — a themed run
-    still produces output, just without semantic ranking for that line.
-
-    NOT clamped to [0, 1] anymore (2026-07-18 — was `max(0.0, ...)` per
-    word, "a line pointing away from the theme scores 0, this is a boost
-    signal, not a penalty", back when this only ever fed a one-directional
-    bias). filters.py's cohesion knob is now bipolar (`theme_pull`, -1..+1)
-    — at its "диссонанс" end a NEGATIVE relevance should score HIGHER than a
-    merely-unrelated (near-zero) line, since a genuinely opposite-meaning
-    line is a better answer to "maximum possible deviation from the theme"
-    than a neutral one. Un-clamping here is what lets that happen; the sign
-    flip that turns negative relevance into a preference only happens in
-    filters.py, not here — this function still just reports the cosine."""
-    if sims is None or not lemmas or _index is None:
-        return 0.0
-    vals = [float(sims[_index[w]]) for w in lemmas if w in _index]
-    return sum(vals) / len(vals) if vals else 0.0
+# НАДГРОБИЕ 2026-09-02: ЧЕТЫРЕ ФУНКЦИИ ТЕМЫ — `theme_vector`,
+# `theme_similarities`, `lemma_centroid`, `relevance` (девяносто строк из ста
+# пятидесяти семи).
+#
+# Все четыре обслуживали ТЕМУ и якорь строфы, вырезанные 2026-08-29 коммитом
+# `2c1eadd`. Читателей вне этого модуля у них с того дня ноль — проверено
+# обходом дерева разбором, а не текстом; во фронте их нет вовсе.
+#
+# ПОЧЕМУ САМ МОДУЛЬ ЖИВ И ОСТАЁТСЯ. Его держит слой «близкое» в
+# `core/wordsuggest.py` и печка индекса: обоим нужны `_ensure_loaded`, `_index`
+# и `_vectors` — двадцать четыре чтения `warm_caches` по репозиторию. Надгробия
+# в `core/filters.py`, `api/server.py` и `core/nlindex.py` хоронили ТЕМУ и
+# оправдывали жизнь ФАЙЛА; про эти четыре функции они не говорили ничего, и
+# половина модуля осталась притворяться живой.
+#
+# ЧЕМ ЭТО БЫЛО ВРЕДНО, помимо веса. Уцелевшие докстринги называли снятые
+# механизмы в настоящем времени: `relevance` объясняла, что «ручка связности в
+# filters.py теперь двусторонняя (`theme_pull`, −1..+1)», а `lemma_centroid` —
+# что якорь строфы требует проверки на уровне смысла. Читатель принимал это за
+# действующий договор и шёл искать `theme_pull`, которого нет.
+#
+# Что именно они делали: `theme_vector` — нормированный центроид векторов слов
+# темы; `theme_similarities` — косинусы всего словаря к теме одним матмулом на
+# запрос (замер: 500k×300 меньше 10 мс против ~600 тысяч отдельных вызовов);
+# `lemma_centroid` — «точка смысла» строки для сравнения с якорем; `relevance` —
+# средний косинус знаменательных слов строки к теме, нарочно не зажатый в
+# [0, 1], чтобы «диссонанс» мог предпочитать отрицательные значения.
