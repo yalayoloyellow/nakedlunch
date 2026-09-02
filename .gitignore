@@ -74,6 +74,9 @@ core/data/blacklist.json
 core/data/nl_rhyme.json
 core/data/nl_rhyme.jsonl
 core/data/nl_index/
+# АДРЕСА СТРОК (2026-09-01) — тот же класс, что индекс: строится из книг и
+# индекса за восемь минут, весит 77 МБ и в истории кода делать ему нечего.
+core/data/nl_addr/
 core/data/rhyme_index.json
 core/data/thesaurus.json
 
