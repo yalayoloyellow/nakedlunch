@@ -432,6 +432,7 @@ export const fsMethods = {
       shortlist: Math.max(1, n || this.FS_BATCH),
       mode: проф.mode, params: проф.params,
       полосы: проф.полосы || {},
+      доли: проф.доли || {},
     };
     // НАДГРОБИЕ 2026-08-30: `payload.theme` из поля «темы сцены». Тема
     // вырезана 2026-08-29, сервер это поле игнорирует — слать его значило
@@ -642,7 +643,7 @@ export const fsMethods = {
   fsGenKey() {
     var проф = this.fsНастройки();
     return JSON.stringify([this.knobsOfProfile(проф), проф.spec,
-                           проф.полосы || {}]);
+                           проф.полосы || {}, проф.доли || {}]);
   },
 
   // Дозаполнить очередь до нужного числа единиц. Тянет строки, пока не хватит
@@ -706,21 +707,29 @@ export const fsMethods = {
   fsНастройки() {
     var st = this.state;
     if (st.fsParams == null || st.fsKnobMode == null || st.fsSpec === null
-        || st.fsПолосы == null) {
+        || st.fsПолосы == null || st.fsДоли == null) {
       var своё = {
         fsKnobMode: st.fsKnobMode == null ? (st.knobMode || null) : st.fsKnobMode,
         fsParams: st.fsParams == null ? JSON.parse(JSON.stringify(st.params || {})) : st.fsParams,
         fsSpec: st.fsSpec === null ? (this.curSpec ? this.curSpec() : null) : st.fsSpec,
         fsПолосы: st.fsПолосы == null
           ? Object.assign({ слова: '', пара: '', плотность: '' }, st.полосы || {}) : st.fsПолосы,
+        // ДОЛИ — 2026-09-02. Их здесь не было вовсе: сцена не получала ни
+        // клаузул, ни позиции, ни ярусов рифмы, а «взять настройки строфы из
+        // редактора» их молча теряло. Человек выставлял «20 процентов на
+        // первое слово, 50 в середине, 30 в конце», нажимал перенос — и во
+        // фристайле пропорция была своя, никем не заказанная. Едут они тем же
+        // путём, что полосы: своя копия, отделяемая один раз.
+        fsДоли: st.fsДоли == null
+          ? JSON.parse(JSON.stringify(st.доли || {})) : st.fsДоли,
       };
       // правим состояние молча: это не выбор пользователя, а первое отделение
       this.setState(своё);
       return { mode: своё.fsKnobMode, params: своё.fsParams, spec: своё.fsSpec,
-               полосы: своё.fsПолосы, source: 'фристайл' };
+               полосы: своё.fsПолосы, доли: своё.fsДоли, source: 'фристайл' };
     }
     return { mode: st.fsKnobMode, params: st.fsParams, spec: st.fsSpec,
-             полосы: st.fsПолосы, source: 'фристайл' };
+             полосы: st.fsПолосы, доли: st.fsДоли, source: 'фристайл' };
   },
 
   /** Правка крутилки СЦЕНЫ. КОНТРОЛ-ОБМАНКА, НАЙДЕННАЯ ЧТЕНИЕМ (2026-08-27):
@@ -760,6 +769,7 @@ export const fsMethods = {
       fsParams: JSON.parse(JSON.stringify(st.params || {})),
       fsSpec: this.curSpec ? this.curSpec() : null,
       fsПолосы: Object.assign({ слова: '', пара: '', плотность: '' }, st.полосы || {}),
+      fsДоли: JSON.parse(JSON.stringify(st.доли || {})),
     });
     this._fsBuf = []; this._fsQ = [];
     this.flash('настройки строфы перенесены в сцену');
