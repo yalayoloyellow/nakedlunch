@@ -3,7 +3,7 @@
 // Источник: project-notes/mockups/design-v2/Editor First.dc.html, class-регион
 // 2681..3043 (PAL_DEF/PROF_KEY/engineControls/PROF_SKIP_STATE/UIPROF_KEY/
 // UI_SKIP/uiSnapshot/load*/save*/toggleUiDef/applyUiProfile/blankUi/bootUi/
-// BLANK_ID/loadDefProf/poke/fsStage/profileList/toggleDefProf/snapshotProfile/
+// BLANK_ID/poke/fsStage/profileList/toggleDefProf/snapshotProfile/
 // curPreset/pickPreset/applyProfile/loadPal/savePal/palInput/applyPal/
 // syncPanelColor/pickPal/rememberPal) — перенос дословный, кроме:
 //
@@ -54,7 +54,7 @@ export const fsProfileMethods = {
   PROF_SKIP_IDS: { fontFile: 1, trackFile: 1 },
   // состояние снимаем целиком, кроме документа и служебных полей — новые флаги входят сами
   PROF_SKIP_STATE: {
-    doc: 1, closing: 1, subPill: 1, subClosing: 1, defProf: 1, uiDefProf: 1, sheets: 1, sheetId: 1,
+    doc: 1, closing: 1, defProf: 1, uiDefProf: 1, sheets: 1, sheetId: 1,
     folders: 1, marks: 1, markAnchor: 1, undoN: 1, redoN: 1, dirty: 1, savedAt: 1, flashMsg: 1,
     confirm: 1, openPill: 1, fsSetOpen: 1, fsLineOpen: 1, profiles: 1, profId: 1, profEdit: 1,
     uiProfiles: 1, uiProfId: 1, uiProfEdit: 1, popTab: 1, pop: 1,
@@ -191,8 +191,11 @@ export const fsProfileMethods = {
     this._saveSettings({ nl_fs_profiles: { list: новый, def: def === undefined ? (this.state.defProf || '') : (def || '') } });
   },
   saveDefProf(id) { this.saveProfiles(this.state.profiles || [], id || ''); },
-  loadProfiles() { return this._profStore('nl_fs_profiles').list; },
-  loadDefProf() { return this._profStore('nl_fs_profiles').def; },
+  // НАДГРОБИЕ 2026-09-02: `loadProfiles`/`loadDefProf` и ниже
+  // `loadUiProfiles`/`loadUiDef` — четыре обёртки над `_profStore`, которых не
+  // звал никто. Живой способ прочитать то же самое — сам `_profStore`, и все
+  // настоящие читатели зовут его напрямую (строки 185, 198, 585). Два способа
+  // прочитать одно, из которых официальный на вид — мёртвый, хуже одного.
   saveUiProfiles(list, def, явно) {
     var новый = list || [];
     var сохранённый = this._profStore('nl_ui_profiles').list || [];
@@ -204,8 +207,6 @@ export const fsProfileMethods = {
     this._saveSettings({ nl_ui_profiles: { list: новый, def: def === undefined ? (this.state.uiDefProf || '') : (def || '') } });
   },
   saveUiDef(id) { this.saveUiProfiles(this.state.uiProfiles || [], id || ''); },
-  loadUiProfiles() { return this._profStore('nl_ui_profiles').list; },
-  loadUiDef() { return this._profStore('nl_ui_profiles').def; },
   // текущий вид: пишем весь cfg, дебаунсом. Ответ не ждём и state.settings не
   // трогаем — nl_view читается только при старте, а лишний setState на каждое
   // движение ползунка перерисовывал бы всё приложение

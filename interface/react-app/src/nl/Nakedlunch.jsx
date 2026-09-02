@@ -461,21 +461,22 @@ export default class Nakedlunch extends Component {
   // открытие гасит всё остальное и снимает висящее закрытие
   openPop(patch) {
     clearTimeout(this._popT); this._popT = null;
-    clearTimeout(this._subT); this._subT = null;
-    this.setState(Object.assign({ openPill: '', fsSetOpen: false, fsLineOpen: false, closing: '', subPill: '', subClosing: '' }, patch || {}));
+    this.setState(Object.assign({ openPill: '', fsSetOpen: false, fsLineOpen: false, closing: '' }, patch || {}));
   }
-  // Меню внутри панели (профиль, фильтры, воронка, роль звена) живут на своём уровне.
-  // Если пустить их через openPill, открытие любого из них закрывает панель-родителя —
-  // именно поэтому в пайплайне «ничего не нажималось».
-  togSub(p) {
-    if (this.state.subPill === p) { this.closeSub(); return; }
-    clearTimeout(this._subT); this._subT = null;
-    this.setState({ subPill: p, subClosing: '' });
-  }
-  openSub(patch) {
-    clearTimeout(this._subT); this._subT = null;
-    this.setState(Object.assign({ subPill: '', subClosing: '' }, patch || {}));
-  }
+  // НАДГРОБИЕ 2026-09-02: ПОДСИСТЕМА ПОДМЕНЮ (`togSub`/`openSub`/`closeSub`,
+  // состояние `subPill`/`subClosing`, таймер `_subT`).
+  //
+  // Она заводилась для меню ВНУТРИ панели — профиль, фильтры, воронка, роль
+  // звена, — которым нужен был свой уровень: пущенные через `openPill`, они
+  // закрывали панель-родителя, и в пайплайне «ничего не нажималось». Все эти
+  // меню уехали вместе с пайплайном и цепью (2026-08-18), и с того дня
+  // `togSub` и `openSub` не звал НИКТО, а `subPill` оставался пустым всегда.
+  //
+  // `closeSub` при этом звали дважды — из `closePop` и из обработчика клика
+  // мимо панелей, — и оба раза он выходил на первой строке по пустому ключу.
+  // Шесть мест в главном компоненте обслуживали состояние, которого не бывает;
+  // тот, кто пошёл бы делать подменю, нашёл бы готовый на вид механизм и
+  // выяснял бы, почему он не работает.
   // ФАНТОМНЫЕ КЛЮЧИ ЗАКРЫТИЯ 'chip'/'junc' УБРАНЫ (Раунд 63).
   //
   // Здесь и в closePop к ключу подмешивалось `chipOpen >= 0 ? 'chip'` и то же
@@ -486,27 +487,16 @@ export default class Nakedlunch extends Component {
   // первой же перестановки закрытие ВСЕГДА считало, что открыт некий 'chip',
   // проходило мимо раннего выхода и заводило 140-мс таймер на каждый клик мимо
   // панелей. Теперь ключ — только то, что действительно нарисовано.
-  closeSub() {
-    var st = this.state, self = this;
-    var k = st.subPill;
-    if (!k || this._subT) return;
-    this.setState({ subClosing: k });
-    this._subT = setTimeout(function () {
-      self._subT = null;
-      self.setState({ subPill: '', subClosing: '' });
-    }, 140);
-  }
   // закрытие: состояние держим ещё кадр анимации, потом гасим по-настоящему
   closePop(extra) {
     var st = this.state, self = this;
     if (extra) this.setState(extra);
-    this.closeSub();
     var k = st.openPill || (st.fsSetOpen ? 'fsset' : '') || (st.fsLineOpen ? 'fsline' : '');
     if (!k || this._popT) return;
     this.setState({ closing: k });
     this._popT = setTimeout(function () {
       self._popT = null;
-      self.setState({ openPill: '', fsSetOpen: false, fsLineOpen: false, closing: '', subPill: '', subClosing: '' });
+      self.setState({ openPill: '', fsSetOpen: false, fsLineOpen: false, closing: '' });
     }, 140);
   }
 
@@ -680,7 +670,7 @@ export default class Nakedlunch extends Component {
     // ЗАКРЫВАЛ попап, а не гасил его pointerdown'ом и тут же открывал заново.
     this._away = (e) => {
       var t = e.target;
-      if (!(t.closest && t.closest('[data-pop]'))) { this.closeSub(); this.closePop(); }
+      if (!(t.closest && t.closest('[data-pop]'))) { this.closePop(); }
     };
     window.addEventListener('pointerdown', this._away, true);
     this.applyTheme();
@@ -768,7 +758,6 @@ export default class Nakedlunch extends Component {
     this._uiRAF = 0;
     clearTimeout(this._flashMsgT);
     clearTimeout(this._popT);
-    clearTimeout(this._subT);
     // таймеры миксинов: подтверждение очистки истории, галочка профиля,
     // очередь mark_shown (автосохранение листа ушло вместе с листами)
     clearTimeout(this._confT);

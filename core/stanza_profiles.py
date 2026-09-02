@@ -1,8 +1,8 @@
 # extendo — the user's OWN saved stanza constructions (2026-07-18, PLAN.md
 # 0.7 — the stanza constructor: "профили и уже есть предустановленные
 # профили ... надо всё сделать максимально удобно и сохраняемо"). Builtin
-# forms (классика/восток/модерн и постмодерн/фольклор — 24 verse-theoretic
-# forms) live in core/data/stanza_forms.json, shipped with the app and
+# forms (классика/восток/модерн и постмодерн/фольклор) live in
+# core/data/stanza_forms.json, shipped with the app and
 # read-only from here. Custom ones are the user's own saved constructions,
 # in data/stanza_profiles.json next to corpus.json/settings.json/stats.jsonl
 # — same "somewhere concrete" file convention as core/settings.py.
@@ -28,8 +28,15 @@ _builtin_cache: list[dict] | None = None
 
 
 def builtin() -> list[dict]:
-    """The 24 shipped verse forms — loaded once, cached for the process
-    lifetime (a build artifact like nl_rhyme, never changes at runtime)."""
+    """Встроенные формы строфы — читаются один раз и держатся процессом
+    (артефакт сборки, как nl_rhyme: в рантайме не меняется).
+
+    ЧИСЛО ФОРМ ЗДЕСЬ НЕ ПИШЕТСЯ (2026-09-02). Стояло «24 shipped verse forms»
+    в трёх местах сразу — здесь, в шапке модуля и в докстринге роута, — и к
+    сентябрю их стало тридцать. Число, переписанное руками в трёх местах, врёт
+    во всех трёх; считается оно одной командой:
+    `python -c "import json;print(len(json.load(open('core/data/stanza_forms.json'))['forms']))"`
+    """
     global _builtin_cache
     if _builtin_cache is None:
         try:

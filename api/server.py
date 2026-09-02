@@ -2389,8 +2389,8 @@ def api_settings_post():
 
 @app.get("/api/stanza/profiles")
 def api_stanza_profiles_get():
-    """Built-in verse forms (core/data/stanza_forms.json, read-only, 24
-    classical/eastern/modern/folk forms) + the user's own saved profiles
+    """Built-in verse forms (core/data/stanza_forms.json, read-only —
+    classical/eastern/modern/folk) + the user's own saved profiles
     (data/stanza_profiles.json) — see core/stanza_profiles.py. Every
     profile's `lines` is re-validated through clean.stanza_spec() here, not
     trusted raw from either file — a hand-edited custom profile that no
