@@ -758,12 +758,26 @@ def _diversify(pool: list, k: int, div: float) -> list:
 # вместе с темой»). Поле `forced_notice` в ответе осталось пустым словарём —
 # форма ответа не меняется ради сноса.
 
+def _маска_пула(idx, nl_fragments, книги):
+    """Маска активного пула: колонкой `src`, если знаем книги, иначе текстами.
+
+    Разбор и замер — в `nlindex.маска_книг`. Здесь важно одно: путей два, и
+    выбор между ними не должен менять НИ ОДНОЙ строки выдачи. Обе маски
+    сверены побитово на четырёх раскладах включённых книг."""
+    м = nlindex.маска_книг(idx, книги)
+    return м if м is not None else nlindex.pool_mask(idx, nl_fragments)
+
+
 def _classic_pool(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clausula, cap,
-                  гсч=random, семя=None, mat_share: float = -1.0):
+                  гсч=random, семя=None, mat_share: float = -1.0, книги=None):
     """Пул «классики»: активный пул минус история, с воротами мата и клаузулы.
     Колоночный путь и старый обязаны давать ОДНО И ТО ЖЕ — иначе режим зависел
     бы от того, испечён индекс или нет."""
-    _idx = _index_for_current_cache() if nl_fragments else None
+    # ИНДЕКС ПОДКЛЮЧАЕТСЯ И ПО СПИСКУ КНИГ (2026-09-03). Здесь стояло «если
+    # есть тексты», и это заставляло вызывающего тащить весь активный пул
+    # текстами только ради проверки «пул вообще есть». Список книг отвечает на
+    # тот же вопрос и стоит ноль.
+    _idx = _index_for_current_cache() if (nl_fragments or книги) else None
     if _idx is not None:
         # ВОРОТА ФОРМЫ СЮДА НЕ ЕДУТ (2026-09-02). Клаузула, внутренняя рифма,
         # перекличка и три полосы редкости раньше передавались и действовали;
@@ -771,7 +785,7 @@ def _classic_pool(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clau
         # даёт равную выдачу». Разбор и замер — в надгробии внутри
         # `nlindex.select_light`. Остаются мат, чёрный список, история и пул.
         pool, survived, ступени = nlindex.select_light(
-            _idx, pool_mask=nlindex.pool_mask(_idx, nl_fragments),
+            _idx, pool_mask=_маска_пула(_idx, nl_fragments, книги),
             hidden_mask=nlindex.mask_of(_idx, hidden),
             no_mat=no_mat, only_mat=only_mat, cap=cap, seed=семя,
             mat_share=mat_share)
@@ -789,7 +803,7 @@ def _classic_pool(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clau
 
 
 def _run_classic(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clausula,
-                 mat_share, forced, cap, гсч=random, семя=None) -> dict:
+                 mat_share, forced, cap, гсч=random, семя=None, книги=None) -> dict:
     """«Классика» — ОТДЕЛЬНЫЙ путь, а не квота внутри общего (Раунд 50).
 
     Требование (2026-08-03): бинарный переключатель «алгоритм — классика»; в классике
@@ -811,7 +825,7 @@ def _run_classic(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, claus
     книги в активном пуле, история показов, мат и клаузула. Это ВОРОТА — про
     то, что содержится, а не про то, насколько хорошо."""
     size = int(knobs["shortlist"])
-    pool, survived, ступени = _classic_pool(knobs, corpus, nl_fragments, hidden=hidden,
+    pool, survived, ступени = _classic_pool(knobs, corpus, nl_fragments, книги=книги, hidden=hidden,
                                             no_mat=no_mat, only_mat=only_mat,
                                             clausula=clausula, cap=cap, гсч=гсч, семя=семя,
                                             mat_share=mat_share)
@@ -929,7 +943,8 @@ _ПАЧКА_МИН = 32
 
 def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str = "none",
         tags: list[str] | None = None, forced: set[str] | None = None,
-        stanza: list[dict] | None = None, семя: int | None = None) -> dict:
+        stanza: list[dict] | None = None, семя: int | None = None,
+        книги: set | None = None) -> dict:
     """Прогон под замком индекса — весь разбор в `_run` ниже.
 
     ЗАМОК ЗДЕСЬ, А НЕ У ВЫЗЫВАЮЩЕГО (2026-08-18). Он стоял в `api/server.py`,
@@ -944,12 +959,13 @@ def run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str
     `форма_пула`) внутри прогона встают без задержки."""
     with nlindex.ЗАМОК:
         return _run(lines, knobs, corpus, nl_fragments=nl_fragments, rhyme=rhyme,
-                    tags=tags, forced=forced, stanza=stanza, семя=семя)
+                    tags=tags, forced=forced, stanza=stanza, семя=семя, книги=книги)
 
 
 def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: str = "none",
          tags: list[str] | None = None, forced: set[str] | None = None,
-         stanza: list[dict] | None = None, семя: int | None = None) -> dict:
+         stanza: list[dict] | None = None, семя: int | None = None,
+         книги: set | None = None) -> dict:
     """The cascade. Returns {shortlist, funnel, forced_notice, seed} — funnel is the
     per-stage survivor count so the user can SEE the filter working (and
     where yield is lost); forced_notice reports on `!слово` guarantees (see
@@ -1028,7 +1044,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     # дробные значения, и молча трактовать 0.7 как «алгоритм» было бы враньём
     # о том, что просили. Половина и выше — классика.
     if float(knobs.get("classic", 0.0)) >= 0.5:
-        return _run_classic(knobs, corpus, nl_fragments,
+        return _run_classic(knobs, corpus, nl_fragments, книги=книги,
                             hidden=hidden, no_mat=no_mat, only_mat=only_mat,
                             clausula=clausula,
                             mat_share=float(knobs.get("mat_share", -1.0)),
@@ -1153,6 +1169,8 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     # tied-score competition drowns them to statistical invisibility (the same
     # failure shape as the old additive theme-weight bug in generate.py — a
     # slider needs an explicit RESERVED SHARE here, not a soft nudge).
+    # «Сколько всего было» — из маски, если текстов не прислали: с переходом
+    # на колонку `src` вызывающий вправе их не собирать вовсе.
     n_nl = len(nl_fragments or [])
     n_blocks = max(1, knobs["shortlist"] // stanza_size)
     # ── быстрый путь: колоночный индекс (Раунд 31) ───────────────────────────
@@ -1165,7 +1183,11 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     # старом их просто нет, и выдумывать числа, которых никто не считал, —
     # ровно та ложь, ради устранения которой воронка и переписана.
     ступени: dict = {}
-    _idx = _index_for_current_cache() if nl_fragments else None
+    # ИНДЕКС ПОДКЛЮЧАЕТСЯ И ПО СПИСКУ КНИГ (2026-09-03). Здесь стояло «если
+    # есть тексты», и это заставляло вызывающего тащить весь активный пул
+    # текстами только ради проверки «пул вообще есть». Список книг отвечает на
+    # тот же вопрос и стоит ноль.
+    _idx = _index_for_current_cache() if (nl_fragments or книги) else None
 
     # ПРЯМАЯ ТЯГА — ЕДИНСТВЕННЫЙ ПУТЬ (2026-08-29). Прежде она включалась при
     # четырёх условиях: есть индекс, есть слоговая вилка, есть рифмовка, нет
@@ -1175,9 +1197,12 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
     _прямая_тяга = bool(_idx is not None and syllable_spec and rhyme != "none")
 
     if _idx is not None:
+        _пул_маска = _маска_пула(_idx, nl_fragments, книги)
+        if not nl_fragments:
+            n_nl = int(_пул_маска.sum())
         nl_survivors, n_nl_survived, forced_candidates, ступени = nlindex.select(
             _idx,
-            pool_mask=nlindex.pool_mask(_idx, nl_fragments),
+            pool_mask=_пул_маска,
             hidden_mask=nlindex.mask_of(_idx, hidden),
             no_mat=no_mat, only_mat=only_mat,
             clausula=clausula,
