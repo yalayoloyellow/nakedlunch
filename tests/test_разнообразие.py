@@ -362,7 +362,7 @@ def test_klassika_slushaetsya_chyornogo_spiska():
         _чс.читать = lambda: правила          # подменяем источник правил
         nlindex.забыть_запрет()
         строки, _, _ = nlindex.select_light(idx, pool_mask=пул, hidden_mask=пусто,
-                                         no_mat=False, only_mat=False, clausula=0,
+                                         no_mat=False, only_mat=False,
                                          cap=400, seed=3)
         карта = nlindex.text_ids(idx)
         попали = [r["text"] for r in строки if карта.get(r["text"]) in запрещённые]

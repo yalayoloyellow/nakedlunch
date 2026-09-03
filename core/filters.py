@@ -759,27 +759,30 @@ def _diversify(pool: list, k: int, div: float) -> list:
 # форма ответа не меняется ради сноса.
 
 def _classic_pool(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clausula, cap,
-                  гсч=random, семя=None):
+                  гсч=random, семя=None, mat_share: float = -1.0):
     """Пул «классики»: активный пул минус история, с воротами мата и клаузулы.
     Колоночный путь и старый обязаны давать ОДНО И ТО ЖЕ — иначе режим зависел
     бы от того, испечён индекс или нет."""
     _idx = _index_for_current_cache() if nl_fragments else None
     if _idx is not None:
+        # ВОРОТА ФОРМЫ СЮДА НЕ ЕДУТ (2026-09-02). Клаузула, внутренняя рифма,
+        # перекличка и три полосы редкости раньше передавались и действовали;
+        # слово владельца — «классика вообще все настройки отключает и просто
+        # даёт равную выдачу». Разбор и замер — в надгробии внутри
+        # `nlindex.select_light`. Остаются мат, чёрный список, история и пул.
         pool, survived, ступени = nlindex.select_light(
             _idx, pool_mask=nlindex.pool_mask(_idx, nl_fragments),
             hidden_mask=nlindex.mask_of(_idx, hidden),
-            no_mat=no_mat, only_mat=only_mat, clausula=clausula, cap=cap, seed=семя,
-            редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
-            редкость_пары=_редкость.разобрать_полосы(knobs.get("rare_pair")),
-            внутр_рифма=int(knobs.get("inner_rhyme", 0) or 0),
-            перекличка=int(knobs.get("echo", 0) or 0),
-            плотность=_редкость.разобрать_полосы(knobs.get("dens")))
+            no_mat=no_mat, only_mat=only_mat, cap=cap, seed=семя,
+            mat_share=mat_share)
         return pool, survived, ступени
     # Позиционный `9.0` (потолок банальности «пропускать всё») снят 2026-08-20:
     # ворота удалены целиком, а на «светлом» пути их и так не было.
+    # Запасной путь (индекса нет) обязан давать ТО ЖЕ, что колонки, — иначе
+    # режим зависел бы от того, испечён индекс или нет. Значит и здесь ни
+    # клаузулы, ни внутренней рифмы.
     pool, _ = _nl_scored(nl_fragments or [], corpus, hidden, light=True,
-                         no_mat=no_mat, only_mat=only_mat, clausula=clausula, гсч=гсч,
-                         внутр_рифма=int(knobs.get("inner_rhyme", 0) or 0))
+                         no_mat=no_mat, only_mat=only_mat, гсч=гсч)
     survived = len(pool)
     гсч.shuffle(pool)                   # оценка у всех одна — верхушки не существует
     return pool[:cap], survived, {}     # старый путь ступеней не считает — и не выдумывает
@@ -810,7 +813,8 @@ def _run_classic(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, claus
     size = int(knobs["shortlist"])
     pool, survived, ступени = _classic_pool(knobs, corpus, nl_fragments, hidden=hidden,
                                             no_mat=no_mat, only_mat=only_mat,
-                                            clausula=clausula, cap=cap, гсч=гсч, семя=семя)
+                                            clausula=clausula, cap=cap, гсч=гсч, семя=семя,
+                                            mat_share=mat_share)
 
     # Доля мата — единственное, что здесь ещё надо разложить. Без рифмо-схемы
     # раскладывать по позициям нечего (пары не существует), поэтому просто

@@ -91,15 +91,17 @@ def test_ворота_на_живом_индексе():
     без = idx.gate_mask(False)
     с = idx.gate_mask(False, False, 0, None, None, 1)
     assert 0 < с.sum() < без.sum(), (int(с.sum()), int(без.sum()))
-    пул = np.ones(idx.n, dtype=bool)
-    нет = np.zeros(idx.n, dtype=bool)
-    _, всех, _ = nlindex.select_light(idx, pool_mask=пул, hidden_mask=нет,
-                                      no_mat=False, only_mat=False,
-                                      clausula=0, cap=3, seed=1)
-    _, узко, _ = nlindex.select_light(idx, pool_mask=пул, hidden_mask=нет,
-                                      no_mat=False, only_mat=False,
-                                      clausula=0, cap=3, seed=1, внутр_рифма=1)
-    assert 0 < узко < всех, "классика не подчинилась воротам внутренней рифмы"
+
+    # НАДГРОБИЕ 2026-09-02: СТОРОЖ ОХРАНЯЛ ОТМЕНЁННЫЙ ДОГОВОР. Он требовал,
+    # чтобы классика подчинялась воротам ФОРМЫ. Слово владельца: «классика
+    # вообще все настройки отключает и просто даёт равную выдачу». Остались
+    # только мат, чёрный список, история и активный пул — сказанное вслух про
+    # СОДЕРЖАНИЕ. Разбор и замер — в надгробии внутри `nlindex.select_light`.
+    # Сторож перевёрнут: держит НОВЫЙ договор.
+    import inspect
+    assert "внутр_рифма" not in inspect.signature(nlindex.select_light).parameters, (
+        "классика снова читает внутреннюю рифму — ворота формы вернулись в "
+        "режим, который форму не судит")
 
 
 def test_канон_знает_ручку():

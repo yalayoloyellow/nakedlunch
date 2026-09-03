@@ -163,7 +163,7 @@ def test_классика_не_судит_о_качестве():
     assert все - строгие > 0, "на этом корпусе нечего проверять"
     строки, выжило, _ = nlindex.select_light(
         ИНДЕКС, pool_mask=np.ones(все, dtype=bool),
-        hidden_mask=np.zeros(все, dtype=bool), no_mat=False, only_mat=False, clausula=0, cap=50, seed=1)
+        hidden_mask=np.zeros(все, dtype=bool), no_mat=False, only_mat=False, cap=50, seed=1)
     # Раунд 51: классика подчиняется ВОРОТАМ, и целостность — ворота, а не
     # мнение о качестве: обрывок дефисного слова это брак нарезки.
     # Раунд 59: и чёрный список — это тоже не мнение о качестве, а сказанное
@@ -190,14 +190,14 @@ def test_классика_равномерно_случайна():
     пул = np.ones(ИНДЕКС.n, dtype=bool)
     пусто = np.zeros(ИНДЕКС.n, dtype=bool)
     a, _, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
-                                no_mat=False, only_mat=False, clausula=0, cap=40, seed=1)
+                                no_mat=False, only_mat=False, cap=40, seed=1)
     b, _, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
-                                no_mat=False, only_mat=False, clausula=0, cap=40, seed=2)
+                                no_mat=False, only_mat=False, cap=40, seed=2)
     assert all(abs(r["score"] - 0.6) < 1e-9 for r in a), "оценка обязана быть плоской"
     assert {r["text"] for r in a} != {r["text"] for r in b}
     # то же зерно — та же выборка (воспроизводимость важнее «побольше хаоса»)
     c, _, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
-                                no_mat=False, only_mat=False, clausula=0, cap=40, seed=1)
+                                no_mat=False, only_mat=False, cap=40, seed=1)
     assert [r["text"] for r in a] == [r["text"] for r in c]
 
 
@@ -219,11 +219,11 @@ def test_классика_помечена_своим_ярусом():
     пусто = np.zeros(ИНДЕКС.n, dtype=bool)
     классика, _, _ = nlindex.select_light(
         ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
-        no_mat=True, only_mat=False, clausula=0, cap=20, seed=2)
+        no_mat=True, only_mat=False, cap=20, seed=2)
     алгоритм, _, _, _ = nlindex.select(
         ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
-        no_mat=True, only_mat=False, clausula=0, cap=20, reserve_n=0,
-        syllable_spec=None, per_bucket=4, seed=2)
+        no_mat=True, only_mat=False, cap=20, reserve_n=0,
+        syllable_spec=None, per_bucket=4, seed=2, clausula=0)
     assert классика and all(r["classic"] is True for r in классика)
     assert алгоритм and all(r["classic"] is False for r in алгоритм)
 
@@ -235,9 +235,9 @@ def test_мат_отсекается_и_в_классике():
     пул = np.ones(ИНДЕКС.n, dtype=bool)
     пусто = np.zeros(ИНДЕКС.n, dtype=bool)
     _, с_матом, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
-                                      no_mat=False, only_mat=False, clausula=0, cap=5, seed=3)
+                                      no_mat=False, only_mat=False, cap=5, seed=3)
     _, без_мата, _ = nlindex.select_light(ИНДЕКС, pool_mask=пул, hidden_mask=пусто,
-                                       no_mat=True, only_mat=False, clausula=0, cap=5, seed=3)
+                                       no_mat=True, only_mat=False, cap=5, seed=3)
     # считаем только по целым: обрывки отсеяны на обоих путях одинаково
     цел = ИНДЕКС.whole_mask().copy()
     # Раунд 59: классика слушается и чёрного списка — разница считается по тому
@@ -327,16 +327,16 @@ def test_istoriya_ne_keshiruetsya():
     nlindex.забыть_таблицу()
     пул = np.ones(idx.n, dtype=bool)
     пусто = np.zeros(idx.n, dtype=bool)
-    общ = dict(no_mat=False, only_mat=False, clausula=0, cap=50,
+    общ = dict(no_mat=False, only_mat=False, cap=50,
                reserve_n=0, syllable_spec=None, per_bucket=4, seed=1)
-    было, n1, _, _ = nlindex.select(idx, pool_mask=пул, hidden_mask=пусто, **общ)
+    было, n1, _, _ = nlindex.select(idx, pool_mask=пул, hidden_mask=пусто, **общ, clausula=0)
     # Прятать надо тех, кто ВЫЖИЛ ворота: остальные и так не считаются, и
     # ожидание «минус пять» было бы неверным (первая версия теста ошиблась
     # ровно на этом — минус четыре из пяти).
     выжившие = nlindex._таблица(idx, False, False, 0)[0]
     скрыт = пусто.copy()
     скрыт[[int(r) for r in выжившие[:5]]] = True
-    стало, n2, _, _ = nlindex.select(idx, pool_mask=пул, hidden_mask=скрыт, **общ)
+    стало, n2, _, _ = nlindex.select(idx, pool_mask=пул, hidden_mask=скрыт, **общ, clausula=0)
     assert n2 == n1 - 5, "история не подействовала — кэш съел её вместе с подготовкой"
 
 
