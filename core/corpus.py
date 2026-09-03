@@ -225,7 +225,7 @@ class Corpus:
             return cls()
         try:
             d = json.loads(CORPUS_PATH.read_text("utf-8"))
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             # a corrupt corpus is the one file we must not silently reset; refuse.
             raise RuntimeError(f"corpus повреждён: {CORPUS_PATH} — почини или удали вручную")
         return cls(accepted=d.get("accepted", []),
