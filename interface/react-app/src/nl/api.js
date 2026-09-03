@@ -27,7 +27,14 @@ async function req(url, opts, timeoutMs) {
   let data = null;
   try { data = await res.json(); } catch (e) { /* не-JSON — ниже честная ошибка по статусу */ }
   if (!res.ok || (data && data.error)) {
-    throw new Error((data && data.error) || ('ошибка сервера: HTTP ' + res.status));
+    // СЕРВЕР ОТВЕТИЛ — ЗНАЧИТ ОН ЖИВ (2026-09-02). Здесь throw был безымянным,
+    // и вызывающий не мог отличить «ядро умерло» от «ядро живо, но в коде
+    // ошибка». Из-за этого пятисотая с точной причиной на диске доходила до
+    // человека как «закрой и открой заново» — совет, который ничего не чинит.
+    var err = new Error((data && data.error) || ('ошибка сервера: HTTP ' + res.status));
+    err.живой = true;
+    err.статус = res.status;
+    throw err;
   }
   return data;
 }
