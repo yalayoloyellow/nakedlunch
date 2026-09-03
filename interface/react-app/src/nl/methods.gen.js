@@ -175,8 +175,17 @@ export const genMethods = {
     // он пустой, и запись ведёт себя как раньше.
     var семя = this._lastSeed != null ? this._lastSeed : '';
     (texts || []).forEach(function (t) {
-      var it = typeof t === 'string' ? { text: t, template: '' } : { text: t.text || '', template: t.template || '' };
-      if (it.text) self._shownQ.push({ text: it.text, template: it.template, seed: семя });
+      // `_исходный` ПРОХОДИТ НАСКВОЗЬ. Отбор подрезает длинную строку и
+      // наращивает короткую под слоговую вилку; корпус прячет показанное по
+      // ключу `в_корпусе` (см. `corpus._ключ`), и без исходника подрезанная
+      // строка сжигала только себя, а полная оставалась непоказанной и
+      // выпадала снова. Ядро исходник присылает, корпус его ждёт — терялся он
+      // ровно здесь, при переносе в очередь.
+      var it = typeof t === 'string'
+        ? { text: t, template: '', _исходный: '' }
+        : { text: t.text || '', template: t.template || '', _исходный: t._исходный || '' };
+      if (it.text) self._shownQ.push({ text: it.text, template: it.template,
+                                       _исходный: it._исходный, seed: семя });
     });
     clearTimeout(this._shownT);
     this._shownT = setTimeout(function () {
@@ -185,7 +194,9 @@ export const genMethods = {
       var groups = {};
       q.forEach(function (it) {
         var k = it.seed == null ? '' : String(it.seed);
-        (groups[k] = groups[k] || []).push({ text: it.text, template: it.template });
+        // и в теле запроса тоже — последнее звено цепочки исходника
+        (groups[k] = groups[k] || []).push({ text: it.text, template: it.template,
+                                             _исходный: it._исходный || '' });
       });
       Object.keys(groups).forEach(function (семя) {
         var payload = { items: groups[семя] };
