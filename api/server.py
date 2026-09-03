@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import json
 import os
 import sys
@@ -3008,7 +3009,40 @@ def dist_root_file(root_file):
     return send_from_directory(DIST, root_file)
 
 
+# ДОСТУП-ЛОГ БЕЗ САМООПРОСА (2026-09-02).
+#
+# Окно опрашивает `/api/status` каждые 12 секунд в покое и каждые 1.2 секунды,
+# пока идёт работа. Werkzeug печатает КАЖДЫЙ такой запрос, и это уходит в
+# `~/Library/Logs/nakedlunch.log` — единственное место, куда владелец полезет,
+# когда что-то сломается.
+#
+# Замер на его живом журнале: 30 102 строки, из них 19 711 — «GET /api/status»,
+# то есть 65% шума. За всё время в нём одна настоящая ошибка (пятисотая
+# 2026-08-06), и найти её среди двадцати тысяч одинаковых строк можно только
+# grep'ом. Диагностический журнал, утопленный в собственном тиканье, — не
+# журнал.
+#
+# ГАСИМ РОВНО УСПЕШНЫЙ САМООПРОС, и это важно: 4xx и 5xx остаются целиком.
+# Именно строка «GET /api/status 500» однажды и объяснила падение, выбросить её
+# значило бы сэкономить на том единственном, ради чего журнал ведут. Всё
+# остальное — заливка книг, генерация, перепечка — тоже остаётся: они редкие и
+# именно они рассказывают, что человек делал.
+_ТИХИЕ_ПУТИ = ("/api/status", "/api/stats", "/healthz")
+
+
+class _БезСамоопроса(logging.Filter):
+    def filter(self, запись) -> bool:
+        try:
+            строка = запись.getMessage()
+        except Exception:
+            return True
+        if '" 2' not in строка and '" 3' not in строка:
+            return True                      # не «200/3xx» — пропускаем всё
+        return not any(п in строка for п in _ТИХИЕ_ПУТИ)
+
+
 def main() -> None:
+    logging.getLogger("werkzeug").addFilter(_БезСамоопроса())
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=8790)
     ap.add_argument("--host", default="127.0.0.1")

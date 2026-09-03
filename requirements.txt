@@ -1,30 +1,40 @@
-# extendo — local, offline, CPU. No external APIs, no LLM (invariants #1/#2).
-# Runtime:
-pymorphy3>=2.0       # used by corpus.py (accept/reject-time lemmatization) — NOT by
-pymorphy3-dicts-ru   # generate.py, which reads the prebaked core/data/forms.json instead
-wordfreq>=3.1        # offline aggregated frequency counts for the banality filter
-flask>=3.0          # thin local server (api/server.py)
-pywebview>=5.0       # native window for launch.py (falls back to browser if absent)
-navec>=0.10          # static Russian word vectors (core/embeddings.py) — theme relevance
-                     # without literal-word stuffing, see PLAN.md 0.2. ONE dependency
-                     # (numpy, already transitive above) — no torch, deliberately: a
-                     # spike measured a 560M sentence encoder gave no better signal
-                     # than this 51MB word-vector model for the same class of problem.
-                     # Model file core/data/navec.tar is a committed build artifact,
-                     # same as forms.json/nl_rhyme.json — see embeddings.py for the
-                     # re-fetch URL if it's ever missing.
+# nakedlunch — локально, офлайн, на процессоре. Ни внешних сервисов, ни LLM.
+# Рантайм:
+pymorphy3>=2.0       # лемматизация в corpus.py — на ней стоят тавтология, барьер
+pymorphy3-dicts-ru   # повтора лемм и разбор строки при заливке книг
+wordfreq>=3.1        # офлайновые частоты слов: шкала редкости и подписи в подсказках
+flask>=3.0           # тонкий локальный сервер (api/server.py)
+pywebview>=5.0       # родное окно для launch.py (без него — запасной путь в браузер)
+navec>=0.10          # статические векторы русских слов (core/embeddings.py). Заводились
+                     # ради ТЕМЫ, вырезанной 2026-08-29; остались, потому что на них
+                     # стоит слой «близкое» во вкладке подсказок по слову и печка
+                     # индекса. ОДНА зависимость (numpy, и так транзитивный) — torch
+                     # сознательно нет: замер показал, что кодировщик предложений на
+                     # 560 млн параметров не даёт лучшего сигнала, чем эта модель на
+                     # 51 МБ. Сам файл core/data/navec.tar — артефакт сборки, ссылка
+                     # для перекачки в шапке embeddings.py.
 
-# Dev only:
-pytest>=8.0          # tests/ — не нужен приложению, нужен разработке
+# Только для разработки:
+pytest>=8.0          # tests/ — приложению не нужен
 
-# Build-time only (NOT runtime dependencies) — needed only to grow the vocabulary
-# or to precompute nakedlunch rhyme keys:
+# Только для сборки таблиц (В РАНТАЙМЕ НЕ НУЖНЫ):
 #   pip install ruaccent "transformers<5"
-# ruaccent's ONNX call breaks on transformers 5.x ('token_type_ids' missing from
-# input feed — a tokenizer-output shape change between major versions). Found
-# 2026-07-13 when a bare `pip install ruaccent` pulled transformers 5.13.1.
-# ruaccent itself runs on onnxruntime (CPU, ~10ms/fragment) — transformers is
-# only used for its tokenizer, so this pin doesn't reintroduce torch/RPST.
-# tools/build_lexicon.py  -> core/data/lexicon.json (wordfreq + pymorphy3, both already runtime deps)
-# tools/build_forms.py    -> core/data/forms.json   (+ ruaccent, for stress)
-# tools/build_nl_rhyme.py -> core/data/nl_rhyme.json (+ ruaccent, rhyme keys for nakedlunch fragments)
+# ONNX-вызов ruaccent ломается на transformers 5.x (в подаче нет 'token_type_ids' —
+# токенизатор сменил форму вывода между мажорными версиями). Поймано 2026-07-13,
+# когда голый `pip install ruaccent` притянул transformers 5.13.1. Сам ruaccent
+# работает на onnxruntime (процессор, ~10 мс на фрагмент), а transformers нужен
+# только ради токенизатора — то есть этот пин не возвращает torch.
+#
+#   tools/build_nl_rhyme.py   -> core/data/nl_rhyme.jsonl  (+ ruaccent: ключи рифм корпуса)
+#   tools/build_rhyme_index.py-> core/data/rhyme_index.json (+ ruaccent: словарь ударений)
+#   tools/build_nl_index.py   -> core/data/nl_index/        (колонки отбора)
+#   tools/build_nl_addr.py    -> core/data/nl_addr/         (адреса строк; нужны
+#                                исходные файлы книг на диске — см. ARCHITECTURE.md)
+#
+# НАДГРОБИЕ 2026-09-02. Здесь стояли ещё две печки — `tools/build_lexicon.py`
+# (core/data/lexicon.json) и `tools/build_forms.py` (core/data/forms.json), а в
+# строке про pymorphy3 говорилось «нужен corpus.py, а НЕ generate.py, который
+# читает готовый forms.json». Всё трое — генератор, его словари и его печки —
+# вырезаны: генератор 2026-08-29 (коммит 2c1eadd), таблицы и печки 2026-09-02
+# (c25e0ed). Файл, по которому ставят зависимости, оставался последним местом,
+# где они числились живыми.
