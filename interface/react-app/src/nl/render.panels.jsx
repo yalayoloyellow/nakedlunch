@@ -207,7 +207,7 @@ export function renderHeader(c) {
         <div data-tab-ind="1" aria-hidden="true" style={s('position: absolute; top: 3px; bottom: 3px; left: 0; width: 0; border-radius: var(--radius); background: var(--ink); z-index: 0; pointer-events: none;')}></div>
         {/* ВКЛАДОК ДВЕ (2026-08-18). Третьей была «nakedlunch» — редактор
             документа; он вырезан целиком, а лента из «отдельной вкладки сбоку»
-            стала единственной поверхностью. Требование владельца дословно:
+            стала единственной поверхностью. Требование:
             «лента — отдельная вкладка, которая уже не нужна в таком виде. По
             сути ты наплодил говна, не почистил старое, фактически не убрал». */}
         <button data-tab="lenta" onMouseDown={noFocus} onClick={() => c.setTab('lenta')} style={s(tabPill(c.state.tab === 'lenta'))}>лента</button>
