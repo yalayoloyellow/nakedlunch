@@ -182,10 +182,11 @@ export const genMethods = {
       // выпадала снова. Ядро исходник присылает, корпус его ждёт — терялся он
       // ровно здесь, при переносе в очередь.
       var it = typeof t === 'string'
-        ? { text: t, template: '', _исходный: '' }
-        : { text: t.text || '', template: t.template || '', _исходный: t._исходный || '' };
+        ? { text: t, template: '', _исходный: '', _ном: null }
+        : { text: t.text || '', template: t.template || '', _исходный: t._исходный || '',
+            _ном: (typeof t._ном === 'number' ? t._ном : null) };
       if (it.text) self._shownQ.push({ text: it.text, template: it.template,
-                                       _исходный: it._исходный, seed: семя });
+                                       _исходный: it._исходный, _ном: it._ном, seed: семя });
     });
     clearTimeout(this._shownT);
     this._shownT = setTimeout(function () {
@@ -196,7 +197,8 @@ export const genMethods = {
         var k = it.seed == null ? '' : String(it.seed);
         // и в теле запроса тоже — последнее звено цепочки исходника
         (groups[k] = groups[k] || []).push({ text: it.text, template: it.template,
-                                             _исходный: it._исходный || '' });
+                                             _исходный: it._исходный || '',
+                                             _ном: (typeof it._ном === 'number' ? it._ном : null) });
       });
       Object.keys(groups).forEach(function (семя) {
         var payload = { items: groups[семя] };

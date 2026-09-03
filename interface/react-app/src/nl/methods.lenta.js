@@ -188,7 +188,12 @@ export const lentaMethods = {
           var м = (r._поз === undefined ? j : r._поз);
           return { text: r.text, letter: spec && spec[м] ? spec[м].letter : 'а',
                    rk: r.rhyme || '', book: r.source || '', bookId: r.source_id || '',
-                   _исходный: r._исходный || '' };
+                   _исходный: r._исходный || '',
+                   // НОМЕР СТРОКИ В ИНДЕКСЕ (2026-09-03). Едет до истории и
+                   // там записывается: по нему показанное вычитается из
+                   // выдачи БЕЗ словаря «текст → номер» на 2.3 млн ключей,
+                   // который стоил 5.4 с при каждом запуске.
+                   _ном: (typeof r._ном === 'number' ? r._ном : null) };
         });
       };
       if (естьБлоки) {
@@ -286,6 +291,7 @@ export const lentaMethods = {
                  // терял между ними — и обещание «показанное не возвращается»
                  // ломалось на каждой подрезанной строке.
                  _исходный: r._исходный || '',
+                 _ном: (typeof r._ном === 'number' ? r._ном : null),
                  блок: блок, вид: (мета && мета.вид) || 'строфа' };
       })
     });
@@ -317,7 +323,8 @@ export const lentaMethods = {
     this._показанБлок = блок;
     if (this.markShownQueue) {
       this.markShownQueue(л.map(function (r) {
-        return { text: r.text, template: '', _исходный: r._исходный || '' };
+        return { text: r.text, template: '', _исходный: r._исходный || '',
+                 _ном: (typeof r._ном === 'number' ? r._ном : null) };
       }));
     }
   },

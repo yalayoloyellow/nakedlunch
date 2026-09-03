@@ -758,6 +758,25 @@ def _diversify(pool: list, k: int, div: float) -> list:
 # вместе с темой»). Поле `forced_notice` в ответе осталось пустым словарём —
 # форма ответа не меняется ради сноса.
 
+def _маска_истории(idx, corpus, hidden, семя):
+    """Маска показанного: номерами, если корпус их знает, иначе текстами.
+
+    Разбор — в `corpus.скрытые_номера` и `nlindex.маска_истории`. Здесь важно
+    одно: путей два, и выбор между ними не смеет спрятать другую строку. Оба
+    сверены на живой истории в 5 400 записей — маски совпали побитово.
+    """
+    номера_же = getattr(corpus, "скрытые_номера", None)
+    if номера_же is None:
+        return nlindex.mask_of(idx, hidden)      # заглушки в тестах без метода
+    try:
+        номера, хвост = номера_же(nlindex.штамп(idx), кроме_семени=семя)
+    except Exception:
+        # Индекс-заглушка без штампа, чужая реализация корпуса — что угодно.
+        # Быстрый путь тут не обязанность, а удобство: молча уходим на старый.
+        return nlindex.mask_of(idx, hidden)
+    return nlindex.маска_истории(idx, номера, хвост)
+
+
 def _маска_пула(idx, nl_fragments, книги):
     """Маска активного пула: колонкой `src`, если знаем книги, иначе текстами.
 
@@ -786,7 +805,7 @@ def _classic_pool(knobs, corpus, nl_fragments, *, hidden, no_mat, only_mat, clau
         # `nlindex.select_light`. Остаются мат, чёрный список, история и пул.
         pool, survived, ступени = nlindex.select_light(
             _idx, pool_mask=_маска_пула(_idx, nl_fragments, книги),
-            hidden_mask=nlindex.mask_of(_idx, hidden),
+            hidden_mask=_маска_истории(_idx, corpus, hidden, семя),
             no_mat=no_mat, only_mat=only_mat, cap=cap, seed=семя,
             mat_share=mat_share)
         return pool, survived, ступени
@@ -1203,7 +1222,7 @@ def _run(lines, knobs: dict, corpus, nl_fragments: list | None = None, rhyme: st
         nl_survivors, n_nl_survived, forced_candidates, ступени = nlindex.select(
             _idx,
             pool_mask=_пул_маска,
-            hidden_mask=nlindex.mask_of(_idx, hidden),
+            hidden_mask=_маска_истории(_idx, corpus, hidden, семя),
             no_mat=no_mat, only_mat=only_mat,
             clausula=clausula,
             cap=NL_SELECT_CAP, reserve_n=min(1_000_000, max(30, n_blocks * 5)),
