@@ -69,9 +69,24 @@ def _печкин_модуль():
     from pathlib import Path
     if "build_nl_rhyme" in sys.modules:
         return sys.modules["build_nl_rhyme"]
-    путь = Path(__file__).resolve().parent.parent / "tools" / "build_nl_rhyme.py"
+    печки = Path(__file__).resolve().parent.parent / "tools"
+    путь = печки / "build_nl_rhyme.py"
     if not путь.exists():
         return None
+    # ПАПКА ПЕЧЕК — В ПУТИ, ИНАЧЕ ВОРОТА МОЛЧА ГАСНУТ (починка 2026-09-04).
+    # `build_nl_rhyme.py` делает `from _accent import stress_index`, а
+    # `tools/_accent.py` лежит рядом с ним и ниоткуда больше не виден: при
+    # запуске из исходников `tools` в sys.path не попадает ни от launch.py, ни
+    # от api/server.py — оба кладут туда только `core`. Модуль падал с
+    # ModuleNotFoundError, его ловил `except Exception` ниже, функция возвращала
+    # None — и ворота внутренней рифмы после реза НЕ ПРОВЕРЯЛИСЬ ВООБЩЕ.
+    # Замер до правки: модуль не поднимался («No module named '_accent'»);
+    # после — поднимается, акцентуатор заводится на 3 194 881 словоформе.
+    # В собранном приложении дефекта не было: PyInstaller кладёт модули в одно
+    # пространство имён, и `_accent` там виден. То есть из исходников и из
+    # сборки ручка вела себя ПО-РАЗНОМУ, а разработка идёт из исходников.
+    if str(печки) not in sys.path:
+        sys.path.insert(0, str(печки))
     спец = importlib.util.spec_from_file_location("build_nl_rhyme", путь)
     мод = importlib.util.module_from_spec(спец)
     sys.modules["build_nl_rhyme"] = мод
