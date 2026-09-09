@@ -542,21 +542,6 @@ class ExportApi:
         except Exception as e:
             return {"ok": False, "error": f"состояние записи недоступно: {e}"}
 
-    def rec_mux(self) -> dict:
-        """Склейка через ffmpeg — ПОСЛЕ остановки. Исходники не трогаются."""
-        try:
-            with self._rec_lock:
-                if self._rec_session is None:
-                    return {"ok": False, "error": "записи не было"}
-                res = self._rec_session.mux()
-            if not res.get("ok"):
-                # reason у mux уже по-русски; поднимаем его как error, чтобы
-                # интерфейсу не пришлось разбирать два разных поля
-                res.setdefault("error", res.get("reason", "склейка не удалась"))
-            return res
-        except Exception as e:
-            return {"ok": False, "error": f"склейка не удалась: {e}"}
-
     def save_file(self, filename: str, content: str) -> dict:
         if self.window is None:
             return {"ok": False, "error": "окно недоступно"}

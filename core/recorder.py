@@ -44,20 +44,14 @@
 #    придёт предыдущий. А вот чанк, которого не дождались, — сбой, и молчать
 #    о нём нельзя (пользователь: испорченную запись лучше увидеть сразу).
 #
-# 7. Склейка (mux) — только перекодированием. WebM от MediaRecorder это VFR
-#    без длительности в заголовке (замерено: ffprobe duration = N/A), -c copy
-#    даёт мусор. ffmpeg опционален: нет его — честный отказ, не падение.
-#
-# Модуль не знает ни про Flask, ни про webview: чистые файлы и subprocess.
+# Модуль не знает ни про Flask, ни про webview: чистые файлы.
 
 from __future__ import annotations
 
 import array
 import os
 import re
-import shutil
 import struct
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -67,9 +61,6 @@ SAMPWIDTH = 2                      # Int16 — то, что отдаёт AudioWo
 FLUSH_EVERY = 0.25                 # период перепрошивки/fsync, секунды (см. п.1)
 SEQ_WINDOW = 32                    # сколько чанков «из будущего» придерживаем (см. п.6)
 DEFAULT_ROOT = Path.home() / "Documents" / "nakedlunch" / "записи"
-FFMPEG_FALLBACKS = ("/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg")
-MUX_NAME = "сведено.mp4"
-VIDEO_EXT = (".webm", ".mp4", ".mov", ".mkv")
 
 _NAME_RE = re.compile(r"^[A-Za-zА-Яа-я0-9_-]{1,32}$")
 _EXT_RE = re.compile(r"^[A-Za-z0-9]{1,8}$")
@@ -451,99 +442,8 @@ class Session:
         """На каждую дорожку — {bytes, seconds, peak, last_write_ago, error}."""
         return {name: w.status() for name, w in self.tracks.items()}
 
-    def mux(self, **kw) -> dict:
-        if any(not w.closed for w in self.tracks.values()):
-            return {"ok": False, "reason": "запись ещё идёт — сначала остановить дорожки"}
-        return mux(self.dir, **kw)
-
-
-# --------------------------------------------------------------------- склейка
-
-def find_ffmpeg() -> str | None:
-    """ffmpeg опционален (PLAN.md: единственная внешняя опциональная зависимость).
-    Ищем в PATH и в обычных местах homebrew — .app-запуск не читает ~/.zshrc,
-    поэтому PATH там может быть голый."""
-    explicit = os.environ.get("NAKEDLUNCH_FFMPEG")
-    if explicit:
-        return explicit if (os.path.isfile(explicit) and os.access(explicit, os.X_OK)) else None
-    found = shutil.which("ffmpeg")
-    if found:
-        return found
-    for cand in FFMPEG_FALLBACKS:
-        if os.path.isfile(cand) and os.access(cand, os.X_OK):
-            return cand
-    return None
-
-
-def _pick_video(d: Path, out_name: str) -> Path | None:
-    """Готовое видео сессии. .partial сюда не попадает (расширение другое) —
-    склеивать оборванную запись молча нельзя."""
-    cand = [p for p in sorted(d.iterdir())
-            if p.is_file() and p.suffix.lower() in VIDEO_EXT and p.name != out_name]
-    if not cand:
-        return None
-    cand.sort(key=lambda p: (VIDEO_EXT.index(p.suffix.lower()), p.name))
-    return cand[0]
-
-
-def mux(session_dir, out_name: str = MUX_NAME, timeout: float = 3600.0) -> dict:
-    """Склеить видео и звуковые дорожки в один файл. Исходники не трогаются.
-
-    ПЕРЕКОДИРОВАНИЕ, НЕ -c copy: WebM от MediaRecorder — VFR без длительности
-    в заголовке (замерено: ffprobe duration = N/A), покадровое копирование
-    даёт файл с поехавшим временем.
-
-    ЗВУК СВОДИТСЯ В ОДНУ ДОРОЖКУ (amix), а не раскладывается отдельными
-    дорожками контейнера. Почему: обычный плеер играет ПЕРВУЮ звуковую
-    дорожку и молчит про остальные — зритель услышал бы только микрофон или
-    только луп и решил бы, что запись испорчена. Тихий сбой хуже громкого.
-    Разделение при этом никуда не девается: mic.wav и loop.wav лежат рядом
-    нетронутыми, для настоящего сведения берут их, а не этот файл.
-    normalize=0 обязателен: по умолчанию amix делит громкость на число входов,
-    и «сведёнка» вышла бы тише исходников без единого сообщения (замерено на
-    двух одинаково громких дорожках: mean_volume -9.5 dB против -5.5 dB).
-    Обратная сторона честная: два горячих источника в сумме могут клиппировать
-    (в том же замере max_volume упёрся в 0.0 dB). Это слышно сразу, а исходники
-    лежат рядом нетронутыми — настоящее сведение делают из них.
-    """
-    d = Path(session_dir)
-    if not d.is_dir():
-        return {"ok": False, "reason": f"каталог записи не найден: {d}"}
-    ff = find_ffmpeg()
-    if not ff:
-        return {"ok": False, "reason": "ffmpeg не найден"}
-    video = _pick_video(d, out_name)
-    if video is None:
-        return {"ok": False, "reason": "нет готовой видеодорожки — склеивать нечего"}
-    wavs = sorted(p for p in d.glob("*.wav") if p.is_file())
-    out = d / out_name
-
-    cmd = [ff, "-y", "-i", str(video)]
-    for w in wavs:
-        cmd += ["-i", str(w)]
-    if len(wavs) == 1:
-        cmd += ["-map", "0:v:0", "-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
-    elif wavs:
-        chain = "".join(f"[{i + 1}:a]" for i in range(len(wavs)))
-        chain += f"amix=inputs={len(wavs)}:duration=longest:normalize=0[a]"
-        cmd += ["-filter_complex", chain, "-map", "0:v:0", "-map", "[a]",
-                "-c:a", "aac", "-b:a", "192k"]
-    else:
-        cmd += ["-map", "0:v:0", "-an"]
-    cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-            "-pix_fmt", "yuv420p", "-fps_mode", "cfr", "-r", "30",
-            "-movflags", "+faststart", str(out)]
-
-    try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "reason": f"ffmpeg не уложился в {int(timeout)}с", "cmd": cmd}
-    except OSError as e:
-        return {"ok": False, "reason": f"ffmpeg не запустился: {e}", "cmd": cmd}
-    if p.returncode != 0:
-        tail = "\n".join((p.stderr or "").strip().splitlines()[-12:])
-        return {"ok": False, "reason": f"ffmpeg вернул код {p.returncode}",
-                "stderr": tail, "cmd": cmd}
-    return {"ok": True, "path": str(out), "bytes": out.stat().st_size if out.exists() else 0,
-            "video": str(video), "audio": [str(w) for w in wavs], "ffmpeg": ff,
-            "cmd": cmd}
+# НАДГРОБИЕ: СКЛЕЙКА ffmpeg ВЫРЕЗАНА ВМЕСТЕ С ДОРОЖКОЙ ВИДЕО. Здесь стояли
+# `find_ffmpeg`, `_pick_video` и `mux`: они собирали снятое захватом окна видео
+# с дорожками звука в один файл. Захват окна убран — тот же кадр даёт любой
+# скринкаст, — и склеивать стало нечего: остаются два wav, которые и так
+# лежат готовыми в каталоге записи.

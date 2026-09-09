@@ -32,10 +32,13 @@
 //   rec_chunk(track, seq, b64)→ {ok, bytes, total, peak} — кусок по порядку
 //   rec_status()              → {ok, active, dir, tracks:{…}} — здоровье
 //   rec_stop(track)           → {ok, path, bytes, seconds, peak} — закрыть
-//   rec_mux()                 → {ok, path, …}            — склейка ffmpeg
-// track: 'video' | 'mic' | 'loop' — это же имена файлов в каталоге записи.
-// params у видео: {kind:'blob', ext} (ext — из ФАКТИЧЕСКОГО rec.mimeType),
-// у звука: {kind:'wav', channels, rate}.
+// track: 'mic' | 'loop' — это же имена файлов в каталоге записи.
+// params у звука: {kind:'wav', channels, rate}.
+//
+// НАДГРОБИЕ: ДОРОЖКА 'video' И СКЛЕЙКА rec_mux() ВЫРЕЗАНЫ. Видео снималось
+// захватом окна (getDisplayMedia), а не композитным канвасом; то же самое
+// даёт любой скринкаст, и держать ради этого третью дорожку, ffmpeg и кнопку
+// «склеить» незачем. Пишется звук.
 //
 // ОТВЕТ {ok:false} — ЭТО НЕ ИСКЛЮЧЕНИЕ. Питон почти никогда не бросает через
 // мост: он отвечает объектом. Поэтому каждый вызов проверяется по полю ok, а
@@ -44,7 +47,6 @@
 // Нет моста (обычная вкладка браузера) — честный отказ, а не тихая пустая
 // запись: кнопка записи заперта и подписана «запись только в приложении».
 
-import { createVideoRec } from './freestyle/rec-video.js';
 import { createAudioRec } from './freestyle/rec-audio.js';
 
 // сколько индикатор живёт после последнего движения мыши
@@ -82,7 +84,7 @@ function fmtTime(ms) {
 }
 
 // короткое имя дорожки для индикатора
-const RU = { video: 'видео', mic: 'мик', loop: 'луп' };
+const RU = { mic: 'мик', loop: 'луп' };
 
 // Слой поверх сцены. cssText переписываем только при изменении: индикатор
 // перерисовывается 4 раза в секунду поверх живого визуализатора, и лишний
@@ -274,10 +276,7 @@ export const fsRecMethods = {
     this._recZero = {};
     this._recStatus = {};
 
-    // Итог прошлой записи убираем: новая запись заводит в питоне НОВЫЙ каталог,
-    // и кнопка «склеить» на старой плашке склеила бы уже не то, что на ней
-    // написано (rec_mux работает с последней сессией — она одна знает, что в
-    // ней лежит целым).
+    // Итог прошлой записи убираем: новая запись заводит в питоне НОВЫЙ каталог.
     const old = document.getElementById('nlRecDone');
     if (old && old.parentNode) old.parentNode.removeChild(old);
 
@@ -287,15 +286,10 @@ export const fsRecMethods = {
 
     const tracks = [];
     try {
-      const video = createVideoRec(bridge);
-      await video.start();
-      tracks.push(video);
-
       // Аудио-отводы: recAudioTracks выше в этом же миксине. Хук отдаёт
       // дорожки НЕЗАПУЩЕННЫМИ — поднимаем их здесь, чтобы откат при сбое был
-      // один на все три. Проверка на наличие хука осталась не для красоты:
-      // без неё сборка без аудио-модуля падала бы вместо того, чтобы писать
-      // видео и громко сказать «1 из 3».
+      // один на обе. Проверка на наличие хука осталась не для красоты: без
+      // неё сборка без аудио-модуля падала бы молча.
       if (typeof this.recAudioTracks === 'function') {
         const got = this.recNormalizeTracks(await this.recAudioTracks(bridge));
         for (let i = 0; i < got.length; i++) {
@@ -323,8 +317,8 @@ export const fsRecMethods = {
     this._recAt = Date.now();
     this._recHudAt = Date.now();
 
-    if (tracks.length < 3) {
-      this.recFail('поднялось дорожек: ' + tracks.length + ' из 3 — аудио-отводы не подключены');
+    if (tracks.length < 2) {
+      this.recFail('поднялось дорожек: ' + tracks.length + ' из 2 — аудио-отводы не подключены');
     }
     // без rec_status здоровье дорожек проверяет только сам MediaRecorder, а
     // «в файле тишина» так не поймать — молчать об этом нельзя
@@ -564,9 +558,7 @@ export const fsRecMethods = {
     if (hud && hud.parentNode) hud.parentNode.removeChild(hud);
   },
 
-  // ---- итог и склейка ----------------------------------------------------
-  // Склейка НЕ автомат (решение пользователя): исходники не трогаем, кнопка
-  // появляется только если мост реально отдаёт rec_mux.
+  // ---- итог ---------------------------------------------------------------
   recShowDone(results, ms) {
     const self = this;
     const bridge = this._recBridge;
@@ -621,11 +613,6 @@ export const fsRecMethods = {
         + ' font-family: inherit; font-size: 11px; cursor: pointer; background: #f2f2f2; color: #101010;';
       return b;
     };
-    if (bridge && typeof bridge.rec_mux === 'function' && paths.video) {
-      const mux = mkBtn('склеить');
-      mux.onclick = function () { self.recMux(mux); };
-      bar.appendChild(mux);
-    }
     const close = mkBtn('закрыть');
     close.style.background = 'transparent';
     close.style.color = '#f2f2f2';
@@ -637,39 +624,6 @@ export const fsRecMethods = {
     };
     bar.appendChild(close);
     done.appendChild(bar);
-  },
-
-  // Склейка. Аргументов НЕТ: питон склеивает свой последний каталог записи —
-  // он его и завёл, он один знает, что в нём лежит целым, а что оборвано
-  // (.partial). Пути с фронта были бы вторым источником правды.
-  async recMux(btn) {
-    const bridge = this._recBridge;
-    if (!bridge || typeof bridge.rec_mux !== 'function') return;
-    if (btn) { btn.disabled = true; btn.textContent = 'склеиваю…'; }
-    const say = function (text, bad) {
-      const row = document.createElement('div');
-      row.style.cssText = 'margin-top: 10px; word-break: break-all; white-space: pre-wrap;'
-        + (bad ? ' color: #ff8a8a;' : '');
-      row.textContent = text;
-      if (btn && btn.parentNode && btn.parentNode.parentNode) btn.parentNode.parentNode.appendChild(row);
-    };
-    try {
-      // WebM от MediaRecorder — VFR и без длительности в заголовке
-      // (ffprobe duration = N/A), поэтому питон обязан перекодировать: -c copy
-      // здесь даёт битый файл. Это забота бэкенда, но повод помнить.
-      const res = await bridge.rec_mux();
-      // отказ приезжает объектом {ok:false, error} — исключения тут не бывает
-      if (!res || res.ok === false) {
-        if (btn) { btn.disabled = false; btn.textContent = 'склеить'; }
-        say('склейка не вышла: ' + ((res && (res.error || res.reason)) || 'питон промолчал'), true);
-        return;
-      }
-      if (btn) { btn.textContent = 'готово'; }
-      if (res.path) say('склеено: ' + res.path);
-    } catch (e) {
-      if (btn) { btn.disabled = false; btn.textContent = 'склеить'; }
-      say('склейка не вышла: ' + msgOf(e), true);
-    }
   },
 
   // ---- снос --------------------------------------------------------------

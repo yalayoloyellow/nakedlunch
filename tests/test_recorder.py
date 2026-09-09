@@ -3,8 +3,8 @@
 # Проверяем не «поле пришло», а результат: WAV открывается модулем wave и
 # содержит ТЕ САМЫЕ сэмплы; пик по тишине действительно ноль; заголовок
 # перепрошивается одним write; .partial переезжает в финальное имя только на
-# close; разрыв номеров ловится; mux без ffmpeg возвращает причину, а не
-# исключение. Отдельно — краш-тест НАСТОЯЩИМ SIGKILL: подпроцесс пишет, его
+# close; разрыв номеров ловится; статус дорожек не врёт.
+# Отдельно — краш-тест НАСТОЯЩИМ SIGKILL: подпроцесс пишет, его
 # убивают посреди записи, .partial обязан открыться модулем wave.
 #
 # Прогон: .venv/bin/python -m pytest tests/test_recorder.py -q
@@ -289,93 +289,10 @@ def test_session_dirs_do_not_collide(rec_root):
     assert a.dir != b.dir
 
 
-# -------------------------------------------------------------------------- mux
-
-@pytest.fixture()
-def no_ffmpeg(monkeypatch):
-    monkeypatch.delenv("NAKEDLUNCH_FFMPEG", raising=False)
-    monkeypatch.setattr(recorder.shutil, "which", lambda *a, **k: None)
-    monkeypatch.setattr(recorder, "FFMPEG_FALLBACKS", ())
-
-
-def test_mux_without_ffmpeg_returns_reason(tmp_path, no_ffmpeg):
-    """ffmpeg опционален: нет его — честный отказ, а не исключение."""
-    (tmp_path / "video.webm").write_bytes(b"\x1a\x45\xdf\xa3")
-    res = recorder.mux(tmp_path)
-    assert res == {"ok": False, "reason": "ffmpeg не найден"}
-
-
-def test_mux_without_video_returns_reason(tmp_path, monkeypatch):
-    monkeypatch.setenv("NAKEDLUNCH_FFMPEG", sys.executable)   # «ffmpeg есть»
-    (tmp_path / "mic.wav").write_bytes(b"")
-    res = recorder.mux(tmp_path)
-    assert res["ok"] is False and "видеодорожк" in res["reason"]
-
-
-def test_mux_ignores_partial_video(tmp_path, monkeypatch):
-    """Оборванную запись молча склеивать нельзя — .partial не видеодорожка."""
-    monkeypatch.setenv("NAKEDLUNCH_FFMPEG", sys.executable)
-    (tmp_path / "video.webm.partial").write_bytes(b"\x1a\x45\xdf\xa3")
-    assert recorder.mux(tmp_path)["ok"] is False
-
-
-def test_find_ffmpeg_honours_missing_explicit_path(tmp_path, monkeypatch):
-    monkeypatch.setenv("NAKEDLUNCH_FFMPEG", str(tmp_path / "нет-такого"))
-    assert recorder.find_ffmpeg() is None
-
-
-def test_session_mux_refuses_while_recording(rec_root, no_ffmpeg):
-    s = recorder.Session()
-    s.open_track("mic")
-    res = s.mux()
-    assert res["ok"] is False and "запись ещё идёт" in res["reason"]
-    s.stop_all()
-
-
-def test_mux_real_ffmpeg_produces_playable_file(rec_root):
-    """Живая склейка — только если ffmpeg реально стоит (иначе пропуск)."""
-    ff = recorder.find_ffmpeg()
-    if not ff:
-        pytest.skip("ffmpeg не установлен")
-    s = recorder.Session()
-    # видео делает сам ffmpeg: WebM/VP8, 2 секунды тестового сигнала
-    src = s.dir / "video.webm"
-    make = subprocess.run([ff, "-y", "-f", "lavfi", "-i", "testsrc=size=320x240:rate=30",
-                           "-t", "2", "-c:v", "libvpx", "-b:v", "300k", str(src)],
-                          capture_output=True, text=True)
-    if make.returncode != 0:
-        pytest.skip("этот ffmpeg не собрал тестовое видео")
-    for name, ch in (("mic", 1), ("loop", 2)):
-        w = s.open_track(name, kind="wav", channels=ch, rate=RATE)
-        w.append(tone(RATE * 2, channels=ch))
-        w.close()
-    res = recorder.mux(s.dir)
-    assert res["ok"] is True, res
-    out = Path(res["path"])
-    assert out.exists() and out.stat().st_size > 0
-    # исходники не тронуты — это условие пользователя, а не пожелание
-    for name in ("video.webm", "mic.wav", "loop.wav"):
-        assert (s.dir / name).exists()
-    with wave.open(str(s.dir / "loop.wav"), "rb") as f:
-        assert f.getnframes() == RATE * 2
-
-    # ПРОВЕРКА ПО ФАКТУ, а не по наличию файла: в сведёнке действительно есть
-    # звук. Именно тут ловится главная ловушка спайка — «всё зелёное, а файл
-    # тишина»; наличия дорожки для этого недостаточно, нужен уровень.
-    probe = subprocess.run([ff, "-hide_banner", "-i", str(out),
-                            "-af", "volumedetect", "-f", "null", "-"],
-                           capture_output=True, text=True)
-    log = probe.stderr
-    assert "Audio:" in log, log[-800:]
-    means = [float(l.split("mean_volume:")[1].split("dB")[0])
-             for l in log.splitlines() if "mean_volume:" in l]
-    assert means, log[-800:]
-    assert means[0] > -30.0, f"сведёнка почти тишина: mean_volume {means[0]} dB"
-    # деление громкости на число входов проверяется не по уровню (замерено:
-    # normalize=1 даёт -9.5 dB против -5.5 — порогом такое не различить честно),
-    # а по самой команде: флаг обязан быть в фильтре
-    assert any("normalize=0" in str(a) for a in res["cmd"]), res["cmd"]
-
+# НАДГРОБИЕ: СТОРОЖА СКЛЕЙКИ СНЯТЫ ВМЕСТЕ С НЕЙ. Здесь стояли шесть тестов
+# про `recorder.mux`, `find_ffmpeg` и выбор видеофайла. Дорожка видео снималась
+# захватом окна и вырезана; склеивать два wav не нужно — они и так лежат
+# готовыми в каталоге записи.
 
 # ------------------------------------------------------------------- КРАШ-ТЕСТ
 
