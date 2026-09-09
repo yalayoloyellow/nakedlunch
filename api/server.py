@@ -2996,7 +2996,7 @@ def api_nl_open_dir():
 #
 # Здесь стояли `_sheets_call` и роуты list/read/write/create/rename/duplicate/
 # trash/restore/purge/purge-all/move/folder-create/folder-delete/open-dir —
-# ровно четырнадцать, сверено с `git show e243487~1:api/server.py`. Тонкая
+# ровно четырнадцать, сверено с `git show 23f5686~1:api/server.py`. Тонкая
 # обёртка над `core/sheets.py`; модуль удалён целиком — **557 строк**
 # (здесь стояло 612; пересчитано по тому же коммиту, где он и удалён).
 #
