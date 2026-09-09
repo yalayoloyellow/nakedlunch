@@ -40,6 +40,7 @@ import nlindex          # колоночный индекс корпуса (Ра
 import scan as scan_mod
 from corpus import lemmatize
 import кэш               # кэш ударений: он же и отвечает, есть ли что читать
+import память            # помещается ли словарь в память этой машины
 
 VOWELS = "аеёиоуыэюя"
 
@@ -208,6 +209,7 @@ def warm_caches() -> None:
     if nlindex.available():
         return
     if кэш.есть():
+        память.проверить_словарь(кэш.какой())
         # {text: {"key", "span", "banal", "taut", "lemmas", "tokens"}} — see
         # tools/build_nl_rhyme.py's module docstring for what each field is
         # and why they're precomputed offline (2026-07-14: makes a FULL-pool

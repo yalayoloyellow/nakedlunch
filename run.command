@@ -1,7 +1,29 @@
 #!/bin/zsh
-# Double-clickable launcher for nakedlunch (Finder → double-click, or ./run.command).
-# Runs the isolated venv's python on launch.py, which opens the native window.
+# Двойной клик из Finder (или ./run.command). Тот же вход, что и у ярлыка
+# nakedlunch.app: собственное окружение рядом с программой, затем launch.py.
+#
+# ЗАПАСНОГО «ПРОСТО python3» ЗДЕСЬ БОЛЬШЕ НЕТ. Он был, и на старой машине давал
+# худший из возможных отказов: macOS, которая не берёт ничего новее Monterey,
+# несёт системный python3 3.9, ядро написано синтаксисом 3.10, и падение
+# случалось в дочернем процессе на разборе файла. Человек видел «Ядро не
+# ответило за отведённое время» — таймаут вместо причины.
+#
+# Теперь отсутствие окружения — честный отказ с готовой командой.
 HERE="${0:A:h}"
 PY="$HERE/.venv/bin/python"
-[ -x "$PY" ] || PY="python3"
+
+if [ ! -x "$PY" ]; then
+  print -r -- "nakedlunch: рядом с программой нет рабочего окружения."
+  print -r -- ""
+  print -r -- "  ожидалось: $PY"
+  print -r -- ""
+  print -r -- "Собери его — нужен Python 3.10 или новее, разработана на 3.12:"
+  print -r -- "  cd \"$HERE\""
+  print -r -- "  python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+  print -r -- ""
+  print -r -- "Окно останется открытым: нажми Enter, чтобы закрыть."
+  read -r _
+  exit 1
+fi
+
 exec "$PY" "$HERE/launch.py"
