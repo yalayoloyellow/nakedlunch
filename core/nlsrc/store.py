@@ -120,6 +120,10 @@ class NakedLunchStore:
         # См. toggle_active: переключение одной книги переписывало state.json
         # целиком, а он 549 МБ.
         self.active_path = self.data_dir / "active.json"
+        # Последняя беда при чтении складских файлов — пустая строка, пока всё
+        # цело. Раньше на её месте стоял `except Exception: pass`, и склад,
+        # потерявший флаги книг или историю показов, выглядел исправным.
+        self.последняя_беда: str = ""
         self.state = State()
         self._active_fragments: List[str] = []
         # None = ещё не считали. Токены нужны ровно одному методу (поиск по
@@ -190,8 +194,13 @@ class NakedLunchStore:
                     for c in self.state.corpora:
                         if c.id in флаги:
                             c.active = bool(флаги[c.id])
-            except Exception:
-                pass
+            except Exception as e:                                   # noqa: BLE001
+                # МОЛЧАТЬ НЕЛЬЗЯ: без флагов ВСЕ книги считаются включёнными.
+                # Человек выключил половину склада, файл флагов побился — и
+                # выключенные книги молча вернулись в выдачу. Со стороны это
+                # «генератор снова тащит мусор», а причина невидима.
+                self.последняя_беда = f"флаги активности книг не прочитались ({e}) — все книги включены"
+                print("склад: " + self.последняя_беда, flush=True)
         # Overlay dynamic state (chat + used_lines) from small fast file if present.
         # This allows frequent saves (after every generation) to be tiny instead of
         # rewriting 250k+ fragments every time.
@@ -204,8 +213,12 @@ class NakedLunchStore:
                     used = dyn_raw.get("used_lines") or {}
                     # Migrate old state: convert all values to float timestamps
                     self.state.used_lines = {k: float(v) for k, v in used.items()}
-            except Exception:
-                pass
+            except Exception as e:                                   # noqa: BLE001
+                # МОЛЧАТЬ НЕЛЬЗЯ: этот файл несёт историю показов. Не прочитался
+                # — программа забыла всё, что уже показывала, и начнёт
+                # повторять. Выглядит как «история сломалась», причина невидима.
+                self.последняя_беда = f"быстрый файл состояния не прочитался ({e}) — история показов пуста"
+                print("склад: " + self.последняя_беда, flush=True)
 
     def _ключи_склада(self) -> set:
         """Ключи всех фрагментов склада — считаются ОДИН раз на пачку.
