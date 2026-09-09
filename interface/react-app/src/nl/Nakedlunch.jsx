@@ -29,24 +29,18 @@ import { renderFsBar } from './render.fspanels.jsx';
 import { renderLenta } from './render.lenta.jsx';
 
 // корневой div — стили дословно из дизайна (строка 156 шаблона)
-const ROOT_STYLE = "height: 100vh; position: relative; --canvas:#131313; --ink:#ededed; --muted-hard:#cfcfcf; --muted:#949494; --muted-soft:#5c5c5c; --border-soft:#3d3d3d; --border-subtle:#242424; --menu-bg:color-mix(in srgb, var(--canvas) 82%, transparent); --content-max-width: min(clamp(440px, 24vw, 540px), calc(100% - 120px)); --radius:6px; --ease:cubic-bezier(0.4,0,0.2,1); --ease-spring:cubic-bezier(0.32,0.72,0,1); font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; background: var(--canvas); color: var(--ink); font-size: 13px; line-height: 1.5; display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased;";
+const ROOT_STYLE = "height: 100vh; position: relative; --canvas:#131313; --panel:#1b1b1b; --ink:#ededed; --muted-hard:#cfcfcf; --muted:#949494; --muted-soft:#5c5c5c; --border-soft:#3d3d3d; --border-subtle:#242424; --menu-bg:var(--panel); --content-max-width: min(clamp(440px, 24vw, 540px), calc(100% - 120px)); --radius:3px; --ease:cubic-bezier(0.4,0,0.2,1); --ease-spring:cubic-bezier(0.32,0.72,0,1); font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; background: var(--canvas); color: var(--ink); font-size: 13px; line-height: 1.5; display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased;";
 
-// SVG-фильтры дизайна (строки 99..154 шаблона): стекло панелей (#nl-warp /
-// #nl-warp-aber — applyTheme крутит их scale), кнопочный варп и текстовые
-// эффекты хрома; ref-крутилки #nl-text-warp / #nl-postfx подключит фристайл
-// в фазе 3 — сами фильтры переносятся целиком, на них ссылаются стили хрома
+// SVG-фильтры сцены: #nl-text-warp и #nl-text-warp-aber ведут строку,
+// #nl-postfx — слой поверх; крутилки к ним подключает фристайл.
+//
+// НАДГРОБИЕ: ФИЛЬТРЫ СТЕКЛА ПАНЕЛЕЙ (#nl-warp, #nl-warp-btn, #nl-warp-aber)
+// СНЯТЫ вместе с переменной --glass-fx и секцией настроек «вид». Панель
+// плавала над содержимым и гнула то, что под ней. Здесь остаются только
+// фильтры СТРОКИ — они и есть эффект, ради которого их писали.
 const SVG_FILTERS = (
   <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
     <defs>
-      <filter id="nl-warp" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
-        <feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves="2" seed="7" result="n"></feTurbulence>
-        <feGaussianBlur in="n" stdDeviation="9" result="ns"></feGaussianBlur>
-        <feDisplacementMap in="SourceGraphic" in2="ns" scale="11" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
-      </filter>
-      <filter id="nl-warp-btn" x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
-        <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="3" result="bn"></feTurbulence>
-        <feDisplacementMap in="SourceGraphic" in2="bn" scale="8" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
-      </filter>
       {/* ОБЛАСТЬ ФИЛЬТРА 300% → 150% (Раунд 57) — ЭТО И БЫЛ ФРИЗ СТРОКИ.
           Год повторялся один и тот же отчёт: подвисание на каждом показе текста., «по одному
           слову пробовал — фриз каждую смену», «чем больше слов надо
@@ -105,18 +99,6 @@ const SVG_FILTERS = (
         <feBlend in="mr" in2="mg" mode="screen" result="mrg"></feBlend>
         <feBlend in="mrg" in2="mb" mode="screen"></feBlend>
       </filter>
-      <filter id="nl-warp-aber" x="0" y="0" width="100%" height="100%" colorInterpolationFilters="sRGB">
-        <feTurbulence type="fractalNoise" baseFrequency="0.006" numOctaves="2" seed="7" result="wn"></feTurbulence>
-        <feGaussianBlur in="wn" stdDeviation="9" result="wns"></feGaussianBlur>
-        <feDisplacementMap in="SourceGraphic" in2="wns" scale="8" xChannelSelector="R" yChannelSelector="G" result="wr"></feDisplacementMap>
-        <feColorMatrix in="wr" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="wmr"></feColorMatrix>
-        <feDisplacementMap in="SourceGraphic" in2="wns" scale="11" xChannelSelector="R" yChannelSelector="G" result="wg"></feDisplacementMap>
-        <feColorMatrix in="wg" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="wmg"></feColorMatrix>
-        <feDisplacementMap in="SourceGraphic" in2="wns" scale="15" xChannelSelector="R" yChannelSelector="G" result="wb"></feDisplacementMap>
-        <feColorMatrix in="wb" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="wmb"></feColorMatrix>
-        <feBlend in="wmr" in2="wmg" mode="screen" result="wmrg"></feBlend>
-        <feBlend in="wmrg" in2="wmb" mode="screen"></feBlend>
-      </filter>
     </defs>
   </svg>
 );
@@ -171,10 +153,10 @@ function renderЯдроМолчит(c) {
   return (
     <div style={s('position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; '
       + 'justify-content: center; background: rgba(0,0,0,.82); backdrop-filter: blur(3px);')}>
-      <div style={s('max-width: 520px; padding: 26px 24px; border-radius: 12px; '
+      <div style={s('max-width: 520px; padding: 26px 24px; border-radius: var(--radius); '
         + 'background: var(--panel); border: 1px solid var(--border-subtle); text-align: left;')}>
         <div style={s('font-size: 13px; color: var(--ink); margin-bottom: 8px;')}>Ядро не отвечает</div>
-        <div style={s('font-size: 11px; line-height: 1.6; color: var(--muted); margin-bottom: 16px;')}>
+        <div style={s('font-size: 10.5px; line-height: 1.6; color: var(--muted); margin-bottom: 16px;')}>
           Часть программы, которая считает, перестала отвечать. Окно живо, но
           сделать оно сейчас ничего не может.<br /><br />
           Закрой и открой программу заново — журнал этой сессии сохранится, и в
@@ -182,7 +164,7 @@ function renderЯдроМолчит(c) {
         </div>
         <button onClick={копировать}
           style={s('appearance: none; border: 1px solid var(--border-subtle); border-radius: 999px; '
-            + 'padding: 8px 16px; font-family: inherit; font-size: 11px; cursor: pointer; '
+            + 'padding: 8px 16px; font-family: inherit; font-size: 10.5px; cursor: pointer; '
             + 'background: none; color: var(--ink);')}
           className={hov('background: var(--ink); color: var(--canvas)')}>скопировать, что известно</button>
       </div>
@@ -350,17 +332,6 @@ export default class Nakedlunch extends Component {
     var ue = Math.max(40, Math.min(220, parseFloat(C.uiExpo) || 100));
     var fx = (uc !== 100 ? 'contrast(' + uc + '%) ' : '') + (ue !== 100 ? 'brightness(' + ue / 100 + ')' : '');
     el.style.filter = fx && this.state.tab !== 'fs' ? fx.trim() : '';
-    var mf = C.menuFill || 'стекло', ma = Math.max(40, Math.min(100, parseFloat(C.menuAlpha) || 82));
-    el.style.setProperty('--menu-bg', mf === 'плотная' ? 'var(--canvas)' : 'color-mix(in srgb, var(--canvas) ' + ma + '%, transparent)');
-    var gb = parseFloat(C.glassBlur != null ? C.glassBlur : 7), gw = parseFloat(C.glassWarp != null ? C.glassWarp : 11);
-    if (isNaN(gb)) gb = 7; if (isNaN(gw)) gw = 11;
-    var aber = C.glassAber === 'да';
-    el.style.setProperty('--glass-fx', (gw > 0 ? 'url(#nl-warp' + (aber ? '-aber' : '') + ') ' : '') + 'blur(' + gb + 'px) saturate(185%) brightness(1.05)');
-    el.style.setProperty('--glass-fx-fallback', 'blur(' + (gb + 3) + 'px) saturate(185%) brightness(1.05)');
-    var wf = document.querySelector('#nl-warp feDisplacementMap');
-    if (wf) wf.setAttribute('scale', String(gw));
-    var ga = document.querySelectorAll('#nl-warp-aber feDisplacementMap');
-    for (var gi = 0; gi < ga.length; gi++) ga[gi].setAttribute('scale', String(gw * [0.7, 1, 1.38][gi]));
     var cw = {
       // «очень узкая» добавлена и стала умолчанием 2026-08-28 по слову
       // требование: колонка теперь ФИКСИРОВАННОЙ ширины (render.lenta.jsx),

@@ -93,8 +93,8 @@ const BASE_CSS = `
      а часть строк рождается из одного шаблона sc-for */
   [data-row="1"] + [data-row="1"] { border-top: 1px solid var(--border-subtle); }
   /* один правый столбец у всех строк: ползунки, списки, плашки заканчиваются на одной линии */
-  [data-row="1"] input[type="range"] { width: 146px; }
-  [data-pa] input[type="range"] { width: 146px; }
+  [data-row="1"] input[type="range"] { width: 104px; }
+  [data-pa] input[type="range"] { width: 104px; }
   [data-row="1"] select { width: 146px; max-width: 146px; }
   /* Правила [contenteditable] (снятие обводки и подсказка-плейсхолдер через
      data-ph) вырезаны 2026-08-18 вместе с редактором: редактируемых узлов в
@@ -106,7 +106,7 @@ const BASE_CSS = `
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1.4 5 5 9 1.4' fill='none' stroke='%23888888' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: right 7px center; background-size: 8px 5px; }
   select::-ms-expand { display: none; }
-  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 1px; background: var(--border-soft); border: none; border-radius: 1px; outline: none; cursor: pointer; }
+  input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 1px; background: var(--border-soft); border: none; border-radius: var(--radius); outline: none; cursor: pointer; }
   input[type="range"]::-webkit-slider-runnable-track { height: 1px; background: transparent; border: none; }
   input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 11px; height: 11px; margin-top: -5px; border: none; border-radius: 50%; background: var(--ink); cursor: pointer; transition: transform 0.12s var(--ease); }
   input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.16); }
@@ -138,7 +138,7 @@ const BASE_CSS = `
   [data-noscrollbar] { scrollbar-width: none; -ms-overflow-style: none; }
   [data-noscrollbar]::-webkit-scrollbar { width: 0; height: 0; display: none; }
   ::-webkit-scrollbar { width: 7px; }
-  ::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: var(--radius); }
   ::-webkit-scrollbar-track { background: transparent; }
   @keyframes streamIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   /* строка-заполнитель на месте будущей строфы: прогон идёт секунды, и он
@@ -167,34 +167,34 @@ const BASE_CSS = `
   .nl-list { display: flex; flex-direction: column; gap: 1px; max-height: 300px; overflow-y: auto; }
   /* Время — СЛЕВА от текста (замечание: время показывалось слева от текста без причины). Пустая ячейка схлопывается вместе с
      просветом, поэтому в избранном, где времени нет, ряд не съезжает. */
-  .nl-list .nl-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 3px; }
-  .nl-list .nl-when { font-size: 8.5px; color: var(--muted-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .nl-list .nl-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: var(--radius); }
+  .nl-list .nl-when { font-size: 9px; color: var(--muted-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .nl-list .nl-when:empty { display: none; }
   .nl-list .nl-row:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
   .nl-list .nl-row.current { background: color-mix(in srgb, var(--ink) 10%, transparent); }
-  .nl-list .nl-name { min-width: 0; font-size: 10px; line-height: 1.5; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; background: none; border: none; padding: 0; text-align: left; font-family: inherit; }
+  .nl-list .nl-name { min-width: 0; font-size: 10.5px; line-height: 1.5; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; background: none; border: none; padding: 0; text-align: left; font-family: inherit; }
   .nl-list .nl-row:hover .nl-name, .nl-list .nl-row.current .nl-name { color: var(--ink); }
   /* Тег — подпись В ЦВЕТЕ ТЕМЫ, без плашки. Жёлтая плашка, которую увидел
      пользователь, приезжала из мёртвого index.css: там был свой .nl-tag
      старого интерфейса (#d9a441). Файл вычищен, имя теперь наше. */
-  .nl-list .nl-tag { font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-soft); background: none; white-space: nowrap; }
+  .nl-list .nl-tag { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-soft); background: none; white-space: nowrap; }
   .nl-list .nl-tag:empty { display: none; }
   /* Действия проявляются по наведению: список читается как список, а не как
      панель кнопок, но всё под рукой без лишнего клика. */
   .nl-list .nl-acts { display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s var(--ease); }
   .nl-list .nl-row:hover .nl-acts, .nl-list .nl-row:focus-within .nl-acts { opacity: 1; }
-  .nl-list .nl-acts button { background: none; border: none; padding: 2px 4px; font-size: 10px; line-height: 1; color: var(--muted-soft); cursor: pointer; font-family: inherit; }
+  .nl-list .nl-acts button { background: none; border: none; padding: 2px 4px; font-size: 10.5px; line-height: 1; color: var(--muted-soft); cursor: pointer; font-family: inherit; }
   .nl-list .nl-acts button:hover { color: var(--ink); }
-  .nl-list .nl-edit { width: 100%; background: none; border: none; border-bottom: 1px solid var(--border-soft); padding: 2px 0; font-family: inherit; font-size: 10px; color: var(--ink); }
+  .nl-list .nl-edit { width: 100%; background: none; border: none; border-bottom: 1px solid var(--border-soft); padding: 2px 0; font-family: inherit; font-size: 10.5px; color: var(--ink); }
   #presetPanel { display: flex; flex-direction: column; gap: 1px; max-height: 288px; overflow-y: auto; }
-  #presetPanel .presetRow { display: grid; grid-template-columns: 13px 1fr auto; align-items: center; gap: 8px; padding: 3px 5px; border-radius: 3px; }
+  #presetPanel .presetRow { display: grid; grid-template-columns: 13px 1fr auto; align-items: center; gap: 8px; padding: 3px 5px; border-radius: var(--radius); }
   #presetPanel .presetRow:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
   #presetPanel .presetRow.active, #presetPanel .presetRow.current { background: color-mix(in srgb, var(--ink) 10%, transparent); }
   #presetPanel .presetName { font-size: 9px; line-height: 1.5; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
   #presetPanel .presetRow:hover .presetName, #presetPanel .presetRow.active .presetName { color: var(--ink); }
   #presetPanel .presetStar { font-size: 10.5px; line-height: 1; color: var(--border-soft); cursor: pointer; background: none; border: none; padding: 0; }
   #presetPanel .presetStar.on, #presetPanel .presetStar.active, #presetPanel .presetStar:hover { color: var(--ink); }
-  #presetPanel .presetTag { font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-soft); }
+  #presetPanel .presetTag { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted-soft); }
   /* выбранный цвет отмечается кольцом, а не заливкой — иначе теряется сам цвет */
   /* движок метит свои тумблеры классом active — инлайн-стиль кнопки иначе перебивает подсветку */
   #fsSetPanel button.active:not(.swatch) { background: var(--ink) !important; color: var(--canvas) !important; }

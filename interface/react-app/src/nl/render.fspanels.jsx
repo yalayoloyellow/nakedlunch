@@ -53,33 +53,33 @@ import { BLENDS, BLEND_DEF } from './methods.fsglue.js';
 import { полосаРедкости, безЗвукописи } from './render.gen.jsx';
 
 // ---- рецепты стилей (renderVals 3395..3607) ----
-const ROW = 'display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 12px; padding: 9px 0; min-height: 34px;';
-const CAP = 'font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 0 0 6px 2px;';
-const CAP2 = 'font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 16px 0 6px 2px;';
-const BOX = 'display: flex; flex-direction: column; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 2px 12px;';
+const ROW = 'display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 5px 12px; padding: 5px 0; min-height: 24px;';
+const CAP = 'font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 0 0 4px 2px;';
+const CAP2 = 'font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 12px 0 4px 2px;';
+const BOX = 'display: flex; flex-direction: column; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 2px 10px;';
 const LBL = 'font-size: 10.5px; color: var(--muted);';
-const SUB = 'font-size: 8.5px; color: var(--muted-soft);';
+const SUB = 'font-size: 9px; color: var(--muted-soft);';
 const CTL = 'display: flex; align-items: center; gap: 9px;';
 const VAL = 'font-size: 10.5px; color: var(--ink); font-variant-numeric: tabular-nums; min-width: 34px; text-align: right;';
 const PICKS = 'display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end;';
-const SEL = 'appearance: none; width: 146px; max-width: 146px; border: none; border-radius: 3px; padding: 5px 20px 5px 7px; font-family: inherit; font-size: 9px; cursor: pointer; background-color: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);';
-const SEARCH = 'flex: 1; min-width: 0; appearance: none; border: none; border-radius: 3px; padding: 5px 8px; font-family: inherit; font-size: 10.5px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none;';
-const MINI = 'appearance: none; border: none; border-radius: 3px; padding: 5px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);';
+const SEL = 'appearance: none; width: 146px; max-width: 146px; border: none; border-radius: var(--radius); padding: 5px 20px 5px 7px; font-family: inherit; font-size: 9px; cursor: pointer; background-color: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);';
+const SEARCH = 'flex: 1; min-width: 0; appearance: none; border: none; border-radius: var(--radius); padding: 5px 8px; font-family: inherit; font-size: 10.5px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none;';
+const MINI = 'appearance: none; border: none; border-radius: var(--radius); padding: 5px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);';
 const HOVINK = 'color: var(--ink)';
 
 // кнопка-тумблер внутри окна настроек (renderVals 3603)
-const winBtn = (on) => 'appearance: none; border: none; border-radius: 3px; padding: 5px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; ' + (on ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);');
+const winBtn = (on) => 'appearance: none; border: none; border-radius: var(--radius); padding: 5px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; ' + (on ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);');
 // значок хрома (renderVals 3507) и док фристайла (3606): рамку несёт только фрейм
 const hudBtn = (on) => icoBtn(on ? 'var(--ink)' : 'var(--muted-soft)');
 const fsBtn = (on, rec) => icoBtn(rec && on ? '#ff453a' : (on ? 'var(--ink)' : 'var(--muted-soft)'));
 // окна сцены и строки — одна и та же панель, отличается только содержимым (3519)
-const fsPanel = (open) => 'position: absolute; top: calc(100% + 6px); left: 32px; right: auto; z-index: 80; width: 386px; max-height: 66vh; overflow-y: auto;'
-  + ' background: var(--menu-bg); backdrop-filter: var(--glass-fx); -webkit-backdrop-filter: var(--glass-fx-fallback); contain: paint; isolation: isolate;'
-  + ' box-shadow: 0 14px 34px -22px rgba(0,0,0,0.45); border-radius: var(--radius); padding: 14px 16px; display: ' + (open ? 'block' : 'none') + ';';
+const fsPanel = (open) => 'position: absolute; top: calc(100% + 6px); left: 32px; right: auto; z-index: 80; width: 430px; max-height: 66vh; overflow-y: auto;'
+  + ' background: var(--menu-bg); border: 1px solid var(--border-subtle);'
+  + ' border-radius: var(--radius); padding: 14px 16px; display: ' + (open ? 'block' : 'none') + ';';
 // меню в шапке фристайла (профили, формат кадра) — рецепт renderVals 3757/3818
 const menuBox = (open, w, disp) => 'position: absolute; top: calc(100% + 6px); left: 32px; z-index: 80; width: ' + w + 'px; max-height: 56vh; overflow-y: auto;'
-  + ' background: var(--menu-bg); backdrop-filter: var(--glass-fx); -webkit-backdrop-filter: var(--glass-fx-fallback); contain: paint; isolation: isolate;'
-  + ' box-shadow: 0 14px 34px -22px rgba(0,0,0,0.45); border-radius: var(--radius); padding: ' + (disp === 'flex' ? '6px' : '10px') + '; display: ' + (open ? disp : 'none') + ';'
+  + ' background: var(--menu-bg); border: 1px solid var(--border-subtle);'
+  + ' border-radius: var(--radius); padding: ' + (disp === 'flex' ? '6px' : '10px') + '; display: ' + (open ? disp : 'none') + ';'
   + (disp === 'flex' ? ' flex-direction: column; gap: 1px;' : '');
 
 const SIZES = [24, 32, 40, 48, 64, 80, 96, 116, 140, 180, 220];
@@ -89,12 +89,15 @@ const POSN = { 'слева': 'flex-start', 'по центру': 'center', 'сп�
 // ---- кирпичики строк настроек ----
 
 // одна настройка — одна строка: подпись слева, контрол справа, единая высота
-function Row({ label, sub, children }) {
+// `sub` — ЖИВОЕ значение, оно печатается под подписью. `hint` — пояснение,
+// оно уезжает в подсказку курсора: постоянная строка под ручкой занимает
+// вторую строку в каждой ячейке и на плотной панели читается как шум.
+function Row({ label, sub, hint, children }) {
   return (
     <div data-row="1" style={s(ROW)}>
       {sub == null
-        ? <span style={s(LBL)}>{label}</span>
-        : <span style={s('display: flex; flex-direction: column; gap: 2px; min-width: 0;')}>
+        ? <span style={s(LBL)} title={hint || undefined}>{label}</span>
+        : <span style={s('display: flex; flex-direction: column; gap: 2px; min-width: 0;')} title={hint || undefined}>
             <span style={s(LBL)}>{label}</span><span style={s(SUB)}>{sub}</span>
           </span>}
       {children}
@@ -107,7 +110,7 @@ function Row({ label, sub, children }) {
 function EngRange({ id, valId, min, max, step, def, show, suffix }) {
   return (
     <span style={s(CTL)}>
-      <input type="range" id={id} min={min} max={max} step={step} defaultValue={def} style={s('width: 146px;')} />
+      <input type="range" id={id} min={min} max={max} step={step} defaultValue={def} style={s('width: 104px;')} />
       <span id={valId} data-val-for={id} data-val-suffix={suffix} style={s(VAL)}>{show}</span>
     </span>
   );
@@ -117,7 +120,7 @@ function EngRange({ id, valId, min, max, step, def, show, suffix }) {
 function MyRange({ min, max, step, value, onIn, show, wrap }) {
   return (
     <span style={s(CTL + (wrap || ''))}>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={onIn} style={s('width: 146px;')} />
+      <input type="range" min={min} max={max} step={step} value={value} onChange={onIn} style={s('width: 104px;')} />
       <span style={s(VAL)}>{show}</span>
     </span>
   );
@@ -213,8 +216,8 @@ export function renderFsSetPanel(c) {
       var on = posX === x && posY === y;
       posCells.push({
         title: y + ' · ' + x,
-        style: 'appearance: none; border: none; border-radius: 3px; padding: 0; height: 26px; display: flex; align-items: ' + POSY[y] + '; justify-content: ' + POSN[x] + '; cursor: pointer; background: ' + (on ? 'color-mix(in srgb, var(--ink) 14%, transparent)' : 'color-mix(in srgb, var(--ink) 5%, transparent)') + ';',
-        dotStyle: 'display: block; width: 9px; height: 2px; margin: 5px; border-radius: 1px; background: ' + (on ? 'var(--ink)' : 'var(--muted-soft)') + ';',
+        style: 'appearance: none; border: none; border-radius: var(--radius); padding: 0; height: 26px; display: flex; align-items: ' + POSY[y] + '; justify-content: ' + POSN[x] + '; cursor: pointer; background: ' + (on ? 'color-mix(in srgb, var(--ink) 14%, transparent)' : 'color-mix(in srgb, var(--ink) 5%, transparent)') + ';',
+        dotStyle: 'display: block; width: 9px; height: 2px; margin: 5px; border-radius: var(--radius); background: ' + (on ? 'var(--ink)' : 'var(--muted-soft)') + ';',
         onPick: function () { c.setState({ posX: x, posY: y }, function () { call(c, 'fitLine'); }); }
       });
     });
@@ -239,7 +242,7 @@ export function renderFsSetPanel(c) {
     var on = st.fontNow === fo.v;
     return {
       name: fo.n,
-      style: 'appearance: none; border: none; border-radius: 3px; padding: 0 8px; height: 27px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; overflow: hidden; cursor: pointer; text-align: left; background: ' + (on ? 'color-mix(in srgb, var(--ink) 10%, transparent)' : 'transparent') + ';',
+      style: 'appearance: none; border: none; border-radius: var(--radius); padding: 0 8px; height: 27px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; overflow: hidden; cursor: pointer; text-align: left; background: ' + (on ? 'color-mix(in srgb, var(--ink) 10%, transparent)' : 'transparent') + ';',
       nameStyle: 'font-family: inherit; font-size: 10.5px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: ' + (on ? 'var(--ink)' : 'var(--muted)') + ';',
       sampleStyle: 'flex: 0 0 auto; font-family: ' + fo.v + ', sans-serif; font-size: 13px; line-height: 1; white-space: nowrap; color: ' + (on ? 'var(--ink)' : 'var(--muted-soft)') + ';',
       onPick: function () { call(c, 'pickFont', fo.v); }
@@ -369,7 +372,7 @@ export function renderFsSetPanel(c) {
             <span style={s(LBL)}>период</span>
             <span style={s(CTL)}>
               <input type="range" min="5" max="180" step="5" value={st.bcAutoSec || 30}
-                onChange={(e) => c.setState({ bcAutoSec: parseInt(e.target.value, 10) || 30 }, function () { call(c, 'bcAutoLoop'); })} style={s('width: 146px;')} />
+                onChange={(e) => c.setState({ bcAutoSec: parseInt(e.target.value, 10) || 30 }, function () { call(c, 'bcAutoLoop'); })} style={s('width: 104px;')} />
               <span style={s(VAL)}>{(st.bcAutoSec || 30) + ' с'}</span>
             </span>
           </div>
@@ -387,7 +390,7 @@ export function renderFsSetPanel(c) {
 
         <div style={s(CAP2)}>плашка</div>
         <div style={s(BOX)}>
-          <Row label="палитра" sub="повторный клик — свой цвет">
+          <Row label="палитра" hint="повторный клик — свой цвет">
             <div style={s('position: relative; display: flex; align-items: center; gap: 8px;')}>
               <Swatches items={swPanel} />
               <input type="color" id="panelColorPicker" defaultValue="#2436e0" style={s(palPicker(palSel, 'panel'))} />
@@ -414,7 +417,7 @@ export function renderFsSetPanel(c) {
           <Row label="темп"><MyRange min="1" max="100" step="1" value={String(fsv('acSpeed'))} onIn={mySl('acSpeed')} show={acShow} /></Row>
           <Row label="плавность"><MyRange min="0" max="100" step="1" value={String(fsv('acEase'))} onIn={mySl('acEase')} show={fsv('acEase') === 0 ? 'резко' : fsv('acEase') + '%'} /></Row>
           <div data-row="1" style={s('padding: 9px 0;')}>
-            <span style={s('font-size: 8.5px; line-height: 1.5; color: var(--muted-soft);')}>{acHint}</span>
+            <span style={s('font-size: 9px; line-height: 1.5; color: var(--muted-soft);')}>{acHint}</span>
           </div>
           <button type="button" id="btnAutoColor" aria-hidden="true" tabIndex={-1} style={s('display: none;')}></button>
         </div>
@@ -424,7 +427,7 @@ export function renderFsSetPanel(c) {
       <div style={s(sec('text'))}>
         <div style={s(CAP)}>текст</div>
         <div style={s(BOX)}>
-          <Row label="цвет" sub="повторный клик — свой цвет">
+          <Row label="цвет" hint="повторный клик — свой цвет">
             <div style={s('position: relative; display: flex; align-items: center; gap: 8px;')}>
               <Swatches items={swInk} />
               <input type="color" id="inkColor" defaultValue="#ffffff" style={s(palPicker(palSel, 'ink'))} />
@@ -435,7 +438,7 @@ export function renderFsSetPanel(c) {
             <span style={s('display: flex; align-items: center; gap: 8px;')}>
               <select value={sizeSel}
                 onChange={(e) => { var v = parseFloat(e.target.value); if (v) c.setCfg('fsSize', v); }}
-                style={s('appearance: none; width: 88px; border: none; border-radius: 3px; padding: 5px 20px 5px 7px; font-family: inherit; font-size: 9px; cursor: pointer; background-color: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);')}>
+                style={s('appearance: none; width: 88px; border: none; border-radius: var(--radius); padding: 5px 20px 5px 7px; font-family: inherit; font-size: 9px; cursor: pointer; background-color: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);')}>
                 <option value="0">свой</option>
                 {SIZES.map(function (z) { return <option key={z} value={String(z)}>{z + 'px'}</option>; })}
               </select>
@@ -445,7 +448,7 @@ export function renderFsSetPanel(c) {
                   свой кегль (в списке его нет) печатается спокойно */}
               <input key={sizeSel} type="number" min="12" max="400" step="1" defaultValue={String(fsSize)}
                 onChange={(e) => { var v = parseFloat(e.target.value); if (!isNaN(v) && v >= 12 && v <= 400) c.setCfg('fsSize', v); }}
-                style={s('width: 50px; appearance: none; border: none; border-radius: 3px; padding: 5px 6px; font-family: inherit; font-size: 9px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none; text-align: right;')} />
+                style={s('width: 50px; appearance: none; border: none; border-radius: var(--radius); padding: 5px 6px; font-family: inherit; font-size: 9px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none; text-align: right;')} />
             </span>
           </Row>
           <Row label="положение" sub={posY + ' · ' + posX}>
@@ -472,7 +475,7 @@ export function renderFsSetPanel(c) {
           <Row label="цвет свечения" sub={st.glowColor ? 'повторный клик — свой цвет' : 'наследует цвет строки'}>
             <span style={s('position: relative; display: flex; align-items: center; gap: 8px;')}>
               <button type="button" onClick={() => c.setState({ glowColor: '' })}
-                style={s('appearance: none; border: none; border-radius: 3px; padding: 4px 7px; font-family: inherit; font-size: 8.5px; cursor: pointer; ' + (st.glowColor ? 'background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);' : 'background: var(--ink); color: var(--canvas);'))}>авто</button>
+                style={s('appearance: none; border: none; border-radius: var(--radius); padding: 4px 7px; font-family: inherit; font-size: 9px; cursor: pointer; ' + (st.glowColor ? 'background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);' : 'background: var(--ink); color: var(--canvas);'))}>авто</button>
               <Swatches items={swGlow} />
               {/* id — тот, который ищут palInput/onCardInput (в макете он разъехался) */}
               <input type="color" id="glowColorPicker" defaultValue="#ffffff" style={s(palPicker(palSel, 'glow', 1))} />
@@ -655,15 +658,16 @@ export function renderFsLinePanel(c) {
         <div style={s(BOX)}>
           {genParams.map(function (p) {
             return (
-              <div key={p.name} data-row="1" style={{ ...s(ROW), opacity: p.dead ? 0.32 : 1 }}>
-                <span style={s('display: flex; flex-direction: column; gap: 2px; min-width: 0;')}>
-                  <span style={s('font-size: 10.5px; color: var(--muted);')}>{p.name}</span>
-                  <span style={s('display: flex; gap: 6px; font-size: 8.5px; color: var(--muted-soft);')}>
-                    {p.dead
-                      ? <span>в классике не действует</span>
-                      : <Fragment><span>{p.lo}</span><span>·</span><span>{p.hi}</span></Fragment>}
-                  </span>
-                </span>
+              /* КРАЯ РУЧКИ УЕХАЛИ В ПОДСКАЗКУ КУРСОРА. Здесь под каждой
+                 подписью печаталась вторая строка «низ · верх» — а справа, в
+                 том же ряду, уже стоит текущее значение теми же словами. Ряд
+                 из-за этого занимал две-три строки вместо одной, и панель на
+                 тринадцать ручек вырастала втрое. Края нужны раз в жизни,
+                 значение — каждый раз. */
+              <div key={p.name} data-row="1"
+                   title={p.dead ? 'в классике не действует' : p.lo + ' · ' + p.hi}
+                   style={{ ...s(ROW), opacity: p.dead ? 0.32 : 1 }}>
+                <span style={s('font-size: 10.5px; color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;')}>{p.name}</span>
                 <span style={s(CTL)}>
                   {/* Мат ходит от −1 («как есть») — ползунок 0..1 отрезал бы
                       ему половину смысла. Так же ходила «Связность»
@@ -716,7 +720,7 @@ export function renderFsLinePanel(c) {
         <div style={s(srcMode === 'свой текст' ? '' : 'display: none;')}>
           <textarea value={st.srcText || ''} onChange={(e) => { c._srcPos = 0; c.setState({ srcText: e.target.value }); }}
             placeholder="вставь текст — строки пойдут по очереди" spellCheck="false"
-            style={s('width: 100%; min-height: 68px; resize: vertical; appearance: none; border: none; border-radius: 3px; padding: 7px 8px; font-family: inherit; font-size: 10.5px; line-height: 1.5; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none;')}></textarea>
+            style={s('width: 100%; min-height: 68px; resize: vertical; appearance: none; border: none; border-radius: var(--radius); padding: 7px 8px; font-family: inherit; font-size: 10.5px; line-height: 1.5; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none;')}></textarea>
           <div style={s('display: flex; align-items: center; gap: 8px; margin-top: 7px;')}>
             <button type="button" onClick={() => { if (c._srcFile) c._srcFile.click(); }} className={hov(HOVINK)} style={s(MINI)}>＋ файл</button>
             <input type="file" ref={(el) => { c._srcFile = el; }} accept=".txt,.md,.rtf" style={s('display: none;')}
@@ -751,7 +755,7 @@ export function renderFsLinePanel(c) {
           <Row label={шагЕдиниц}>
             <MyRange min="1" max="8" step="1" value={String(fsv('fsPer'))} onIn={mySl('fsPer')} show={String(fsv('fsPer'))} />
           </Row>
-          <Row label="интервал" sub="секунд между сменами">
+          <Row label="интервал" hint="секунд между сменами">
             <MyRange min="0.2" max="8" step="0.1" value={String(fsv('fsSec'))} onIn={mySl('fsSec')}
               show={Number(fsv('fsSec')).toFixed(1) + ' с'} />
           </Row>
@@ -775,7 +779,7 @@ export function renderProfileRows(rows, emptyNote) {
           <div key={p.id} className={hov('--sh: 1; background: color-mix(in srgb, var(--ink) 5%, transparent)')} style={s(p.rowStyle)}>
             {p.editing
               ? <input type="text" defaultValue={p.name} onBlur={p.onRename} onKeyDown={p.onRenameKey} autoFocus spellCheck="false"
-                  style={s('flex: 1; min-width: 0; appearance: none; background: color-mix(in srgb, var(--ink) 6%, transparent); border: none; border-radius: 3px; padding: 3px 5px; font-family: inherit; font-size: 10.5px; color: var(--ink); outline: none;')} />
+                  style={s('flex: 1; min-width: 0; appearance: none; background: color-mix(in srgb, var(--ink) 6%, transparent); border: none; border-radius: var(--radius); padding: 3px 5px; font-family: inherit; font-size: 10.5px; color: var(--ink); outline: none;')} />
               : <button type="button" onClick={p.onLoad} onDoubleClick={p.startRename} title={p.nameTitle} style={s(p.nameStyle)}>{p.name}</button>}
             <button type="button" onClick={p.onDefault} title={p.defTitle} style={s(p.defStyle)}>
               <svg viewBox="0 0 24 24" width="11" height="11" fill={p.defFill} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}><line x1="12" y1="17.2" x2="12" y2="22"></line><path d="M5.4 17h13.2v-1.7a2 2 0 0 0-1.1-1.8l-1.7-.86A2 2 0 0 1 14.7 10.8V6.1h.9a2 2 0 0 0 0-4H8.4a2 2 0 0 0 0 4h.9v4.7a2 2 0 0 1-1.1 1.8l-1.7.86A2 2 0 0 0 5.4 15.3Z"></path></svg>
@@ -832,7 +836,7 @@ export function renderFsBar(c) {
     var on = (st.aspect || 'полный') === a;
     return {
       name: a,
-      style: 'appearance: none; border: none; background: ' + (on ? 'color-mix(in srgb, var(--ink) 10%, transparent)' : 'none') + '; border-radius: 3px; padding: 5px 8px; font-family: inherit; font-size: 10.5px; font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; color: ' + (on ? 'var(--ink)' : 'var(--muted)') + ';',
+      style: 'appearance: none; border: none; background: ' + (on ? 'color-mix(in srgb, var(--ink) 10%, transparent)' : 'none') + '; border-radius: var(--radius); padding: 5px 8px; font-family: inherit; font-size: 10.5px; font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; color: ' + (on ? 'var(--ink)' : 'var(--muted)') + ';',
       onPick: function () { c.closePop({ aspect: a === 'полный' ? '' : a }); setTimeout(function () { call(c, 'fitStage'); }, 0); }
     };
   });
@@ -921,7 +925,7 @@ export function renderFsBar(c) {
         </button>
         <div data-pa="down" data-po={pO('prof')} style={s(menuBox(st.openPill === 'prof', 246, 'block'))}>
           <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px;')}>
-            <span style={s('font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft);')}>профили сцены</span>
+            <span style={s('font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft);')}>профили сцены</span>
             <button onClick={() => c.saveFsProfile()} className={hov(HOVINK)} style={s('appearance: none; background: none; border: none; padding: 0; font-family: inherit; font-size: 9px; color: var(--muted); cursor: pointer; white-space: nowrap;')}>＋ сохранить</button>
           </div>
           {renderProfileRows(profRows, 'пусто — «сохранить» запомнит сцену, пресет и палитру')}
@@ -938,10 +942,10 @@ export function renderFsBar(c) {
               дописан, обработчик молчит, а управляемому React вернул бы старое
               значение и набрать было бы нечего. key — выбор из списка сверху */}
           <input key={st.aspect || ''} type="text" defaultValue={ASP[st.aspect] ? '' : (st.aspect || '')} onChange={onAspectCustom} placeholder="свой 21:9" spellCheck="false"
-            style={s('width: 100%; margin-top: 6px; appearance: none; border: none; border-radius: 3px; padding: 5px 7px; font-family: inherit; font-size: 9px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none;')} />
+            style={s('width: 100%; margin-top: 6px; appearance: none; border: none; border-radius: var(--radius); padding: 5px 7px; font-family: inherit; font-size: 9px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none;')} />
           <button type="button" onClick={() => c.setState({ fitFrame: !st.fitFrame }, function () { call(c, 'fitLine'); })}
-            style={s('appearance: none; display: flex; align-items: center; gap: 6px; width: 100%; border: none; background: none; border-radius: 3px; padding: 5px 8px; font-family: inherit; font-size: 10.5px; text-align: left; cursor: pointer; color: ' + (st.fitFrame ? 'var(--ink)' : 'var(--muted)') + ';')}>
-            <span style={s('display: inline-flex; align-items: center; justify-content: center; width: 11px; height: 11px; flex-shrink: 0; border-radius: 3px; font-size: 8.5px; line-height: 1; ' + (st.fitFrame ? 'background: var(--ink); color: var(--canvas);' : 'box-shadow: inset 0 0 0 1px var(--border-soft);'))}>{st.fitFrame ? '✓' : ''}</span>
+            style={s('appearance: none; display: flex; align-items: center; gap: 6px; width: 100%; border: none; background: none; border-radius: var(--radius); padding: 5px 8px; font-family: inherit; font-size: 10.5px; text-align: left; cursor: pointer; color: ' + (st.fitFrame ? 'var(--ink)' : 'var(--muted)') + ';')}>
+            <span style={s('display: inline-flex; align-items: center; justify-content: center; width: 11px; height: 11px; flex-shrink: 0; border-radius: var(--radius); font-size: 9px; line-height: 1; ' + (st.fitFrame ? 'background: var(--ink); color: var(--canvas);' : 'box-shadow: inset 0 0 0 1px var(--border-soft);'))}>{st.fitFrame ? '✓' : ''}</span>
             вписывать текст
           </button>
         </div>

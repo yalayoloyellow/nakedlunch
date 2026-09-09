@@ -262,11 +262,10 @@ export const fsProfileMethods = {
       self.applyTheme(); self.saveViewSoon(); if (done) done();
     });
   },
-  // базовый вид: всё по умолчанию и без градиента у краёв
+  // базовый вид: всё по умолчанию
   blankUi(done) {
     var keep = {}, cur = this.state.cfg || {}, self = this;
     Object.keys(cur).forEach(function (k) { if (self.UI_SKIP[k] || k.indexOf('fs') === 0) keep[k] = cur[k]; });
-    keep.fadeOn = 'нет';
     this.setState({ uiProfId: this.UI_BLANK_ID, cfg: keep }, function () {
       self.applyTheme(); self.saveViewSoon(); if (done) done();
     });
@@ -301,7 +300,7 @@ export const fsProfileMethods = {
       return Object.assign({
         id: id, name: name, editing: ed, notEditing: !ed, canEdit: !!x.canEdit,
         nameTitle: x.canEdit ? 'Клик — загрузить · двойной клик — переименовать' : 'Клик — загрузить',
-        rowStyle: 'display: flex; align-items: center; gap: 4px; border-radius: 3px; padding: 3px 5px;'
+        rowStyle: 'display: flex; align-items: center; gap: 4px; border-radius: var(--radius); padding: 3px 5px;'
           + (x.first ? ' margin-bottom: 3px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 6px;' : '')
           + ' background: ' + (on ? 'color-mix(in srgb, var(--ink) 8%, transparent)' : 'transparent') + ';',
         nameStyle: 'appearance: none; flex: 1; min-width: 0; background: none; border: none; padding: 3px 2px; font-family: inherit; font-size: 10.5px; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: ' + (on ? 'var(--ink)' : 'var(--muted)') + ';',

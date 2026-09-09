@@ -27,7 +27,7 @@ import { renderSettings } from './render.settings.jsx';
 import { renderFavPanel, renderHistPanel, renderStatsPanel, renderBlackPanel } from './render.data.jsx';
 
 // ---- рецепты стилей из renderVals ----
-const tabPill = (a) => 'appearance: none; border: none; background: transparent; border-radius: var(--radius); padding: 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; white-space: nowrap; min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; position: relative; z-index: 1; transition: color 180ms var(--ease); color: ' + (a ? 'var(--canvas)' : 'var(--muted)') + ';';
+const tabPill = (a) => 'appearance: none; border: none; background: transparent; border-radius: var(--radius); padding: 10px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; white-space: nowrap; min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; position: relative; z-index: 1; transition: color 180ms var(--ease); color: ' + (a ? 'var(--canvas)' : 'var(--muted)') + ';';
 const hudBtn = (on) => icoBtn(on ? 'var(--ink)' : 'var(--muted-soft)');
 // Значки сжатой шапки (ярус 2+): та же графика, что у остальных значков хрома —
 // тонкий штрих currentColor, 12px. Слово заменяется значком, а не пропадает.
@@ -177,7 +177,7 @@ export function renderHeader(c) {
     };
   });
   var uiTintPickerStyle = 'position: absolute; left: ' + (Math.max(0, UI_TINT_PAL.indexOf(C.uiTint)) * 27 + 44) + 'px; top: 0; width: 20px; height: 20px; padding: 0; border: none; opacity: 0; pointer-events: none; background: none;';
-  var uiTintOffStyle = 'appearance: none; border: none; border-radius: 3px; padding: 4px 7px; font-family: inherit; font-size: 8.5px; cursor: pointer; ' + (!C.uiTint || C.uiTint === 'нет' ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--muted);');
+  var uiTintOffStyle = 'appearance: none; border: none; border-radius: var(--radius); padding: 4px 7px; font-family: inherit; font-size: 9px; cursor: pointer; ' + (!C.uiTint || C.uiTint === 'нет' ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--muted);');
 
   // ---- настройки ленты + легенда ----
   // Те же три ручки, что управляли строками документа: размер, интерлиньяж и
@@ -193,7 +193,7 @@ export function renderHeader(c) {
   var legendRows = legendRowsCalc();
 
   // ---- стили панелей с display-переключением (renderVals 3920, 4003, 4059) ----
-  var cfgPanelStyle = 'position: absolute; top: calc(100% + 12px); right: 0; z-index: 80; width: 430px; max-height: 68vh; overflow-y: auto; background: var(--menu-bg); backdrop-filter: var(--glass-fx); -webkit-backdrop-filter: var(--glass-fx-fallback); contain: paint; isolation: isolate; box-shadow: 0 14px 34px -22px rgba(0,0,0,0.45); border-radius: var(--radius); padding: 14px 16px; display: ' + (st.openPill === 'cfg' ? 'block' : 'none') + ';';
+  var cfgPanelStyle = 'position: absolute; top: calc(100% + 12px); right: 0; z-index: 80; width: 430px; max-height: 68vh; overflow-y: auto; background: var(--menu-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 14px 16px; display: ' + (st.openPill === 'cfg' ? 'block' : 'none') + ';';
 
   return (
     <header ref={c.hdrRef} data-chrome="1" data-float={isFs ? '1' : null} style={s('display: flex; align-items: center; padding: ' + hdrPad + '; gap: ' + hdrGap + 'px; position: relative; z-index: 45; flex-shrink: 0; min-width: 0;')}>
@@ -356,7 +356,7 @@ export function renderLegend(c) {
 export function renderFlash(c) {
   if (!c.state.flashMsg) return null;
   return (
-    <div style={s('position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 95; background: var(--menu-bg); backdrop-filter: var(--glass-fx); -webkit-backdrop-filter: var(--glass-fx-fallback); contain: paint; isolation: isolate; box-shadow: 0 14px 34px -22px rgba(0,0,0,0.45); border-radius: var(--radius); padding: 8px 14px; font-size: 10.5px; color: var(--ink); white-space: nowrap; pointer-events: none;')}>
+    <div style={s('position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 95; background: var(--menu-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 8px 14px; font-size: 10.5px; color: var(--ink); white-space: nowrap; pointer-events: none;')}>
       {c.state.flashMsg}
     </div>
   );

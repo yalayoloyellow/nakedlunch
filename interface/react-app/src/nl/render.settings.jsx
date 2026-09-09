@@ -55,10 +55,10 @@ export function cfgItemRow(it, key, labelStyle, showStyle) {
   );
 }
 
-const ЗАГОЛОВОК = 'font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 0 0 7px 2px;';
+const ЗАГОЛОВОК = 'font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 0 0 7px 2px;';
 const БЛОК = 'display: flex; flex-direction: column; background: color-mix(in srgb, var(--ink) 4%, transparent); border-radius: var(--radius); overflow: hidden;';
-const КНОПКА = 'appearance: none; background: none; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 6px 10px; font-family: inherit; font-size: 10px; color: var(--muted); cursor: pointer; white-space: nowrap;';
-const ССЫЛКА = 'appearance: none; background: none; border: none; padding: 0; font-family: inherit; font-size: 10px; color: var(--muted); cursor: pointer; white-space: nowrap;';
+const КНОПКА = 'appearance: none; background: none; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 6px 10px; font-family: inherit; font-size: 10.5px; color: var(--muted); cursor: pointer; white-space: nowrap;';
+const ССЫЛКА = 'appearance: none; background: none; border: none; padding: 0; font-family: inherit; font-size: 10.5px; color: var(--muted); cursor: pointer; white-space: nowrap;';
 const РЯД = 'display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 10px; font-size: 10.5px; color: var(--muted-hard);';
 const ЧИСЛО = 'font-variant-numeric: tabular-nums; color: var(--ink);';
 
@@ -71,7 +71,7 @@ function выбор(значения, текущее, onPick) {
         var on = o.v === текущее;
         return (
           <button key={i} onClick={function () { onPick(o.v); }}
-            style={s('appearance: none; border: none; border-radius: 3px; padding: 4px 7px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
+            style={s('appearance: none; border: none; border-radius: var(--radius); padding: 4px 7px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
               + (on ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--muted);'))}>{o.name}</button>
         );
       })}
@@ -109,7 +109,7 @@ export function renderSettings(c, vals) {
 
   var tabBtn = function (name) {
     var on = tab === name;
-    return s('appearance: none; border: none; border-radius: 3px; padding: 5px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
+    return s('appearance: none; border: none; border-radius: var(--radius); padding: 5px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
       + (on ? 'background: var(--ink); color: var(--canvas);' : 'background: none; color: var(--muted-soft);'));
   };
 
@@ -149,7 +149,7 @@ export function renderSettings(c, vals) {
           })}
           <div style={s('margin-bottom: 14px;')}>
             <div style={s('display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 10.5px; color: var(--muted); margin-bottom: 6px;')}>
-              <span>тон интерфейса</span><span style={s('color: var(--muted-soft); font-size: 8.5px;')}>повторный клик — свой цвет</span>
+              <span>тон интерфейса</span><span style={s('color: var(--muted-soft); font-size: 9px;')}>повторный клик — свой цвет</span>
             </div>
             <div style={s('position: relative; display: flex; align-items: center; gap: 8px;')}>
               <button onClick={function () { c.setCfg('uiTint', 'нет'); }} title="По теме" style={s(vals.uiTintOffStyle)}>нет</button>
@@ -241,7 +241,7 @@ export function renderSettings(c, vals) {
                 повседневной — это приглашение нажать не ту. */}
             {st.обслуживание ? (
               <div style={s(БЛОК + ' margin-bottom: 12px; padding: 10px; gap: 8px;')}>
-                <div style={s('font-size: 9.5px; color: var(--muted); line-height: 1.5;')}>
+                <div style={s('font-size: 9px; color: var(--muted); line-height: 1.5;')}>
                   Разовые операции. В обычной работе не нужны: заливка книги
                   сама режет, чистит и пересчитывает.
                 </div>
@@ -270,7 +270,7 @@ export function renderSettings(c, vals) {
               {(st.importing || []).map(function (имя, k) {
                 var р = (st.jobs || []).filter(function (j) { return j.id === 'import'; })[0];
                 return (
-                  <div key={'imp' + k} style={s('display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 10px; border-top: ' + (k ? '1px solid var(--border-subtle)' : 'none') + ';')}>
+                  <div key={'imp' + k} style={s('display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 10.5px; border-top: ' + (k ? '1px solid var(--border-subtle)' : 'none') + ';')}>
                     <span style={s('flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--ink); animation: nlGenPulse 1s var(--ease) infinite;')}></span>
                     <span style={s('flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted-hard);')}>{имя}</span>
                     <span style={s('flex-shrink: 0; font-size: 9px; color: var(--ink);')}>{(р && р.detail) || 'в очереди'}</span>
@@ -284,7 +284,7 @@ export function renderSettings(c, vals) {
                 // не проходит. См. methods.corpus.toggleSource.
                 var занят = !!(st.srcBusy || {})[src.id];
                 return (
-                  <div key={i} style={s('display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 10px; border-top: ' + (i ? '1px solid var(--border-subtle)' : 'none') + ';')}>
+                  <div key={i} style={s('display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 10.5px; border-top: ' + (i ? '1px solid var(--border-subtle)' : 'none') + ';')}>
                     <button onClick={function () { c.toggleSource(src.id); }} disabled={занят}
                       title={занят ? 'применяю…' : (src.active ? 'Включён — клик выключит' : 'Выключен — клик включит')}
                       style={s('appearance: none; flex-shrink: 0; width: 8px; height: 8px; padding: 0; border-radius: 50%; cursor: ' + (занят ? 'wait' : 'pointer') + '; border: 1px solid ' + (src.active ? 'var(--ink)' : 'var(--border-soft)') + '; background: ' + (src.active ? 'var(--ink)' : 'transparent') + ';' + (занят ? ' animation: nlGenPulse 1s var(--ease) infinite;' : ''))}></button>
@@ -298,7 +298,7 @@ export function renderSettings(c, vals) {
                       </Fragment>
                     ) : (
                       <button onClick={function () { c.setState({ confirm: 'src:' + src.id }); }} disabled={занят} title="Удалить источник"
-                        style={s(ССЫЛКА + ' flex-shrink: 0; font-size: 11px; color: var(--muted-soft);')} className={hov('color: var(--ink)')}>−</button>
+                        style={s(ССЫЛКА + ' flex-shrink: 0; font-size: 10.5px; color: var(--muted-soft);')} className={hov('color: var(--ink)')}>−</button>
                     )}
                   </div>
                 );
@@ -334,7 +334,7 @@ export function renderЛог(c) {
   var st = c.state;
   var текст = st.логТекст || '';
   var кнопка = 'appearance: none; border: 1px solid var(--border-subtle); border-radius: 999px; '
-    + 'padding: 7px 14px; font-family: inherit; font-size: 10px; cursor: pointer; '
+    + 'padding: 7px 14px; font-family: inherit; font-size: 10.5px; cursor: pointer; '
     + 'background: none; color: var(--ink);';
   return (
     <Fragment>
@@ -351,18 +351,18 @@ export function renderЛог(c) {
         <button style={s(кнопка)} className={hov('background: var(--ink); color: var(--canvas)')}
                 onClick={function () { c.обновитьЛог(); }}>обновить</button>
         {st.логАвария ? (
-          <span style={s('font-size: 10px; color: #e66;')}>прошлый запуск завершился аварийно</span>
+          <span style={s('font-size: 10.5px; color: #e66;')}>прошлый запуск завершился аварийно</span>
         ) : null}
       </div>
-      <div style={s('font-size: 9.5px; color: var(--muted-soft); line-height: 1.5; margin-bottom: 10px;')}>
+      <div style={s('font-size: 9px; color: var(--muted-soft); line-height: 1.5; margin-bottom: 10px;')}>
         Файл ложится на рабочий стол и открывается в проводнике — остаётся
         перетащить его в переписку. Внутри все запуски, а не только этот.<br />
         В отчёте видно состояние программы, последние действия и ошибки — вместе
         со строками текстов, которые в это время были на экране.
       </div>
-      <pre style={s('white-space: pre-wrap; word-break: break-word; font-size: 9.5px; '
+      <pre style={s('white-space: pre-wrap; word-break: break-word; font-size: 9px; '
         + 'line-height: 1.5; color: var(--muted); background: var(--panel); '
-        + 'border: 1px solid var(--border-subtle); border-radius: 8px; padding: 10px; '
+        + 'border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 10px; '
         + 'max-height: 46vh; overflow: auto; margin: 0;')}>
         {текст || 'нажми «обновить», чтобы собрать отчёт'}</pre>
     </Fragment>

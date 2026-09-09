@@ -26,13 +26,13 @@ import { РЕЖИМ_КЛАССИКА, ВНУТР_РИФМА, ПЕРЕКЛИЧК�
 // молча переделать и его панель.
 
 // ---- общие рецепты стилей --------------------------------------------------
-const ЗАГОЛОВОК = 'font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 0 0 6px 2px;';
+const ЗАГОЛОВОК = 'font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 0 0 6px 2px;';
 const РАЗДЕЛ = 'border-top: 1px solid var(--border-subtle); margin-top: 13px; padding-top: 11px;';
-const ПОЛЕ = 'appearance: none; min-width: 0; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 3px 2px; font-family: inherit; font-size: 10px; color: var(--ink); cursor: pointer;';
-const ТЕКСТ = 'appearance: none; flex: 1; min-width: 0; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 3px 2px; font-family: inherit; font-size: 10px; color: var(--ink);';
-const СЛОВО = 'appearance: none; background: none; border: none; padding: 0; font-size: 10px; color: var(--muted); cursor: pointer; white-space: nowrap;';
-const ПОЯС = 'font-size: 8.5px; color: var(--muted-soft);';
-const ГЛАВНАЯ = 'appearance: none; border: none; border-radius: 3px; padding: 5px 10px; font-family: inherit; font-size: 9px; cursor: pointer; background: var(--ink); color: var(--canvas);';
+const ПОЛЕ = 'appearance: none; min-width: 0; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 3px 2px; font-family: inherit; font-size: 10.5px; color: var(--ink); cursor: pointer;';
+const ТЕКСТ = 'appearance: none; flex: 1; min-width: 0; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 3px 2px; font-family: inherit; font-size: 10.5px; color: var(--ink);';
+const СЛОВО = 'appearance: none; background: none; border: none; padding: 0; font-size: 10.5px; color: var(--muted); cursor: pointer; white-space: nowrap;';
+const ПОЯС = 'font-size: 9px; color: var(--muted-soft);';
+const ГЛАВНАЯ = 'appearance: none; border: none; border-radius: var(--radius); padding: 5px 10px; font-family: inherit; font-size: 9px; cursor: pointer; background: var(--ink); color: var(--canvas);';
 
 // «2 строки», «5 строк», «21 строка» — иначе панель сама себе врёт грамматикой.
 // Счётчики звеньев и текстов убраны 2026-08-18 вместе с цепью и серией: считать
@@ -60,7 +60,7 @@ function селект(value, onChange, опции, стиль) {
 function св_кнопка(c, своя, onDelete) {
   if (!своя) return null;
   return (<button onClick={onDelete} title="Удалить свою запись полки"
-    style={s('appearance: none; background: none; border: none; padding: 2px 4px; font-size: 10px; color: var(--muted-soft); cursor: pointer;')}
+    style={s('appearance: none; background: none; border: none; padding: 2px 4px; font-size: 10.5px; color: var(--muted-soft); cursor: pointer;')}
     className={hov('color: var(--ink)')}>✕</button>);
 }
 
@@ -70,7 +70,7 @@ function св_кнопка(c, своя, onDelete) {
 function попап(c, ключ, ширина, дети) {
   return (
     <div data-pa="down" data-po={c.state.closing === ключ ? '1' : null}
-      style={s('position: absolute; top: calc(100% + 10px); right: 0; z-index: 80; width: ' + ширина + 'px; max-height: 78vh; overflow-y: auto; background: var(--menu-bg); backdrop-filter: var(--glass-fx); -webkit-backdrop-filter: var(--glass-fx-fallback); contain: paint; isolation: isolate; box-shadow: 0 14px 34px -22px rgba(0,0,0,0.45); border-radius: var(--radius); padding: 13px 15px; font-size: 11px; color: var(--muted);')}>
+      style={s('position: absolute; top: calc(100% + 10px); right: 0; z-index: 80; width: ' + ширина + 'px; max-height: 78vh; overflow-y: auto; background: var(--menu-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 13px 15px; font-size: 10.5px; color: var(--muted);')}>
       {дети}
     </div>
   );
@@ -109,19 +109,19 @@ function renderFormShelf(c) {
             <span style={s('font-size: 9px; color: var(--muted-soft); font-variant-numeric: tabular-nums; width: 15px;')}>{String(i + 1).padStart(2, '0')}</span>
             <button onClick={function (e) { c.cycleLetter(i, e.altKey); }}
               title="клик — следующая буква рифмовки, ⌥-клик — предыдущая"
-              style={s('appearance: none; border: none; border-radius: 3px; width: 21px; height: 19px; font-family: inherit; font-size: 10.5px; cursor: pointer; background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink);')}
+              style={s('appearance: none; border: none; border-radius: var(--radius); width: 21px; height: 19px; font-family: inherit; font-size: 10.5px; cursor: pointer; background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink);')}
               className={hov('background: color-mix(in srgb, var(--ink) 16%, transparent)')}>{l.letter}</button>
             <span style={s(ПОЯС)}>слоги</span>
             <input type="number" min="1" max="30" value={l.min_syl}
               onChange={function (e) { c.setLineSyl(i, 'min_syl', e.target.value); }}
-              style={s('width: 32px; appearance: textfield; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 1px 2px; font-family: inherit; font-size: 10px; color: var(--ink); text-align: center; font-variant-numeric: tabular-nums;')} />
+              style={s('width: 32px; appearance: textfield; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 1px 2px; font-family: inherit; font-size: 10.5px; color: var(--ink); text-align: center; font-variant-numeric: tabular-nums;')} />
             <span style={s('color: var(--muted-soft);')}>–</span>
             <input type="number" min="1" max="30" value={l.max_syl}
               onChange={function (e) { c.setLineSyl(i, 'max_syl', e.target.value); }}
-              style={s('width: 32px; appearance: textfield; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 1px 2px; font-family: inherit; font-size: 10px; color: var(--ink); text-align: center; font-variant-numeric: tabular-nums;')} />
+              style={s('width: 32px; appearance: textfield; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 1px 2px; font-family: inherit; font-size: 10.5px; color: var(--ink); text-align: center; font-variant-numeric: tabular-nums;')} />
             <span style={s('flex: 1;')}></span>
             <button onClick={function () { c.dropStanzaLine(i); }} title="убрать строку"
-              style={s('appearance: none; background: none; border: none; padding: 2px 4px; font-size: 10px; color: var(--muted-soft); cursor: pointer;')}
+              style={s('appearance: none; background: none; border: none; padding: 2px 4px; font-size: 10.5px; color: var(--muted-soft); cursor: pointer;')}
               className={hov('color: var(--ink)')}>✕</button>
           </div>
         );
@@ -234,7 +234,7 @@ function пул_и_воронка(ф, f, ярус) {
            префиксом, каким отбор ищет пары (nlindex._префиксы_ключей), поэтому
            число дышит вместе с ручкой: шире ярус — корзин меньше и каждая
            толще. На «точной» корзина = целый ключ, подпись остаётся прежней. */
-        <div style={s('font-size: 11px; color: var(--ink); font-variant-numeric: tabular-nums;')}
+        <div style={s('font-size: 10.5px; color: var(--ink); font-variant-numeric: tabular-nums;')}
              title={ярус == null
                     ? 'в классике рифмовки нет — корзины по целым ключам, для справки'
                     : 'корзина — строки, среди которых маска «' + имяМаскиРифмы(ярус)
@@ -362,7 +362,7 @@ export function полосаРедкости(c, ось, имя, поясн, ст
   return (
     <div data-row="1" style={s('padding: 6px 0;')}>
       <div style={s('display: flex; align-items: baseline; gap: 8px;')}>
-        <span style={s('font-size: 10px; color: var(--muted);')}>{имя}</span>
+        <span style={s('font-size: 10.5px; color: var(--muted);')}>{имя}</span>
         <span style={s('font-size: 9px; color: var(--muted); opacity: .7; margin-left: auto;')}>
           {выбрано ? выбрано + '% корпуса · ' + строка.replace(/,/g, ', ') : 'не отбирает'}
         </span>
@@ -384,12 +384,12 @@ export function полосаРедкости(c, ось, имя, поясн, ст
               мазнуть(i);
             }}
             onMouseEnter={function () { мазнуть(i); }}
-            style={s('flex: 1 1 0; border-radius: 1px; '
+            style={s('flex: 1 1 0; border-radius: var(--radius); '
               + (вкл ? 'background: var(--ink);'
                      : 'background: color-mix(in srgb, var(--ink) 9%, transparent);'))} />);
         })}
       </div>
-      <div style={s('display: flex; justify-content: space-between; margin-top: 3px; font-size: 8px; color: var(--muted); opacity: .65;')}>
+      <div style={s('display: flex; justify-content: space-between; margin-top: 3px; font-size: 9px; color: var(--muted); opacity: .65;')}>
         <span>0% нередкие</span><span>{поясн}</span><span>редкие 100%</span>
       </div>
     </div>
@@ -543,7 +543,7 @@ function полоскаДолей(ось, сорта, маска, строка, 
       <div style={s('position: relative; display: flex; height: 14px;')}>
         {ц.map(function (п, i) {
           return (<div key={i} title={вкл[i][0] + ' · ' + п + '%'}
-            style={{ ...s('height: 100%; border-radius: 1px; background: color-mix(in srgb, var(--ink) 22%, transparent);'),
+            style={{ ...s('height: 100%; border-radius: var(--radius); background: color-mix(in srgb, var(--ink) 22%, transparent);'),
                      width: п + '%' }} />);
         })}
         {ц.slice(0, -1).map(function (п, i) {
@@ -560,7 +560,7 @@ function полоскаДолей(ось, сорта, маска, строка, 
           доле цифра шире своей ячейки и вылезает за неё — замерено, что
           ячейку это не растягивает (заданная ширина ограничивает
           автоминимум флекса), то есть числа не разъезжаются. */}
-      <div style={s('display: flex; margin-top: 3px; font-size: 8px; color: var(--muted); opacity: .65;')}>
+      <div style={s('display: flex; margin-top: 3px; font-size: 9px; color: var(--muted); opacity: .65;')}>
         {ц.map(function (п, i) {
           return (<div key={i} style={{ width: п + '%', textAlign: 'center' }}>{п}</div>);
         })}
@@ -614,7 +614,7 @@ function рядМаски(имя, полосы, маска, onSet, пусто, �
   var м = Number(маска) || 0;
   return (
     <div data-row="1" style={s('display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; padding: 4px 0; min-height: 26px;')}>
-      <span style={s('font-size: 10px; color: var(--muted); flex: 0 0 58px;')}>{имя}</span>
+      <span style={s('font-size: 10.5px; color: var(--muted); flex: 0 0 58px;')}>{имя}</span>
       <div style={s('display: flex; flex-wrap: wrap; gap: 3px;')}>
         {полосы.map(function (п) {
           var on = !!(м & п[1]);
@@ -626,7 +626,7 @@ function рядМаски(имя, полосы, маска, onSet, пусто, �
               }
               onSet(нов);
             }}
-            style={s('appearance: none; border: none; border-radius: 3px; padding: 4px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
+            style={s('appearance: none; border: none; border-radius: var(--radius); padding: 4px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
               + (on ? 'background: var(--ink); color: var(--canvas);'
                     : 'background: color-mix(in srgb, var(--ink) 6.5%, transparent); color: var(--muted);'))}
             className={hov('color: var(--ink)')}>{п[0]}</button>);
@@ -642,12 +642,12 @@ function рядМаски(имя, полосы, маска, onSet, пусто, �
 function переключатель(имя, опции, активен, onPick, хвост) {
   return (
     <div data-row="1" style={s('display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; padding: 4px 0; min-height: 26px;')}>
-      <span style={s('font-size: 10px; color: var(--muted); flex: 0 0 58px;')}>{имя}</span>
+      <span style={s('font-size: 10.5px; color: var(--muted); flex: 0 0 58px;')}>{имя}</span>
       <div style={s('display: flex; flex-wrap: wrap; gap: 3px;')}>
         {опции.map(function (o, i) {
           var on = активен === i;
           return (<button key={o} onClick={function () { onPick(i); }}
-            style={s('appearance: none; border: none; border-radius: 3px; padding: 4px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
+            style={s('appearance: none; border: none; border-radius: var(--radius); padding: 4px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
               + (on ? 'background: var(--ink); color: var(--canvas);'
                     : 'background: color-mix(in srgb, var(--ink) 6.5%, transparent); color: var(--muted);'))}
             className={hov('color: var(--ink)')}>{o}</button>);
@@ -737,7 +737,7 @@ function renderНастройки(c) {
         {ПРЕСЕТЫ.map(function (п) {
           var on = п.name === текущий;
           return (<button key={п.name} onClick={function () { c.pickПресет(п.name); }} title={п.зачем}
-            style={s('appearance: none; border: none; border-radius: 4px; padding: 5px 10px; font-family: inherit; font-size: 10px; cursor: pointer; '
+            style={s('appearance: none; border: none; border-radius: var(--radius); padding: 5px 10px; font-family: inherit; font-size: 10.5px; cursor: pointer; '
               + (on ? 'background: var(--ink); color: var(--canvas);'
                     : 'background: color-mix(in srgb, var(--ink) 6.5%, transparent); color: var(--muted);'))}
             className={hov('color: var(--ink)')}>{п.name}</button>);

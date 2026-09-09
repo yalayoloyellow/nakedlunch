@@ -37,7 +37,7 @@ export const FONTS_BASE = ['JetBrains Mono', 'Georgia', 'Helvetica'];
 
 // рецепт кнопки-варианта в строках настроек — из renderVals дизайна (3410)
 export function pickStyle(a) {
-  return 'appearance: none; border: none; border-radius: 5px; padding: 3px 8px; font-size: 9px; letter-spacing: 0.01em; cursor: pointer; white-space: nowrap; transition: background-color 0.12s var(--ease), color 0.12s var(--ease); '
+  return 'appearance: none; border: none; border-radius: var(--radius); padding: 3px 8px; font-size: 9px; letter-spacing: 0.01em; cursor: pointer; white-space: nowrap; transition: background-color 0.12s var(--ease), color 0.12s var(--ease); '
     + (a ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 6.5%, transparent); color: var(--muted);');
 }
 
@@ -182,21 +182,19 @@ export const panelMethods = {
         cfgNum('uiContrast', 'контраст', 60, 180, 1, 100, '%'),
         cfgPick('uiGrainFps', 'кадры зерна', ['15', '24', '30', '60', 'без предела'], '24')
       ] },
-      { name: 'вид', items: [
-        cfgPick('menuFill', 'заливка меню', ['стекло', 'плотная'], 'стекло'),
-        cfgNum('menuAlpha', 'плотность панелей', 40, 100, 1, 82, '%'),
-        cfgNum('glassBlur', 'размытие стекла', 0, 32, 1, 7, 'px'),
-        hint(cfgNum('glassWarp', 'искажение стекла', 0, 60, 1, 11), 'фон за панелью слегка ведёт, как за настоящим стеклом'),
-        cfgPick('glassAber', 'хроматика стекла', ['нет', 'да'], 'нет')
-      ] },
-      { name: 'градиент у краёв', items: [
-        cfgPick('fadeOn', 'включён', ['да', 'нет'], 'да'),
-        cfgNum('fadeLen', 'длина', 100, 900, 20, 160, 'px'),
-        hint(cfgNum('fadeStr', 'сила', 40, 140, 5, 100, '%'), 'больше 100% — текст уходит раньше и глуше'),
-        hint(cfgNum('fadeCurve', 'кривая', 0.3, 2, 0.05, 0.5), 'меньше 1 — гаснет резко у края и долго тянется хвостом; больше 1 — наоборот'),
-        cfgNum('fadeBlur', 'размытие', 0, 30, 1, 14, 'px'),
-        hint(cfgNum('fadeDither', 'дизер', 0, 10, 0.5, 0, '%'), 'тонкий шум против ступеней на тёмном градиенте')
-      ] }
+      // НАДГРОБИЕ: СЕКЦИИ «ВИД» И «ГРАДИЕНТ У КРАЁВ» СНЯТЫ.
+      //
+      // «Градиент у краёв» — шесть ручек, которых НИКТО НЕ ЧИТАЛ. Проверено
+      // grep'ом по всему src и по собранному бандлу: каждый из ключей fadeOn,
+      // fadeLen, fadeStr, fadeCurve, fadeBlur, fadeDither встречался ровно
+      // один раз — здесь, в объявлении. Ни одного места, где значение
+      // превращалось бы в пиксели. Ручка, которая ничего не двигает, хуже
+      // отсутствующей: она врёт о том, что программа умеет.
+      //
+      // «Вид» — стекло панелей: размытие, искажение и хроматика фона под
+      // панелью. Панель плавала над содержимым и гнула то, что под ней; замер
+      // строки из двенадцати слов: 113 мс с варпом против 16 без. Панели
+      // пристыкованы, стекла нет, крутить нечего.
     ].map(function (sec) { return { name: sec.name, items: cfgRows(sec.items) }; });
   },
 };

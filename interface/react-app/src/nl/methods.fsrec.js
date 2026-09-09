@@ -507,7 +507,7 @@ export const fsRecMethods = {
       const bad = box('nlRecFail',
         'position: fixed; left: 50%; top: 22px; transform: translateX(-50%); z-index: ' + (Z + 2) + ';'
         + ' max-width: 78vw; pointer-events: none; background: #c81e28; color: #fff;'
-        + ' border-radius: 4px; padding: 10px 16px; font-family: ui-monospace, monospace; font-size: 12px;'
+        + ' border-radius: var(--radius); padding: 10px 16px; font-family: ui-monospace, monospace; font-size: 13px;'
         + ' line-height: 1.5; letter-spacing: 0.02em; white-space: pre-wrap; text-align: center;'
         + ' box-shadow: 0 10px 30px -12px rgba(0,0,0,0.6);');
       bad.textContent = 'СБОЙ ЗАПИСИ\n' + err;
@@ -523,7 +523,7 @@ export const fsRecMethods = {
     const hud = box('nlRecHud',
       'position: fixed; right: 18px; top: 16px; z-index: ' + (Z + 1) + '; pointer-events: none;'
       + ' display: ' + (idle ? 'none' : 'block') + '; background: rgba(10,10,10,0.72);'
-      + ' color: #f2f2f2; border-radius: 4px; padding: 7px 11px;'
+      + ' color: #f2f2f2; border-radius: var(--radius); padding: 7px 11px;'
       + ' font-family: ui-monospace, monospace; font-size: 10.5px; line-height: 1.6;'
       + ' letter-spacing: 0.03em; white-space: pre; text-align: right;');
     if (idle) return;
@@ -565,12 +565,12 @@ export const fsRecMethods = {
     const done = box('nlRecDone',
       'position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: ' + (Z + 3) + ';'
       + ' max-width: min(720px, 86vw); background: rgba(12,12,12,0.92); color: #f2f2f2;'
-      + ' border-radius: 5px; padding: 18px 22px; font-family: ui-monospace, monospace;'
-      + ' font-size: 11px; line-height: 1.7; box-shadow: 0 20px 50px -20px rgba(0,0,0,0.8);');
+      + ' border-radius: var(--radius); padding: 18px 22px; font-family: ui-monospace, monospace;'
+      + ' font-size: 10.5px; line-height: 1.7; box-shadow: 0 20px 50px -20px rgba(0,0,0,0.8);');
     done.textContent = '';
 
     const head = document.createElement('div');
-    head.style.cssText = 'font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 10px;';
+    head.style.cssText = 'font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 10px;';
     head.textContent = 'запись остановлена · ' + fmtTime(ms);
     done.appendChild(head);
 
@@ -590,7 +590,7 @@ export const fsRecMethods = {
     // листов: /api/rec/open-dir.
     const открыть = document.createElement('button');
     открыть.type = 'button';
-    открыть.style.cssText = 'margin-top: 10px; font: inherit; font-size: 11px; color: inherit; background: none; border: 1px solid currentColor; border-radius: 999px; padding: 5px 12px; cursor: pointer; opacity: 0.75;';
+    открыть.style.cssText = 'margin-top: 10px; font: inherit; font-size: 10.5px; color: inherit; background: none; border: 1px solid currentColor; border-radius: 999px; padding: 5px 12px; cursor: pointer; opacity: 0.75;';
     открыть.textContent = 'открыть папку записей';
     открыть.addEventListener('click', function () {
       fetch('/api/rec/open-dir', { method: 'POST' }).catch(function () {});
@@ -609,8 +609,8 @@ export const fsRecMethods = {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = label;
-      b.style.cssText = 'appearance: none; border: none; border-radius: 3px; padding: 7px 14px;'
-        + ' font-family: inherit; font-size: 11px; cursor: pointer; background: #f2f2f2; color: #101010;';
+      b.style.cssText = 'appearance: none; border: none; border-radius: var(--radius); padding: 7px 14px;'
+        + ' font-family: inherit; font-size: 10.5px; cursor: pointer; background: #f2f2f2; color: #101010;';
       return b;
     };
     const close = mkBtn('закрыть');

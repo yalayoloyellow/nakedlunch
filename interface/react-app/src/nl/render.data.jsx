@@ -22,10 +22,10 @@ import { Fragment } from 'react';
 import { s, hov } from './style.js';
 import { СРОКИ_ИСТОРИИ } from './methods.corpus.js';
 
-const ПАНЕЛЬ = 'position: absolute; top: calc(100% + 12px); right: 0; z-index: 80; background: var(--menu-bg); backdrop-filter: var(--glass-fx); -webkit-backdrop-filter: var(--glass-fx-fallback); contain: paint; isolation: isolate; box-shadow: 0 14px 34px -22px rgba(0,0,0,0.45); border-radius: var(--radius); padding: 12px 14px;';
-const ЗАГОЛОВОК = 'font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft);';
-const ССЫЛКА = 'appearance: none; background: none; border: none; padding: 0; font-family: inherit; font-size: 9.5px; color: var(--muted); cursor: pointer; white-space: nowrap;';
-const ПОИСК = 'flex: 1; min-width: 0; appearance: none; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 4px 2px; font-family: inherit; font-size: 10px; color: var(--ink);';
+const ПАНЕЛЬ = 'position: absolute; top: calc(100% + 12px); right: 0; z-index: 80; background: var(--menu-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 12px 14px;';
+const ЗАГОЛОВОК = 'font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft);';
+const ССЫЛКА = 'appearance: none; background: none; border: none; padding: 0; font-family: inherit; font-size: 9px; color: var(--muted); cursor: pointer; white-space: nowrap;';
+const ПОИСК = 'flex: 1; min-width: 0; appearance: none; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 4px 2px; font-family: inherit; font-size: 10.5px; color: var(--ink);';
 const ЧИСЛО = 'font-variant-numeric: tabular-nums; color: var(--ink);';
 
 function фмт(n) {
@@ -126,18 +126,18 @@ export function renderHistPanel(c) {
           контекста рядом с настройками шрифта. */}
       {st.histCfg && (
         <div style={s('background: color-mix(in srgb, var(--ink) 4%, transparent); border-radius: var(--radius); padding: 8px 10px; margin-bottom: 9px;')}>
-          <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 10px; color: var(--muted-hard);')}>
+          <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 10.5px; color: var(--muted-hard);')}>
             <span>хранить</span>
             <div style={s('display: flex; gap: 3px; flex-wrap: wrap;')}>
               {СРОКИ_ИСТОРИИ.map(function (o, i) {
                 var on = o.v === st.histRetention;
                 return (<button key={i} onClick={function () { c.setHistRetention(o.v); }}
-                  style={s('appearance: none; border: none; border-radius: 3px; padding: 4px 7px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
+                  style={s('appearance: none; border: none; border-radius: var(--radius); padding: 4px 7px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
                     + (on ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);'))}>{o.name}</button>);
               })}
             </div>
           </div>
-          <div style={s('font-size: 8.5px; line-height: 1.45; color: var(--muted-soft); margin-top: 7px; text-wrap: pretty;')}>
+          <div style={s('font-size: 9px; line-height: 1.45; color: var(--muted-soft); margin-top: 7px; text-wrap: pretty;')}>
             показанное скрыто из пула, пока не истечёт срок или пока не вернёшь вручную · история одна на редактор и фристайл
           </div>
         </div>
@@ -205,7 +205,7 @@ function имяКниги(s) {
 
 function ряд(k, v, i) {
   return (
-    <div key={i} style={s('display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 10px; color: var(--muted); padding: 2px 0;')}>
+    <div key={i} style={s('display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 10.5px; color: var(--muted); padding: 2px 0;')}>
       <span style={s('min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;')}>{k}</span>
       <span style={s(ЧИСЛО)}>{v}</span>
     </div>
@@ -237,7 +237,7 @@ export function renderStatsPanel(c) {
         воронка отбора · {ворон.всего.toLocaleString('ru')} строк, {ворон.книг_всего} книг</div>
       {ворон.ступени.map(function (ш, i) {
         return (
-          <div key={i} style={s('display: flex; align-items: baseline; gap: 8px; font-size: 10px; padding: 1px 0;')}>
+          <div key={i} style={s('display: flex; align-items: baseline; gap: 8px; font-size: 10.5px; padding: 1px 0;')}>
             <span style={s('flex: 1; min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;')}>{ш.шаг}</span>
             <span style={s('width: 78px; text-align: right; color: var(--ink); font-variant-numeric: tabular-nums;')}>{ш.дожило.toLocaleString('ru')}</span>
             <span style={s('width: 42px; text-align: right; color: var(--muted-soft); font-variant-numeric: tabular-nums;')}>{ш.доля}%</span>
@@ -291,14 +291,14 @@ export function renderStatsPanel(c) {
             var беда = j.state === 'error' || j.state === 'stalled';
             return (
               <div key={i} style={s('margin-bottom: 9px;')}>
-                <div style={s('display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 10px; color: var(--muted-hard);')}>
+                <div style={s('display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 10.5px; color: var(--muted-hard);')}>
                   <span style={s('min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;')}>{j.label}</span>
-                  <span style={s('flex-shrink: 0; font-size: 8.5px; color: ' + (беда ? '#c96a6a' : 'var(--muted-soft)') + ';')}>{j.подпись}</span>
+                  <span style={s('flex-shrink: 0; font-size: 9px; color: ' + (беда ? '#c96a6a' : 'var(--muted-soft)') + ';')}>{j.подпись}</span>
                 </div>
-                <div style={s('height: 2px; background: var(--border-subtle); border-radius: 1px; margin: 5px 0 4px; overflow: hidden;')}>
+                <div style={s('height: 2px; background: var(--border-subtle); border-radius: var(--radius); margin: 5px 0 4px; overflow: hidden;')}>
                   <div style={{ width: j.pct + '%', height: '100%', background: беда ? '#c96a6a' : 'var(--ink)' }}></div>
                 </div>
-                <div style={s('font-size: 8.5px; color: var(--muted-soft); font-variant-numeric: tabular-nums;')}>{j.detail}</div>
+                <div style={s('font-size: 9px; color: var(--muted-soft); font-variant-numeric: tabular-nums;')}>{j.detail}</div>
               </div>
             );
           })}
@@ -355,7 +355,7 @@ export function renderStatsPanel(c) {
           <div style={s(ЗАГОЛОВОК + ' margin-bottom: 5px;')}>о чём тексты</div>
           <div style={s('display: flex; flex-wrap: wrap; gap: 4px;')}>
             {темы.map(function (t, i) {
-              return (<span key={i} style={s('font-size: 9px; color: var(--muted); background: color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 3px; padding: 3px 6px; white-space: nowrap;')}>{t.w}<span style={s('color: var(--muted-soft);')}>{' · ' + t.n}</span></span>);
+              return (<span key={i} style={s('font-size: 9px; color: var(--muted); background: color-mix(in srgb, var(--ink) 6%, transparent); border-radius: var(--radius); padding: 3px 6px; white-space: nowrap;')}>{t.w}<span style={s('color: var(--muted-soft);')}>{' · ' + t.n}</span></span>);
             })}
           </div>
         </div>
@@ -416,7 +416,7 @@ export function renderBlackPanel(c) {
           c.addBlack(п);
         }}
         style={s('width: 100%; background: none; border: none; border-bottom: 1px solid var(--border-subtle);'
-          + ' color: var(--ink); font-family: inherit; font-size: 11px; padding: 4px 0; outline: none; margin-bottom: 8px;')} />
+          + ' color: var(--ink); font-family: inherit; font-size: 10.5px; padding: 4px 0; outline: none; margin-bottom: 8px;')} />
       {правила.map(function (п, i) {
         return (
           <div key={i} style={s('display: flex; align-items: baseline; gap: 8px; font-size: 10.5px; padding: 3px 0; border-bottom: 1px solid var(--border-subtle);')}>
@@ -424,7 +424,7 @@ export function renderBlackPanel(c) {
             <span style={s('color: var(--muted-soft); font-variant-numeric: tabular-nums;')}
               title="сколько строк корпуса убирает это правило">−{фмт(п.lines)}</span>
             <button onClick={function () { c.removeBlack(п.rule); }} title="Убрать правило"
-              style={s('appearance: none; border: none; background: none; color: var(--muted-soft); font-family: inherit; font-size: 12px; cursor: pointer; padding: 0 2px;')}
+              style={s('appearance: none; border: none; background: none; color: var(--muted-soft); font-family: inherit; font-size: 13px; cursor: pointer; padding: 0 2px;')}
               className={hov('color: var(--ink)')}>×</button>
           </div>
         );
