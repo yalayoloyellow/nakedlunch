@@ -112,7 +112,6 @@ def test_sborka_indeksa_ne_govorit_pech_nechego(только_построчны�
 
     Печём по-настоящему, до `meta.json`: возврат 0 без индекса на диске —
     это не доказательство."""
-    import embeddings
     import filters
     import nlbridge
     import nlindex
@@ -120,9 +119,6 @@ def test_sborka_indeksa_ne_govorit_pech_nechego(только_построчны�
 
     monkeypatch.setattr(nlindex, "available", lambda: True)
     monkeypatch.setattr(filters, "_NL_RHYME", {})
-    # navec весит 51 МБ и к маршрутизации файлов отношения не имеет
-    monkeypatch.setattr(embeddings, "warm_caches", lambda: None)
-    monkeypatch.setattr(embeddings, "_index", {})
     monkeypatch.setattr(nlbridge, "open_store", lambda: ЗаглушкаСклада(ЗАПИСИ))
     monkeypatch.setattr(би, "OUT", tmp_path / "nl_index")
     monkeypatch.setattr(би, "СТАТУС", tmp_path / "nl_index.status.json")

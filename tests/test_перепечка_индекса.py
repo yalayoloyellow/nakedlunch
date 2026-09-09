@@ -201,9 +201,8 @@ from pathlib import Path
 # целиком, файла core/generate.py больше нет, и стенд падал на импорте ещё до
 # первого запроса — то есть шесть сторожей этого файла молчали не потому, что
 # всё в порядке. Сторожат они перепечку индекса, а не источник строк.
-import embeddings, filters, wordsuggest
-for м in (embeddings, filters, wordsuggest):
-    м.warm_caches = lambda: None
+import filters
+filters.warm_caches = lambda: None
 import nlindex, server
 
 ТЕЛО = {{"knobs": {{"real_text": 1.0}}, "rhyme": "none"}}
@@ -568,18 +567,14 @@ def сервер():
     `generate` из списка убран 2026-08-29 вместе с самим модулем (генератор
     грамматических строк вырезан): фикстура падала на импорте, и оба теста про
     судью устарелости не выполнялись вовсе."""
-    import embeddings
     import filters
-    import wordsuggest
-    было = (filters.warm_caches, embeddings.warm_caches, wordsuggest.warm_caches)
-    for м in (filters, embeddings, wordsuggest):
-        м.warm_caches = lambda: None
+    было = (filters.warm_caches,)
+    filters.warm_caches = lambda: None
     sys.path.insert(0, str(КОРЕНЬ / "api"))
     try:
         import server
     finally:
-        (filters.warm_caches, embeddings.warm_caches,
-         wordsuggest.warm_caches) = было
+        (filters.warm_caches,) = было
     return server
 
 

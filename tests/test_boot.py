@@ -283,16 +283,14 @@ def сервер():
     test_живость_сборки.py. С ними импорт стоит около секунды, без них —
     гигабайты; а проверять надо поведение функции, а не цену её соседей."""
     # `generate` (грамматический генератор) удалён 2026-08-29 — греть нечего.
-    import embeddings
     import filters
-    было = (filters.warm_caches, embeddings.warm_caches)
+    было = (filters.warm_caches,)
     filters.warm_caches = lambda: None
-    embeddings.warm_caches = lambda: None
     sys.path.insert(0, str(ROOT / "api"))
     try:
         import server
     finally:
-        (filters.warm_caches, embeddings.warm_caches) = было
+        (filters.warm_caches,) = было
     return server
 
 

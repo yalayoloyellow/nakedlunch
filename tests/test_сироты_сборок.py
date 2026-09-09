@@ -53,16 +53,14 @@ def сервер():
     # `generate` из этого списка ушёл 2026-08-29 вместе с самим файлом
     # core/generate.py: глушить прогрев модуля, которого нет, — это
     # ModuleNotFoundError на импорте фикстуры, а не защита.
-    import embeddings
     import filters
-    было = (filters.warm_caches, embeddings.warm_caches)
+    было = (filters.warm_caches,)
     filters.warm_caches = lambda: None
-    embeddings.warm_caches = lambda: None
     sys.path.insert(0, str(КОРЕНЬ / "api"))
     try:
         import server
     finally:
-        (filters.warm_caches, embeddings.warm_caches) = было
+        (filters.warm_caches,) = было
     return server
 
 

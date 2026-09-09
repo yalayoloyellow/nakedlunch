@@ -275,9 +275,8 @@ sys.path.insert(0, {api!r})
 # Тяжёлые прогревы вон: они не при чём, а без заглушек импорт стоит гигабайты
 # (тот же приём, что в test_живость_сборки.py).
 # `generate` из этого списка ушёл 2026-08-29 вместе с core/generate.py.
-import embeddings, filters, nlbridge, wordsuggest
-for м in (embeddings, filters, wordsuggest):
-    м.warm_caches = lambda: None
+import filters, nlbridge
+filters.warm_caches = lambda: None
 nlbridge.open_store = lambda: None
 import server
 # ДОЖДАТЬСЯ ПРОГРЕВА, ЕСЛИ ОН ВСЁ-ТАКИ СТАРТОВАЛ. Он демон: без ожидания

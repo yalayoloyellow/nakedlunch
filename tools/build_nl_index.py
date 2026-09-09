@@ -33,7 +33,6 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "core"))
 
-import embeddings  # noqa: E402
 import filters     # noqa: E402
 
 import пути         # noqa: E402  (где что лежит, см. core/пути.py)
@@ -239,7 +238,6 @@ def build() -> int:
     t0 = time.time()
     статус(state="running", stage="загружаю кэш ударений", done=0, total=0, error=None)
     filters.warm_caches()
-    embeddings.warm_caches()
     # ПЕЧЁМ ИЗ JSON НАПРЯМУЮ (Раунд 56).
     #
     # `filters.warm_caches()` СПЕЦИАЛЬНО не грузит nl_rhyme.json, когда
@@ -264,8 +262,8 @@ def build() -> int:
 
     # ПОТОКОМ, А НЕ СЛОВАРЁМ (2026-08-21). Здесь стояло `R = кэш.читать_всё()`,
     # и это держало в памяти ВЕСЬ кэш: замер экстраполяцией с пробы в 200 000
-    # записей даёт 4.2 ГБ на рабочем корпусе. Плюс navec (1.5 ГБ у сервера
-    # рядом), плюс сами колонки — вот и весь OOM, из-за которого выпечка
+    # записей даёт 4.2 ГБ на рабочем корпусе, плюс сами колонки — вот и весь
+    # OOM, из-за которого выпечка
     # умирала молча, а книга оставалась в складе, но вне индекса.
     #
     # Цена потока замерена: один проход по кэшу 11 с, счёт строк без разбора
@@ -280,7 +278,6 @@ def build() -> int:
         """Пары (текст, поля) по порядку — из памяти либо потоком с диска."""
         return iter(загружен.items()) if загружен else кэш.поток()
 
-    navec = embeddings._index or {}
     n = len(загружен) if загружен else кэш.сколько()
     if not n:
         # Имя файла в этой строке было `nl_rhyme.json` — а с 2026-08-18 старого
@@ -417,12 +414,13 @@ def build() -> int:
     wk_pos = np.array(wk_pos_flat, dtype=np.uint8)
     del wk_flat, wk_pos_flat
     lem_list = [""] * len(lem_vocab)
-    lem2navec = np.full(len(lem_vocab), -1, dtype=np.int32)
+    # НАДГРОБИЕ: КОЛОНКА `lem2navec` (лемма → номер вектора navec) БОЛЬШЕ НЕ
+    # ПЕЧЁТСЯ. Читателя у неё не было с 2026-08-29 (тема вырезана), а вместе с
+    # попапом по слову ушли и сами векторы. `RULES` — строка, набранная руками,
+    # от списка колонок не зависит: уже испечённый индекс остаётся своим, и
+    # перепечка из-за этой правки не нужна.
     for w, i2 in lem_vocab.items():
         lem_list[i2] = w
-        r = navec.get(w)
-        if r is not None:
-            lem2navec[i2] = r
     # обратный индекс токен → фрагменты: он и даёт literal/forced мгновенно
     tp = np.array(tok_pairs, dtype=np.int32)
     del tok_pairs
@@ -508,7 +506,7 @@ def build() -> int:
     tmp.mkdir(parents=True)
     for name, arr in (("banal", banal), ("taut", taut), ("bind", bind), ("mat", mat),
                       ("syl", syl), ("key_id", key_id), ("span_a", span_a), ("span_b", span_b),
-                      ("lem_ids", lem_ids), ("lem_off", lem_off), ("lem2navec", lem2navec),
+                      ("lem_ids", lem_ids), ("lem_off", lem_off),
                       ("wk_ids", wk_ids), ("wk_pos", wk_pos), ("wk_off", wk_off),
                       ("tokpost", tokpost), ("tokoff", tokoff), ("text_off", text_off),
                       ("src", src), ("content", content),

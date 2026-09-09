@@ -76,16 +76,14 @@ def запись_прогона(tmp_path, monkeypatch):
     внутри роута, и промах был именно там. Поэтому зовём роут и читаем, что
     он положил в журнал."""
     # `generate` удалён 2026-08-29 вместе с грамматическим генератором.
-    import embeddings
     import filters
-    было = (filters.warm_caches, embeddings.warm_caches)
+    было = (filters.warm_caches,)
     filters.warm_caches = lambda: None
-    embeddings.warm_caches = lambda: None
     sys.path.insert(0, str(КОРЕНЬ / "api"))
     try:
         import server
     finally:
-        (filters.warm_caches, embeddings.warm_caches) = было
+        (filters.warm_caches,) = было
 
     import stats as stats_mod
     monkeypatch.setattr(stats_mod, "DATA_DIR", tmp_path)

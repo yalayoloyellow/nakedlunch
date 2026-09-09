@@ -52,7 +52,7 @@ from опора import нужен_большой_индекс  # noqa: E402
 
 @pytest.fixture(scope="module")
 def сервер():
-    """`api/server.py` с заглушенными тяжёлыми прогревами (см. test_wordsuggest):
+    """`api/server.py` с заглушенными тяжёлыми прогревами:
     судья живости — чистая функция, корпус ему не нужен, а импорт без заглушек
     стоил бы 5.5 ГБ."""
     # `nlbridge.open_store` БОЛЬШЕ НЕ ГЛУШИТСЯ (2026-08-18). Глушилка стояла
@@ -65,16 +65,14 @@ def сервер():
     # `generate` из этого списка ушёл 2026-08-29 вместе с самим файлом
     # core/generate.py: глушить прогрев модуля, которого нет, — это
     # ModuleNotFoundError на импорте фикстуры, а не защита.
-    import embeddings
     import filters
-    было = (filters.warm_caches, embeddings.warm_caches)
+    было = (filters.warm_caches,)
     filters.warm_caches = lambda: None
-    embeddings.warm_caches = lambda: None
     sys.path.insert(0, str(КОРЕНЬ / "api"))
     try:
         import server
     finally:
-        (filters.warm_caches, embeddings.warm_caches) = было
+        (filters.warm_caches,) = было
     return server
 
 
