@@ -215,6 +215,7 @@ export const fsProfileMethods = {
     clearTimeout(this._viewT);
     this._viewT = setTimeout(function () {
       self._viewT = null;
+      if (self._mounted === false) return;
       api.settingsSet({ nl_view: self.state.cfg || {} })
         .catch(function (e) { self.flash(e && e.message ? e.message : String(e)); });
     }, VIEW_DEBOUNCE);
@@ -293,21 +294,21 @@ export const fsProfileMethods = {
   // её нельзя переименовать, перезаписать или удалить.
   profileList(o) {
     var self = this, st = this.state;
-    var ICON = 'appearance: none; background: none; border: none; padding: 2px 3px; display: flex; align-items: center; cursor: pointer; color: var(--muted-soft); opacity: var(--sh, 0);';
+    var ICON = 'appearance: none; background: none; border: none; padding: 1px 3px; display: flex; align-items: center; cursor: pointer; color: var(--muted-soft); opacity: var(--sh, 0);';
     var NOOP = function () {};
     var mk = function (id, name, x) {
       var on = st[o.sel] === id, def = st[o.def] === id, ed = !!(o.edit && st[o.edit] === id);
       return Object.assign({
         id: id, name: name, editing: ed, notEditing: !ed, canEdit: !!x.canEdit,
         nameTitle: x.canEdit ? 'Клик — загрузить · двойной клик — переименовать' : 'Клик — загрузить',
-        rowStyle: 'display: flex; align-items: center; gap: 4px; border-radius: var(--radius); padding: 3px 5px;'
+        rowStyle: 'display: flex; align-items: center; gap: 4px; border-radius: var(--radius); padding: 2px 5px;'
           + (x.first ? ' margin-bottom: 3px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 6px;' : '')
           + ' background: ' + (on ? 'color-mix(in srgb, var(--ink) 8%, transparent)' : 'transparent') + ';',
-        nameStyle: 'appearance: none; flex: 1; min-width: 0; background: none; border: none; padding: 3px 2px; font-family: inherit; font-size: 10.5px; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: ' + (on ? 'var(--ink)' : 'var(--muted)') + ';',
+        nameStyle: 'appearance: none; flex: 1; min-width: 0; background: none; border: none; padding: 2px; font-family: inherit; font-size: 10.5px; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: ' + (on ? 'var(--ink)' : 'var(--muted)') + ';',
         iconStyle: x.canEdit ? ICON : 'display: none;',
         defFill: def ? 'currentColor' : 'none',
         defTitle: def ? 'Загружается при запуске · клик — снять' : 'Загружать при запуске',
-        defStyle: 'appearance: none; background: none; border: none; padding: 2px 3px; display: flex; align-items: center; cursor: pointer; color: ' + (def ? 'var(--ink)' : 'var(--muted-soft)') + '; opacity: ' + (def ? '1' : 'var(--sh, 0)') + ';',
+        defStyle: 'appearance: none; background: none; border: none; padding: 1px 3px; display: flex; align-items: center; cursor: pointer; color: ' + (def ? 'var(--ink)' : 'var(--muted-soft)') + '; opacity: ' + (def ? '1' : 'var(--sh, 0)') + ';',
         onDefault: function (e) { e.stopPropagation(); o.toggleDef(id); },
         onRename: NOOP, onRenameKey: NOOP, startRename: NOOP, onUpdate: NOOP, onDrop: NOOP
       }, x.row);

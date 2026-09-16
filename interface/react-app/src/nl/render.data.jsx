@@ -22,10 +22,10 @@ import { Fragment } from 'react';
 import { s, hov } from './style.js';
 import { СРОКИ_ИСТОРИИ } from './methods.corpus.js';
 
-const ПАНЕЛЬ = 'position: absolute; top: calc(100% + 12px); right: 0; z-index: 80; background: var(--menu-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 12px 14px;';
+const ПАНЕЛЬ = 'position: absolute; top: calc(100% + 6px); right: 0; z-index: 80; background: var(--menu-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 7px 9px;';
 const ЗАГОЛОВОК = 'font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft);';
 const ССЫЛКА = 'appearance: none; background: none; border: none; padding: 0; font-family: inherit; font-size: 9px; color: var(--muted); cursor: pointer; white-space: nowrap;';
-const ПОИСК = 'flex: 1; min-width: 0; appearance: none; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 4px 2px; font-family: inherit; font-size: 10.5px; color: var(--ink);';
+const ПОИСК = 'flex: 1; min-width: 0; appearance: none; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 2px; font-family: inherit; font-size: 10.5px; color: var(--ink);';
 const ЧИСЛО = 'font-variant-numeric: tabular-nums; color: var(--ink);';
 
 function фмт(n) {
@@ -44,16 +44,16 @@ export function renderFavPanel(c) {
   var строки = q ? все.filter(function (f) { return String(f.t || '').toLowerCase().indexOf(q) >= 0; }) : все;
 
   return (
-    <div data-pa="down" data-po={st.closing === 'fav' ? '1' : null} style={s(ПАНЕЛЬ + ' width: 340px;')}>
-      <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;')}>
+    <div data-panel="popover" data-pa="down" data-po={st.closing === 'fav' ? '1' : null} style={s(ПАНЕЛЬ + ' width: 340px; max-width: calc(100vw - 24px); max-height: min(78vh, 760px); overflow-y: auto;')}>
+      <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-bottom: 6px;')}>
         <span style={s(ЗАГОЛОВОК)}>избранное · {все.length}</span>
         {st.favUndo ? (
           <button onClick={function () { c.undoFav(); }} style={s(ССЫЛКА + ' color: var(--ink);')}>вернуть удалённое</button>
         ) : null}
       </div>
 
-      <div style={s('display: flex; align-items: center; gap: 8px; margin-bottom: 8px;')}>
-        <input type="text" value={st.favQ || ''} placeholder="поиск" spellCheck={false}
+      <div style={s('display: flex; align-items: center; gap: 7px; margin-bottom: 6px;')}>
+        <input type="text" value={st.favQ || ''} placeholder="поиск" aria-label="Поиск в избранном" spellCheck={false}
           onChange={function (e) { c.setState({ favQ: e.target.value }); }} style={s(ПОИСК)} />
         {/* ЗДЕСЬ БЫЛА КНОПКА ＋ (убрана 2026-08-18). Она звала addFavManual,
             а тот брал «строку под курсором ленты». Курсора по строкам не стало
@@ -90,7 +90,7 @@ export function renderFavPanel(c) {
         {строки.length ? null : (<div style={s('font-size: 9px; color: var(--muted-soft); padding: 6px 5px;')}>{все.length ? 'ничего не нашлось' : 'пусто — звезда слева от строки'}</div>)}
       </div>
 
-      <div style={s('display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border-subtle); margin-top: 9px; padding-top: 9px;')}>
+      <div style={s('display: flex; align-items: center; gap: 7px; border-top: 1px solid var(--border-subtle); margin-top: 5px; padding-top: 5px;')}>
         <button onClick={function () { c.copyText(все.map(function (f) { return f.t; }).join('\n')); }} style={s(ССЫЛКА)} className={hov('color: var(--ink)')}>копировать всё</button>
         <button onClick={function () { c.exportFavs('txt'); }} style={s(ССЫЛКА)} className={hov('color: var(--ink)')}>txt</button>
         <button onClick={function () { c.exportFavs('md'); }} style={s(ССЫЛКА)} className={hov('color: var(--ink)')}>md</button>
@@ -113,8 +113,8 @@ export function renderHistPanel(c) {
   var строки = (q ? все.filter(function (h) { return String(h.t || '').toLowerCase().indexOf(q) >= 0; }) : все).slice(0, 300);
 
   return (
-    <div data-pa="down" data-po={st.closing === 'hist' ? '1' : null} style={s(ПАНЕЛЬ + ' width: 360px;')}>
-      <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;')}>
+    <div data-panel="popover" data-pa="down" data-po={st.closing === 'hist' ? '1' : null} style={s(ПАНЕЛЬ + ' width: 360px; max-width: calc(100vw - 24px); max-height: min(78vh, 760px); overflow-y: auto;')}>
+      <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-bottom: 6px;')}>
         <span style={s(ЗАГОЛОВОК)}>история · {фмт(все.length)}</span>
         <button onClick={function () { c.setState({ histCfg: !st.histCfg }); }} style={s(ССЫЛКА)} className={hov('color: var(--ink)')}>
           {st.histCfg ? 'скрыть настройки' : 'настройки'}
@@ -125,26 +125,26 @@ export function renderHistPanel(c) {
           чем именно они управляют, а в общих настройках это была строка без
           контекста рядом с настройками шрифта. */}
       {st.histCfg && (
-        <div style={s('background: color-mix(in srgb, var(--ink) 4%, transparent); border-radius: var(--radius); padding: 8px 10px; margin-bottom: 9px;')}>
+        <div style={s('background: color-mix(in srgb, var(--ink) 4%, transparent); border-radius: var(--radius); padding: 4px 8px; margin-bottom: 5px;')}>
           <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 10.5px; color: var(--muted-hard);')}>
             <span>хранить</span>
             <div style={s('display: flex; gap: 3px; flex-wrap: wrap;')}>
               {СРОКИ_ИСТОРИИ.map(function (o, i) {
                 var on = o.v === st.histRetention;
                 return (<button key={i} onClick={function () { c.setHistRetention(o.v); }}
-                  style={s('appearance: none; border: none; border-radius: var(--radius); padding: 4px 7px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
+                  style={s('appearance: none; border: none; border-radius: var(--radius); padding: 2px 7px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
                     + (on ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);'))}>{o.name}</button>);
               })}
             </div>
           </div>
-          <div style={s('font-size: 9px; line-height: 1.45; color: var(--muted-soft); margin-top: 7px; text-wrap: pretty;')}>
+          <div style={s('font-size: 9px; line-height: 1.45; color: var(--muted-soft); margin-top: 5px; text-wrap: pretty;')}>
             показанное скрыто из пула, пока не истечёт срок или пока не вернёшь вручную · история одна на редактор и фристайл
           </div>
         </div>
       )}
 
-      <div style={s('display: flex; align-items: center; gap: 8px; margin-bottom: 8px;')}>
-        <input type="text" value={st.histQ || ''} placeholder="поиск" spellCheck={false}
+      <div style={s('display: flex; align-items: center; gap: 7px; margin-bottom: 6px;')}>
+        <input type="text" value={st.histQ || ''} placeholder="поиск" aria-label="Поиск в истории" spellCheck={false}
           onChange={function (e) { c.setState({ histQ: e.target.value }); }} style={s(ПОИСК)} />
       </div>
 
@@ -165,7 +165,7 @@ export function renderHistPanel(c) {
         {строки.length ? null : (<div style={s('font-size: 9px; color: var(--muted-soft); padding: 6px 5px;')}>{все.length ? 'ничего не нашлось' : 'пусто'}</div>)}
       </div>
 
-      <div style={s('display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--border-subtle); margin-top: 9px; padding-top: 9px;')}>
+      <div style={s('display: flex; align-items: center; gap: 7px; border-top: 1px solid var(--border-subtle); margin-top: 5px; padding-top: 5px;')}>
         {/* НАДГРОБИЕ 2026-08-29: здесь было поле «вернуть в пул по теме» и
             кнопка к нему. Тема вырезана целиком по требованию, и
             отбирать показанное по ней стало нечем. Поштучное «вернуть»
@@ -214,7 +214,7 @@ function ряд(k, v, i) {
 
 function блок(имя, ряды, key) {
   return (
-    <div key={key} style={s('margin-bottom: 12px;')}>
+    <div key={key} style={s('margin-bottom: 8px;')}>
       <div style={s(ЗАГОЛОВОК + ' margin-bottom: 5px;')}>{имя}</div>
       {ряды.map(function (r, i) { return ряд(r[0], r[1], i); })}
     </div>
@@ -228,11 +228,26 @@ export function renderStatsPanel(c) {
   var s0 = d.stats || {};
   var g = s0.generate || {}, f = s0.favorites || {}, sh = s0.shown || {}, nl = st.nl || {};
 
+  // Состояние генерации живёт в этой же панели, над списком остальных работ.
+  // Единый снимок используют и круг в шапке, и этот блок: отдельной полосы
+  // под шапкой больше нет, поэтому быстрый ответ не даёт ей мелькнуть.
+  var ген = c.generationSummary ? c.generationSummary() : null;
+  var текущийРасчёт = ген ? (
+    <div role={ген.state === 'ошибка' ? 'alert' : 'status'} style={s('margin-bottom: 9px; padding: 6px 8px; border-left: 2px solid ' + (ген.state === 'ошибка' ? 'var(--danger)' : 'var(--info)') + '; background: color-mix(in srgb, ' + (ген.state === 'ошибка' ? 'var(--danger)' : 'var(--info)') + ' 8%, transparent);')}>
+      <div style={s('display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 10.5px; color: var(--ink);')}>
+        <span>{ген.title}</span>
+        {ген.elapsed ? <span style={s('font-size: 9px; color: var(--muted-hard); font-variant-numeric: tabular-nums;')}>{ген.elapsed}</span> : null}
+      </div>
+      {ген.state === 'работа' ? <div style={s('height: 2px; margin: 7px 0 5px; overflow: hidden; background: var(--border-subtle);')}><div style={s('width: 34%; height: 100%; background: var(--info); animation: nlJobSweep 1.4s ease-in-out infinite;')}></div></div> : null}
+      <div style={s('margin-top: ' + (ген.state === 'работа' ? '0' : '3px') + ' ; font-size: 9.5px; line-height: 1.45; color: var(--muted-hard); overflow-wrap: anywhere;')}>{ген.detail}</div>
+    </div>
+  ) : null;
+
   // КАРТА ВОРОНКИ (Раунд 57). Сколько фрагментов и книг доживает до каждой
   // ступени отсева — чтобы цена каждой ручки была видна числом, а не на словах.
   var ворон = st.funnel && st.funnel.ready ? st.funnel : null;
   var воронка = ворон ? (
-    <div style={s('margin-bottom: 18px;')}>
+    <div style={s('margin-bottom: 10px;')}>
       <div style={s('font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted-soft); margin-bottom: 6px;')}>
         воронка отбора · {ворон.всего.toLocaleString('ru')} строк, {ворон.книг_всего} книг</div>
       {ворон.ступени.map(function (ш, i) {
@@ -246,7 +261,7 @@ export function renderStatsPanel(c) {
         );
       })}
       {(ворон.источники || []).length ? (
-        <div style={s('margin-top: 8px;')}>
+        <div style={s('margin-top: 6px;')}>
           <div style={s('font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted-soft); margin-bottom: 4px;')}>
             кто доходит до отбора · {ворон.источники.length} книг</div>
           {/* ВСЕ книги двумя колонками, а не топ-6 в столбик (2026-08-28,
@@ -279,18 +294,19 @@ export function renderStatsPanel(c) {
   var схемы = Object.entries(g.rhyme_scheme_counts || {}).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 5);
 
   return (
-    <div data-pa="down" data-po={st.closing === 'jobs' ? '1' : null} style={s(ПАНЕЛЬ + ' width: 340px; max-height: 74vh; overflow-y: auto;')}>
+    <div data-panel="popover" data-pa="down" data-po={st.closing === 'jobs' ? '1' : null} style={s(ПАНЕЛЬ + ' width: 420px; max-width: calc(100vw - 24px); max-height: min(78vh, 760px); overflow-y: auto;')}>
+      {текущийРасчёт}
       {/* Фоновые работы и статистика — ОДНА кнопка (требование: статистика переезжает в круглую иконку фоновых работ — двух отдельных мест
       не нужно.). Работы стоят сверху и только когда есть
           о чём говорить: в покое это была бы строка «работ нет» над сводкой. */}
       {воронка}
       {работы.length ? (
-        <div style={s('margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle);')}>
-          <div style={s(ЗАГОЛОВОК + ' margin-bottom: 8px;')}>фоновые работы</div>
+        <div style={s('margin-bottom: 9px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle);')}>
+          <div style={s(ЗАГОЛОВОК + ' margin-bottom: 6px;')}>фоновые работы</div>
           {работы.map(function (j, i) {
             var беда = j.state === 'error' || j.state === 'stalled';
             return (
-              <div key={i} style={s('margin-bottom: 9px;')}>
+              <div key={i} style={s('margin-bottom: 6px;')}>
                 <div style={s('display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 10.5px; color: var(--muted-hard);')}>
                   <span style={s('min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;')}>{j.label}</span>
                   <span style={s('flex-shrink: 0; font-size: 9px; color: ' + (беда ? '#c96a6a' : 'var(--muted-soft)') + ';')}>{j.подпись}</span>
@@ -305,7 +321,7 @@ export function renderStatsPanel(c) {
         </div>
       ) : null}
 
-      <div style={s(ЗАГОЛОВОК + ' margin-bottom: 9px;')}>статистика</div>
+      <div style={s(ЗАГОЛОВОК + ' margin-bottom: 6px;')}>статистика</div>
 
       {/* НАДГРОБИЕ: ЗДЕСЬ СТОЯЛИ ШЕСТЬ БЛОКОВ — «среда», «работа», «откуда
           строки», «избранное», «корпус», «лента» (сняты 2026-08-28:
@@ -337,7 +353,7 @@ export function renderStatsPanel(c) {
       ], 'work')}
 
       {ключи.length ? (
-        <div style={s('margin-bottom: 12px;')}>
+        <div style={s('margin-bottom: 8px;')}>
           <div style={s(ЗАГОЛОВОК + ' margin-bottom: 6px;')}>за 30 дней</div>
           <div style={s('display: flex; align-items: flex-end; gap: 2px; height: 34px;')}>
             {ключи.map(function (k, i) {
@@ -349,7 +365,7 @@ export function renderStatsPanel(c) {
       ) : null}
 
       {темы.length ? (
-        <div style={s('margin-bottom: 12px;')}>
+        <div style={s('margin-bottom: 8px;')}>
           {/* Требование: частые темы считать не по вводимым темам, а по сохранённым текстам.. Считаем по избранному и
               листам — по тому, что пользователь ОСТАВИЛ, а не однажды напечатал. */}
           <div style={s(ЗАГОЛОВОК + ' margin-bottom: 5px;')}>о чём тексты</div>
@@ -365,7 +381,7 @@ export function renderStatsPanel(c) {
 
       {/* Выгрузка здесь, а не в настройках: она выгружает СТАТИСТИКУ и корпус,
           и пользователь прав — в настройках ей нечего делать. */}
-      <div style={s('display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border-subtle); padding-top: 9px;')}>
+      <div style={s('display: flex; align-items: center; gap: 7px; border-top: 1px solid var(--border-subtle); padding-top: 5px;')}>
         <span style={s(ЗАГОЛОВОК)}>выгрузить</span>
         <button onClick={function () { c.exportStatsJson(); }} style={s(ССЫЛКА)} className={hov('color: var(--ink)')}>json</button>
         <button onClick={function () { c.exportStatsCsv(); }} style={s(ССЫЛКА)} className={hov('color: var(--ink)')}>csv</button>
@@ -390,12 +406,12 @@ export function renderBlackPanel(c) {
   var правила = (st.black && st.black.rules) || [];
   var всего = правила.reduce(function (s, п) { return s + (п.lines || 0); }, 0);
   return (
-    <div data-pa="down" data-po={st.closing === 'black' ? '1' : null} style={s(ПАНЕЛЬ + ' width: 360px;')}>
-      <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;')}>
+    <div data-panel="popover" data-pa="down" data-po={st.closing === 'black' ? '1' : null} style={s(ПАНЕЛЬ + ' width: 360px; max-width: calc(100vw - 24px); max-height: min(78vh, 760px); overflow-y: auto;')}>
+      <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 7px; margin-bottom: 6px;')}>
         <span style={s(ЗАГОЛОВОК)}>чёрный список · {правила.length}</span>
         <span style={s('font-size: 9px; color: var(--muted-soft);')}>убрано строк: {фмт(всего)}</span>
       </div>
-      <p style={s('margin: 0 0 8px; font-size: 9px; line-height: 1.55; color: var(--muted-soft);')}>
+      <p style={s('margin: 0 0 6px; font-size: 9px; line-height: 1.5; color: var(--muted-soft);')}>
         слово или сочетание · ловятся склонения, но не части других слов:
         «с» уберёт «с» как отдельное слово и не тронет «список»
       </p>
@@ -407,7 +423,7 @@ export function renderBlackPanel(c) {
           Неуправляемое поле не зависит ни от чего: буквы пишет браузер, а мы
           читаем их в момент ввода. Правило добавляется по Enter, значение
           читается прямо из события. */}
-      <input type="text" placeholder="госпожа де сент-анж" spellCheck={false} autoFocus
+      <input type="text" placeholder="госпожа де сент-анж" aria-label="Новое правило чёрного списка" spellCheck={false} autoFocus
         onKeyDown={function (e) {
           if (e.key !== 'Enter') return;
           e.preventDefault();
@@ -416,7 +432,7 @@ export function renderBlackPanel(c) {
           c.addBlack(п);
         }}
         style={s('width: 100%; background: none; border: none; border-bottom: 1px solid var(--border-subtle);'
-          + ' color: var(--ink); font-family: inherit; font-size: 10.5px; padding: 4px 0; outline: none; margin-bottom: 8px;')} />
+          + ' color: var(--ink); font-family: inherit; font-size: 10.5px; padding: 3px 0; outline: none; margin-bottom: 6px;')} />
       {правила.map(function (п, i) {
         return (
           <div key={i} style={s('display: flex; align-items: baseline; gap: 8px; font-size: 10.5px; padding: 3px 0; border-bottom: 1px solid var(--border-subtle);')}>

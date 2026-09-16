@@ -2,7 +2,7 @@
 // Object.assign(Nakedlunch.prototype, genMethods).
 //
 // ЧТО ЗДЕСЬ ОСТАЛОСЬ ПОСЛЕ ТРЁХ СНОСОВ (последний — 2026-08-29):
-//   startGenClock/stop    — секундомер в статусной строке;
+//   startGenClock/stop    — секундомер в панели фоновых работ;
 //   почемуПусто           — честная причина пустой выдачи по воронке бэка;
 //   markShownQueue        — история = только показанное на экране, построчно.
 // Все три зовёт лента (methods.lenta.js) и все три — фристайл.
@@ -25,7 +25,7 @@ export const genMethods = {
   // ЧТО БЫЛО. Единственный вход темы во фронте: поле «темы» в настройках строфы
   // резалось по запятым, чистилось от лишних пробелов и уезжало на бэк как
   // `payload.theme`. Ключ запоминался в `_lastKey` — оттуда его брала запись
-  // истории (markShownQueue ниже) и статусная строка ленты.
+  // истории (markShownQueue ниже) и подпись ленты.
   //
   // ПОЧЕМУ СНЯТО. Решено: «тему стоит вырезать как функцию
   // она глупа и сложна» и «вырезать всё вместе с темой». Тема — не одна ручка,
@@ -55,31 +55,44 @@ export const genMethods = {
   // шкале ядра означает САМЫЕ МЯГКИЕ — то есть делал обратное своему названию.
 
   // ---- генерация ----
-  // Секундомер в статусе (2026-08-02). Прогон по строфе на 14 строк идёт 21
+  // Секундомер в статусе панели (2026-08-02). Прогон по строфе на 14 строк идёт 21
   // секунду на тёплом сервере и 43 на холодном — молчаливое «генерация…»
   // мелким серым в углу читалось как «клавиша не сработала». Теперь счётчик
-  // идёт вслух, а статус на время работы становится цветом чернил.
+  // идёт в панели фоновых работ, а кнопка работ меняет состояние на время расчёта.
   // Ленте он нужен ровно в холодном случае: пустой буфер на первом нажатии или
   // после смены настроек. Дальше ожидания нет вовсе.
   // ЗДЕСЬ БЫЛА `снятьКаретку()` (вырезано 2026-08-18). Она гасила выделение и
   // уводила фокус из контейнера строк на время прогона, чтобы браузер не рисовал
   // палку каретки у левого края. Каретки нет — редактор вырезан целиком.
 
-  startGenClock(label) {
-    var self = this, t0 = Date.now();
+  startGenClock(label, background) {
+    var self = this, t0 = Date.now(), фоновый = !!background;
+    var предыдущийРезультат = this.state.genResult;
     clearInterval(this._genClock);
-    this.setState({ genStatus: label + '…', genBusy: true });
+    this._genStartedAt = t0;
+    this.setState({ genStatus: label + '…', genBusy: !фоновый,
+                    genState: фоновый ? 'background' : 'running',
+                    genPhase: label, genStartedAt: t0, genElapsedMs: 0,
+                    genError: '', genResult: фоновый ? предыдущийРезультат : null });
     this._genClock = setInterval(function () {
       // Заполнитель в строке документа (#nlGenSecs), которому секунды писались
       // напрямую, минуя setState, вырезан 2026-08-18 вместе с редактором.
-      // Секундомер остался один — в статусной строке шапки.
-      self.setState({ genStatus: label + '… ' + Math.round((Date.now() - t0) / 1000) + 'с' });
+      // Секундомер остался один — в панели фоновых работ.
+      var elapsed = Date.now() - t0;
+      self.setState({ genStatus: label + '… ' + Math.round(elapsed / 1000) + 'с',
+                      genElapsedMs: elapsed });
     }, 1000);
   },
-  stopGenClock() {
+  stopGenClock(outcome) {
     clearInterval(this._genClock);
     this._genClock = null;
-    this.setState({ genBusy: false });
+    var elapsed = this._genStartedAt ? Date.now() - this._genStartedAt : (this.state.genElapsedMs || 0);
+    var patch = { genBusy: false, genElapsedMs: elapsed };
+    // Ошибка, отмена и устаревший ответ уже установили свой исход. Не
+    // перетираем его общим «готово» в finally.
+    if (outcome) Object.assign(patch, outcome);
+    else if (this.state.genState === 'running' || this.state.genState === 'background') patch.genState = 'done';
+    this.setState(patch);
   },
 
   // Честная причина пустой выдачи (Раунд 51). Раньше на любой пустой ответ
@@ -105,9 +118,24 @@ export const genMethods = {
   // значило бы объяснять пустой экран отсутствующей настройкой.
   почемуПусто(res, свои) {
     var f = (res && res.funnel) || {};
+    var ст = f.ступени || {};
     var nl = { active: f.nl_fetched > 0, pool_available: f.pool_available,
                algo_survived: f.nl_survived, classic_survived: f.nl_classic_survived };
     if (nl.active && !nl.pool_available) return 'в активном пуле не осталось непоказанных строк — верни что-нибудь из истории';
+    // Пустая строфа не означает пустой отбор. Если полный поиск завершён и
+    // доказал нулевую совместимую комбинацию, называем именно этот факт:
+    // иначе 257 строк, переживших ворота, ошибочно превращались в «ни одна
+    // строка не прошла отбор» и человек не понимал, что сломана связь между
+    // строками формы, а не сам пул.
+    if (Number(nl.algo_survived || nl.classic_survived || 0) > 0
+        && ст['поиск_завершён'] === true
+        && ст['максимум_доказан'] === true
+        && Number(ст['верхняя_оценка_строф']) === 0) {
+      var размер = Number(ст['размер_строфы'] || 0);
+      return String(nl.algo_survived || nl.classic_survived)
+        + ' строк прошли ворота, но полной строфы на ' + размер
+        + ' строк из них не собрать — расширь форму, ослабь ворота или залей ещё книг';
+    }
     if (nl.active && !(nl.algo_survived || nl.classic_survived)) {
       // КРУТИЛКИ ТОГО, КТО СПРАШИВАЕТ (2026-08-30). Функцию зовут двое:
       // лента (её крутилки — `state.params`) и фристайл, у которого с Раунда
@@ -211,7 +239,10 @@ export const genMethods = {
           // вчерашнему снимку. Дозагрузка отложенная и одна на пачку: фристайл
           // помечает строки каждые несколько секунд.
           clearTimeout(self._histReloadT);
-          self._histReloadT = setTimeout(function () { if (self.reloadHistory) self.reloadHistory(); }, 1500);
+          self._histReloadT = setTimeout(function () {
+            self._histReloadT = null;
+            if (self._mounted !== false && self.reloadHistory) self.reloadHistory();
+          }, 1500);
         }).catch(function (e) {
           // запись истории не мешает потоку: молча в консоль, но первый раз
           // за сессию — честный flash, чтобы потеря не была тихой

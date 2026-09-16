@@ -21,6 +21,7 @@
 
 import json
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -159,6 +160,47 @@ def test_pustoy_i_otsutstvuyushchiy_fayl_pishutsya_kak_ran6she(файл):
     файл.write_text("   ", "utf-8")
     settings_mod.write({"nl_view": {"b": 2}})
     assert settings_mod.read()["nl_view"] == {"b": 2}
+
+
+def test_odnovremennye_zapisi_nastroek_ne_zabirayut_obshchiy_vremennyy_fayl(файл, monkeypatch):
+    """Два debounce-запроса сервера не должны сталкиваться на .новый.
+
+    Без блокировки первый поток пишет во временный файл и ждёт, пока второй
+    тоже войдёт в запись. После этого один из двух os.replace неизбежно
+    получает FileNotFoundError — ровно ошибка из журнала живого приложения.
+    """
+    settings_mod.write({"nl_view": {"old": 1}})
+    original = Path.write_text
+    первый_временный = threading.Event()
+    отпустить = threading.Event()
+
+    def задержать_первый(self, data, encoding=None, errors=None, newline=None):
+        if self.name == "settings.json.новый":
+            if первый_временный.is_set():
+                отпустить.set()
+            else:
+                первый_временный.set()
+                отпустить.wait(timeout=0.5)
+        return original(self, data, encoding, errors, newline)
+
+    monkeypatch.setattr(Path, "write_text", задержать_первый)
+    результаты = []
+
+    def сохранить(i):
+        try:
+            settings_mod.write({"nl_view": {str(i): i}})
+            результаты.append("ok")
+        except Exception as e:  # тест должен показать точный старый сбой
+            результаты.append(type(e).__name__)
+
+    потоки = [threading.Thread(target=сохранить, args=(i,)) for i in (1, 2)]
+    for поток in потоки:
+        поток.start()
+    for поток in потоки:
+        поток.join(timeout=2)
+
+    assert результаты == ["ok", "ok"]
+    assert settings_mod.read()["nl_view"] in ({"1": 1}, {"2": 2})
 
 
 def test_zapis_ostavlyaet_kopiyu_predydushchego(файл):

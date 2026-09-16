@@ -99,10 +99,18 @@ def test_forget_zabyvaet_index_i_karty():
     nlindex._text_ids = {"строка": 0}
     nlindex._pool_cache = (("ключ",), None)
     nlindex._lag_cache = (7, 0)
+    nlindex._АДРЕСА = ("старый артефакт",)
+    nlindex._КНИЖНЫЙ_КЭШ[3] = "старый текст книги"
+    nlindex._КНИЖНЫЙ_КЭШ_ИСТОЧНИК = object()
+    nlindex._книги_кэш = (("старый индекс",), (True,))
     nlindex.forget()
     assert nlindex._idx is None and nlindex._tried is False
     assert nlindex._text_ids is None and nlindex._pool_cache is None
     assert nlindex._lag_cache is None, "ответ «всё доехало» пережил перепечь"
+    assert nlindex._АДРЕСА is None, "адреса старого индекса пережили перепечь"
+    assert not nlindex._КНИЖНЫЙ_КЭШ, "текст старой книги пережил перепечь"
+    assert nlindex._КНИЖНЫЙ_КЭШ_ИСТОЧНИК is None, "источник книжного кэша не сброшен"
+    assert nlindex._книги_кэш is None, "маска книг старого индекса пережила перепечь"
 
 
 def test_mask_of_molcha_propuskaet_neindeksnoe():

@@ -34,7 +34,7 @@
 //     Ручки ДВИЖКА (id + defaultValue + [data-val-for]) остаются
 //     неуправляемыми — их читает engineControls() прямо из DOM.
 
-import { Fragment } from 'react';
+import { Fragment, cloneElement, isValidElement } from 'react';
 import { s, hov } from './style.js';
 import { icoBtn } from './icons.js';
 import { pickStyle, PARAM_DEFAULTS } from './methods.panels.js';
@@ -50,36 +50,36 @@ import { ВОРОТА, МНЕНИЯ, В_КЛАССИКЕ, ШКАЛЫ, подпи
 var ЦЕЛЫЕ_МАСКИ = { 'Клаузула': '7', 'Рифма': '15', 'Позиция рифмы': '7' };
 var ЦЕЛЫЕ_ВОРОТА = { 'Внутренняя рифма': 1, 'Перекличка': 1, 'Повтор': 1 };
 import { BLENDS, BLEND_DEF } from './methods.fsglue.js';
-import { полосаРедкости, безЗвукописи } from './render.gen.jsx';
+import { полосаРедкости, безКолонки } from './render.gen.jsx';
 
 // ---- рецепты стилей (renderVals 3395..3607) ----
-const ROW = 'display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 5px 12px; padding: 5px 0; min-height: 24px;';
+const ROW = 'display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 3px 7px; padding: 2px 0; min-height: 20px;';
 const CAP = 'font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 0 0 4px 2px;';
-const CAP2 = 'font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 12px 0 4px 2px;';
-const BOX = 'display: flex; flex-direction: column; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 2px 10px;';
+const CAP2 = 'font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 6px 0 3px 2px;';
+const BOX = 'display: flex; flex-direction: column; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 1px 8px;';
 const LBL = 'font-size: 10.5px; color: var(--muted);';
 const SUB = 'font-size: 9px; color: var(--muted-soft);';
-const CTL = 'display: flex; align-items: center; gap: 9px;';
+const CTL = 'display: flex; align-items: center; gap: 6px;';
 const VAL = 'font-size: 10.5px; color: var(--ink); font-variant-numeric: tabular-nums; min-width: 34px; text-align: right;';
 const PICKS = 'display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end;';
-const SEL = 'appearance: none; width: 146px; max-width: 146px; border: none; border-radius: var(--radius); padding: 5px 20px 5px 7px; font-family: inherit; font-size: 9px; cursor: pointer; background-color: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);';
-const SEARCH = 'flex: 1; min-width: 0; appearance: none; border: none; border-radius: var(--radius); padding: 5px 8px; font-family: inherit; font-size: 10.5px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none;';
-const MINI = 'appearance: none; border: none; border-radius: var(--radius); padding: 5px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);';
+const SEL = 'appearance: none; width: 146px; max-width: 146px; border: none; border-radius: var(--radius); padding: 2px 20px 2px 7px; font-family: inherit; font-size: 9px; cursor: pointer; background-color: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);';
+const SEARCH = 'flex: 1; min-width: 0; appearance: none; border: none; border-radius: var(--radius); padding: 2px 7px; font-family: inherit; font-size: 10.5px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none;';
+const MINI = 'appearance: none; border: none; border-radius: var(--radius); padding: 2px 7px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);';
 const HOVINK = 'color: var(--ink)';
 
 // кнопка-тумблер внутри окна настроек (renderVals 3603)
-const winBtn = (on) => 'appearance: none; border: none; border-radius: var(--radius); padding: 5px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; ' + (on ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);');
+const winBtn = (on) => 'appearance: none; border: none; border-radius: var(--radius); padding: 2px 7px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; ' + (on ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);');
 // значок хрома (renderVals 3507) и док фристайла (3606): рамку несёт только фрейм
 const hudBtn = (on) => icoBtn(on ? 'var(--ink)' : 'var(--muted-soft)');
 const fsBtn = (on, rec) => icoBtn(rec && on ? '#ff453a' : (on ? 'var(--ink)' : 'var(--muted-soft)'));
 // окна сцены и строки — одна и та же панель, отличается только содержимым (3519)
 const fsPanel = (open) => 'position: absolute; top: calc(100% + 6px); left: 32px; right: auto; z-index: 80; width: 430px; max-height: 66vh; overflow-y: auto;'
   + ' background: var(--menu-bg); border: 1px solid var(--border-subtle);'
-  + ' border-radius: var(--radius); padding: 14px 16px; display: ' + (open ? 'block' : 'none') + ';';
+  + ' border-radius: var(--radius); padding: 7px 9px; display: ' + (open ? 'block' : 'none') + ';';
 // меню в шапке фристайла (профили, формат кадра) — рецепт renderVals 3757/3818
 const menuBox = (open, w, disp) => 'position: absolute; top: calc(100% + 6px); left: 32px; z-index: 80; width: ' + w + 'px; max-height: 56vh; overflow-y: auto;'
   + ' background: var(--menu-bg); border: 1px solid var(--border-subtle);'
-  + ' border-radius: var(--radius); padding: ' + (disp === 'flex' ? '6px' : '10px') + '; display: ' + (open ? disp : 'none') + ';'
+  + ' border-radius: var(--radius); padding: ' + (disp === 'flex' ? '5px' : '7px') + '; display: ' + (open ? disp : 'none') + ';'
   + (disp === 'flex' ? ' flex-direction: column; gap: 1px;' : '');
 
 const SIZES = [24, 32, 40, 48, 64, 80, 96, 116, 140, 180, 220];
@@ -92,6 +92,16 @@ const POSN = { 'слева': 'flex-start', 'по центру': 'center', 'сп�
 // `sub` — ЖИВОЕ значение, оно печатается под подписью. `hint` — пояснение,
 // оно уезжает в подсказку курсора: постоянная строка под ручкой занимает
 // вторую строку в каждой ячейке и на плотной панели читается как шум.
+function controlWithLabel(children, label) {
+  if (!isValidElement(children)) return children;
+  // Составные контролы (ползунок и группа кнопок) получают имя через
+  // `ariaLabel`, обычные DOM-контролы — напрямую. Так подпись строки не
+  // остаётся только визуальным соседством, а становится именем поля.
+  var props = { 'aria-label': children.props['aria-label'] || label };
+  if (typeof children.type === 'function') props.ariaLabel = children.props.ariaLabel || label;
+  return cloneElement(children, props);
+}
+
 function Row({ label, sub, hint, children }) {
   return (
     <div data-row="1" style={s(ROW)}>
@@ -100,38 +110,41 @@ function Row({ label, sub, hint, children }) {
         : <span style={s('display: flex; flex-direction: column; gap: 2px; min-width: 0;')} title={hint || undefined}>
             <span style={s(LBL)}>{label}</span><span style={s(SUB)}>{sub}</span>
           </span>}
-      {children}
+      {controlWithLabel(children, label)}
     </div>
   );
 }
 
 // ползунок ДВИЖКА: неуправляемый, значение живёт в DOM (его читает
 // engineControls), подпись обновляет onCardInput через [data-val-for]
-function EngRange({ id, valId, min, max, step, def, show, suffix }) {
+function EngRange({ id, valId, min, max, step, def, show, suffix, ariaLabel }) {
   return (
     <span style={s(CTL)}>
-      <input type="range" id={id} min={min} max={max} step={step} defaultValue={def} style={s('width: 104px;')} />
+      <input type="range" id={id} min={min} max={max} step={step} defaultValue={def}
+        aria-label={ariaLabel} style={s('width: 104px;')} />
       <span id={valId} data-val-for={id} data-val-suffix={suffix} style={s(VAL)}>{show}</span>
     </span>
   );
 }
 
 // свой ползунок: значение в state.fsv, показ считает renderVals
-function MyRange({ min, max, step, value, onIn, show, wrap }) {
+function MyRange({ min, max, step, value, onIn, show, wrap, ariaLabel }) {
   return (
     <span style={s(CTL + (wrap || ''))}>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={onIn} style={s('width: 104px;')} />
+      <input type="range" min={min} max={max} step={step} value={value} onChange={onIn}
+        aria-label={ariaLabel} style={s('width: 104px;')} />
       <span style={s(VAL)}>{show}</span>
     </span>
   );
 }
 
 // ряд кнопок-вариантов (pickStyle) — «кадрирование», «подложка», «тон» и т.п.
-function Picks({ items }) {
+function Picks({ items, ariaLabel }) {
   return (
     <span style={s(PICKS)}>
       {items.map(function (m, i) {
-        return <button key={i} type="button" onClick={m.onPick} style={s(m.style)}>{m.name}</button>;
+        return <button key={i} type="button" aria-label={ariaLabel ? ariaLabel + ': ' + m.name : undefined}
+          onClick={m.onPick} style={s(m.style)}>{m.name}</button>;
       })}
     </span>
   );
@@ -142,8 +155,8 @@ function CfgRow({ it }) {
   return (
     <Row label={it.label}>
       <span style={s(CTL)}>
-        {it.isRange ? <input type="range" min={it.min} max={it.max} step={it.step} value={it.val} onChange={it.onIn} style={s('margin: 0;')} /> : null}
-        {it.isPick ? <Picks items={it.opts} /> : null}
+        {it.isRange ? <input type="range" aria-label={it.label} min={it.min} max={it.max} step={it.step} value={it.val} onChange={it.onIn} style={s('margin: 0;')} /> : null}
+        {it.isPick ? <Picks ariaLabel={it.label} items={it.opts} /> : null}
         <span style={s(VAL)}>{it.show}</span>
       </span>
     </Row>
@@ -171,7 +184,7 @@ function Swatches({ items }) {
   return (
     <Fragment>
       {items.map(function (sw, i) {
-        return <button key={i} type="button" onClick={sw.onPick} title={sw.title} style={s(sw.style)}></button>;
+        return <button key={i} type="button" className="nl-swatch" onClick={sw.onPick} title={sw.title} aria-label={sw.title} style={s(sw.style)}></button>;
       })}
     </Fragment>
   );
@@ -216,8 +229,8 @@ export function renderFsSetPanel(c) {
       var on = posX === x && posY === y;
       posCells.push({
         title: y + ' · ' + x,
-        style: 'appearance: none; border: none; border-radius: var(--radius); padding: 0; height: 26px; display: flex; align-items: ' + POSY[y] + '; justify-content: ' + POSN[x] + '; cursor: pointer; background: ' + (on ? 'color-mix(in srgb, var(--ink) 14%, transparent)' : 'color-mix(in srgb, var(--ink) 5%, transparent)') + ';',
-        dotStyle: 'display: block; width: 9px; height: 2px; margin: 5px; border-radius: var(--radius); background: ' + (on ? 'var(--ink)' : 'var(--muted-soft)') + ';',
+        style: 'appearance: none; border: none; border-radius: var(--radius); padding: 0; height: 20px; min-height: 20px; display: flex; align-items: ' + POSY[y] + '; justify-content: ' + POSN[x] + '; cursor: pointer; background: ' + (on ? 'color-mix(in srgb, var(--ink) 14%, transparent)' : 'color-mix(in srgb, var(--ink) 5%, transparent)') + ';',
+        dotStyle: 'display: block; width: 9px; height: 2px; margin: 4px; border-radius: var(--radius); background: ' + (on ? 'var(--ink)' : 'var(--muted-soft)') + ';',
         onPick: function () { c.setState({ posX: x, posY: y }, function () { call(c, 'fitLine'); }); }
       });
     });
@@ -242,7 +255,7 @@ export function renderFsSetPanel(c) {
     var on = st.fontNow === fo.v;
     return {
       name: fo.n,
-      style: 'appearance: none; border: none; border-radius: var(--radius); padding: 0 8px; height: 27px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; overflow: hidden; cursor: pointer; text-align: left; background: ' + (on ? 'color-mix(in srgb, var(--ink) 10%, transparent)' : 'transparent') + ';',
+      style: 'appearance: none; border: none; border-radius: var(--radius); padding: 0 8px; height: 22px; min-height: 22px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; overflow: hidden; cursor: pointer; text-align: left; background: ' + (on ? 'color-mix(in srgb, var(--ink) 10%, transparent)' : 'transparent') + ';',
       nameStyle: 'font-family: inherit; font-size: 10.5px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: ' + (on ? 'var(--ink)' : 'var(--muted)') + ';',
       sampleStyle: 'flex: 0 0 auto; font-family: ' + fo.v + ', sans-serif; font-size: 13px; line-height: 1; white-space: nowrap; color: ' + (on ? 'var(--ink)' : 'var(--muted-soft)') + ';',
       onPick: function () { call(c, 'pickFont', fo.v); }
@@ -276,9 +289,9 @@ export function renderFsSetPanel(c) {
   // передать его напрямую значит потерять this (и кэш ref'а)
   return (
     <div id="fsSetPanel" ref={c.fsRef('cardsRef')} onInput={(e) => call(c, 'onCardInput', e)}
-      data-pa="down" data-po={st.closing === 'fsset' ? '1' : null} style={s(fsPanel(st.fsSetOpen))}>
+      data-panel="popover" data-pa="down" data-po={st.closing === 'fsset' ? '1' : null} style={s(fsPanel(st.fsSetOpen) + ' max-width: calc(100vw - 24px);')}>
 
-      <nav style={s('display: flex; gap: 4px; margin-bottom: 13px;')}>
+      <nav style={s('display: flex; gap: 3px; margin-bottom: 6px;')}>
         {tabs.map(function (t) {
           return <button key={t[0]} type="button" onClick={() => c.setState({ fsTab: t[0] })}
             style={s(pickStyle((st.fsTab || 'cam') === t[0]))}>{t[1]}</button>;
@@ -334,15 +347,15 @@ export function renderFsSetPanel(c) {
         </div>
 
         <div style={s(CAP2)}>пресет</div>
-        <div style={s('display: flex; flex-direction: column; gap: 8px;')}>
-          <div style={s('display: flex; align-items: center; gap: 8px;')}>
-            <input type="text" id="presetSearch" placeholder="поиск" spellCheck="false" value={presetQ}
+      <div style={s('display: flex; flex-direction: column; gap: 5px;')}>
+          <div style={s('display: flex; align-items: center; gap: 6px;')}>
+            <input type="text" id="presetSearch" placeholder="поиск" aria-label="Поиск пресета визуализатора" spellCheck="false" value={presetQ}
               onChange={(e) => c.setState({ presetQ: e.target.value })} style={s(SEARCH)} />
             {/* хук движка из дизайна — на него вешаются внешние вызовы выбора */}
             <button type="button" id="fsPresetTrigger" style={s('display: none;')}><span id="fsPresetTriggerLabel"></span></button>
             <button type="button" id="btnRandomPreset" onClick={() => eng && eng.random && eng.random()} className={hov(HOVINK)} style={s(MINI)}>случайный</button>
           </div>
-          <div style={s('display: flex; gap: 4px; flex-wrap: wrap;')}>
+          <div style={s('display: flex; gap: 3px; flex-wrap: wrap;')}>
             {[['all', 'все', 'tabAll'], ['fav', 'избранное', 'tabFav'], ['recent', 'недавние', 'tabRecent']].map(function (t) {
               // .active — тот же класс, которым метил свои тумблеры движок:
               // подсветку уже рисует правило #fsSetPanel button.active (style.js)
@@ -357,21 +370,22 @@ export function renderFsSetPanel(c) {
                 <div key={p.name} className={'presetRow' + (p.current ? ' current' : '')}>
                   <button type="button" className={'presetStar' + (p.fav ? ' on' : '')} title="в избранное"
                     onClick={() => eng && eng.toggleFav && eng.toggleFav(p.name)}>★</button>
-                  <div className="presetName" onClick={() => eng && eng.pick && eng.pick(p.name)}>{p.name}</div>
+                  <button type="button" className="presetName" aria-current={p.current ? 'true' : undefined}
+                    onClick={() => eng && eng.pick && eng.pick(p.name)}>{p.name}</button>
                   {p.tag ? <span className="presetTag">{p.tag}</span> : null}
                 </div>
               );
             })}
             {presetRows.length ? null
-              : <div style={s('font-size: 9px; line-height: 1.5; color: var(--muted-soft); padding: 4px 5px;')}>{eng ? 'ничего не нашлось' : 'движок ещё не загружен'}</div>}
+              : <div style={s('font-size: 9px; line-height: 1.5; color: var(--muted-soft); padding: 3px 5px;')}>{eng ? 'ничего не нашлось' : 'движок ещё не загружен'}</div>}
           </div>
-          <div style={s('display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 12px; border-top: 1px solid var(--border-subtle); padding-top: 9px;')}>
+          <div style={s('display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 10px; border-top: 1px solid var(--border-subtle); padding-top: 6px;')}>
             <span style={s(LBL)}>автосмена пресетов</span>
             <button type="button" onClick={() => c.setState({ bcAutoOn: !st.bcAutoOn }, function () { call(c, 'bcAutoLoop'); })}
               className={hov(HOVINK)} style={s(winBtn(!!st.bcAutoOn))}>{st.bcAutoOn ? 'вкл' : 'выкл'}</button>
             <span style={s(LBL)}>период</span>
             <span style={s(CTL)}>
-              <input type="range" min="5" max="180" step="5" value={st.bcAutoSec || 30}
+              <input type="range" aria-label="Период автосмены пресетов" min="5" max="180" step="5" value={st.bcAutoSec || 30}
                 onChange={(e) => c.setState({ bcAutoSec: parseInt(e.target.value, 10) || 30 }, function () { call(c, 'bcAutoLoop'); })} style={s('width: 104px;')} />
               <span style={s(VAL)}>{(st.bcAutoSec || 30) + ' с'}</span>
             </span>
@@ -393,7 +407,7 @@ export function renderFsSetPanel(c) {
           <Row label="палитра" hint="повторный клик — свой цвет">
             <div style={s('position: relative; display: flex; align-items: center; gap: 8px;')}>
               <Swatches items={swPanel} />
-              <input type="color" id="panelColorPicker" defaultValue="#2436e0" style={s(palPicker(palSel, 'panel'))} />
+              <input type="color" id="panelColorPicker" aria-label="Свой цвет плашки" defaultValue="#2436e0" style={s(palPicker(palSel, 'panel'))} />
               {/* журнал недавних цветов движка — заполняет он сам */}
               <div id="palette" style={s('display: none;')}></div>
             </div>
@@ -402,7 +416,7 @@ export function renderFsSetPanel(c) {
             {/* список режимов наложения в дизайне наполнял внешний движок;
                 теперь это константа связки (methods.fsglue.js), а сам select
                 остаётся неуправляемым — его читает engineControls() */}
-            <select id="blendSelect" defaultValue={BLEND_DEF} style={s(SEL)}>
+              <select id="blendSelect" aria-label="Режим наложения плашки" defaultValue={BLEND_DEF} style={s(SEL)}>
               {BLENDS.map(function (b) { return <option key={b[0]} value={b[0]}>{b[1]}</option>; })}
             </select>
           </Row>
@@ -416,7 +430,7 @@ export function renderFsSetPanel(c) {
           <Row label="источник"><Picks items={acModes} /></Row>
           <Row label="темп"><MyRange min="1" max="100" step="1" value={String(fsv('acSpeed'))} onIn={mySl('acSpeed')} show={acShow} /></Row>
           <Row label="плавность"><MyRange min="0" max="100" step="1" value={String(fsv('acEase'))} onIn={mySl('acEase')} show={fsv('acEase') === 0 ? 'резко' : fsv('acEase') + '%'} /></Row>
-          <div data-row="1" style={s('padding: 9px 0;')}>
+          <div data-row="1" style={s('padding: 3px 0;')}>
             <span style={s('font-size: 9px; line-height: 1.5; color: var(--muted-soft);')}>{acHint}</span>
           </div>
           <button type="button" id="btnAutoColor" aria-hidden="true" tabIndex={-1} style={s('display: none;')}></button>
@@ -430,15 +444,15 @@ export function renderFsSetPanel(c) {
           <Row label="цвет" hint="повторный клик — свой цвет">
             <div style={s('position: relative; display: flex; align-items: center; gap: 8px;')}>
               <Swatches items={swInk} />
-              <input type="color" id="inkColor" defaultValue="#ffffff" style={s(palPicker(palSel, 'ink'))} />
+              <input type="color" id="inkColor" aria-label="Свой цвет текста" defaultValue="#ffffff" style={s(palPicker(palSel, 'ink'))} />
               <div id="inkRecentSwatches" style={s('display: none;')}></div>
             </div>
           </Row>
           <Row label="кегль">
             <span style={s('display: flex; align-items: center; gap: 8px;')}>
-              <select value={sizeSel}
+              <select value={sizeSel} aria-label="Размер текста freestyle"
                 onChange={(e) => { var v = parseFloat(e.target.value); if (v) c.setCfg('fsSize', v); }}
-                style={s('appearance: none; width: 88px; border: none; border-radius: var(--radius); padding: 5px 20px 5px 7px; font-family: inherit; font-size: 9px; cursor: pointer; background-color: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);')}>
+                style={s('appearance: none; width: 88px; border: none; border-radius: var(--radius); padding: 2px 20px 2px 7px; font-family: inherit; font-size: 9px; cursor: pointer; background-color: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);')}>
                 <option value="0">свой</option>
                 {SIZES.map(function (z) { return <option key={z} value={String(z)}>{z + 'px'}</option>; })}
               </select>
@@ -446,9 +460,9 @@ export function renderFsSetPanel(c) {
                   срабатывал бы на каждой цифре и «150» набрать было бы нельзя.
                   key = выбор из списка: смена кегля списком перемонтирует поле,
                   свой кегль (в списке его нет) печатается спокойно */}
-              <input key={sizeSel} type="number" min="12" max="400" step="1" defaultValue={String(fsSize)}
+              <input key={sizeSel} type="number" aria-label="Размер текста freestyle, своё значение" min="12" max="400" step="1" defaultValue={String(fsSize)}
                 onChange={(e) => { var v = parseFloat(e.target.value); if (!isNaN(v) && v >= 12 && v <= 400) c.setCfg('fsSize', v); }}
-                style={s('width: 50px; appearance: none; border: none; border-radius: var(--radius); padding: 5px 6px; font-family: inherit; font-size: 9px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none; text-align: right;')} />
+                style={s('width: 50px; appearance: none; border: none; border-radius: var(--radius); padding: 2px 6px; font-family: inherit; font-size: 9px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none; text-align: right;')} />
             </span>
           </Row>
           <Row label="положение" sub={posY + ' · ' + posX}>
@@ -475,19 +489,19 @@ export function renderFsSetPanel(c) {
           <Row label="цвет свечения" sub={st.glowColor ? 'повторный клик — свой цвет' : 'наследует цвет строки'}>
             <span style={s('position: relative; display: flex; align-items: center; gap: 8px;')}>
               <button type="button" onClick={() => c.setState({ glowColor: '' })}
-                style={s('appearance: none; border: none; border-radius: var(--radius); padding: 4px 7px; font-family: inherit; font-size: 9px; cursor: pointer; ' + (st.glowColor ? 'background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);' : 'background: var(--ink); color: var(--canvas);'))}>авто</button>
+                style={s('appearance: none; border: none; border-radius: var(--radius); padding: 2px 7px; font-family: inherit; font-size: 9px; cursor: pointer; ' + (st.glowColor ? 'background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--muted);' : 'background: var(--ink); color: var(--canvas);'))}>авто</button>
               <Swatches items={swGlow} />
               {/* id — тот, который ищут palInput/onCardInput (в макете он разъехался) */}
-              <input type="color" id="glowColorPicker" defaultValue="#ffffff" style={s(palPicker(palSel, 'glow', 1))} />
+              <input type="color" id="glowColorPicker" aria-label="Свой цвет свечения" defaultValue="#ffffff" style={s(palPicker(palSel, 'glow', 1))} />
             </span>
           </Row>
           <button type="button" id="textDistortAberrationBtn" aria-hidden="true" tabIndex={-1} style={s('display: none;')}></button>
         </div>
 
         <div style={s(CAP2)}>гарнитура</div>
-        <div style={s('display: flex; flex-direction: column; gap: 8px;')}>
-          <div style={s('display: flex; align-items: center; gap: 8px;')}>
-            <input type="text" value={st.fontQ || ''} onChange={(e) => c.setState({ fontQ: e.target.value })} placeholder="поиск" spellCheck="false" style={s(SEARCH)} />
+          <div style={s('display: flex; flex-direction: column; gap: 5px;')}>
+            <div style={s('display: flex; align-items: center; gap: 6px;')}>
+            <input type="text" value={st.fontQ || ''} onChange={(e) => c.setState({ fontQ: e.target.value })} placeholder="поиск" aria-label="Поиск гарнитуры" spellCheck="false" style={s(SEARCH)} />
             {/* свой шрифт: FontFace вместо сети (офлайн-инвариант) — грузит
                 loadFontFile из methods.fs.js; в дизайне обе точки цеплял движок */}
             <button type="button" id="btnCustomFont" onClick={() => { var el = document.getElementById('fontFile'); if (el) el.click(); }}
@@ -534,12 +548,12 @@ export function renderFsSetPanel(c) {
           <Row label="жёсткость"><MyRange min="50" max="400" step="10" value={String(fsv('ghard'))} onIn={mySl('ghard')} show={fsv('ghard') + '%'} /></Row>
           <Row label="блюр"><MyRange min="0" max="20" step="0.5" value={String(fsv('gblur'))} onIn={mySl('gblur')} show={fsv('gblur') === 0 ? 'нет' : fsv('gblur') + 'px'} /></Row>
           <Row label="кадры">
-            <select value={String(st.grainFps == null ? 24 : st.grainFps)} onChange={(e) => c.setState({ grainFps: parseInt(e.target.value, 10) || 0 })} style={s(SEL)}>
+            <select aria-label="Частота кадров зерна" value={String(st.grainFps == null ? 24 : st.grainFps)} onChange={(e) => c.setState({ grainFps: parseInt(e.target.value, 10) || 0 })} style={s(SEL)}>
               {grainFps.map(function (v) { return <option key={v} value={String(v)}>{v ? v + ' к/с' : 'без предела'}</option>; })}
             </select>
           </Row>
           <Row label="наложение">
-            <select value={st.grainBlend || 'overlay'} onChange={(e) => c.setState({ grainBlend: e.target.value }, function () { call(c, 'pushScene'); })} style={s(SEL)}>
+            <select aria-label="Режим наложения зерна" value={st.grainBlend || 'overlay'} onChange={(e) => c.setState({ grainBlend: e.target.value }, function () { call(c, 'pushScene'); })} style={s(SEL)}>
               {grainBlends.map(function (b) { return <option key={b} value={b}>{b}</option>; })}
             </select>
           </Row>
@@ -634,7 +648,7 @@ export function renderFsLinePanel(c) {
   var шагПодписи = srcChunk === 'слова' ? 'по одному слову' : 'целыми строками';
 
   return (
-    <div data-pa="down" data-po={st.closing === 'fsline' ? '1' : null} onInput={(e) => call(c, 'onCardInput', e)} style={s(fsPanel(st.fsLineOpen))}>
+    <div data-panel="popover" data-pa="down" data-po={st.closing === 'fsline' ? '1' : null} onInput={(e) => call(c, 'onCardInput', e)} style={s(fsPanel(st.fsLineOpen) + ' max-width: calc(100vw - 24px);')}>
       {/* НАДГРОБИЕ 2026-08-30: ПОЛЕ «ТЕМЫ СЦЕНЫ». Заведено Раундом 57, чтобы
           у фристайла была своя тема, а не ключ последней генерации в
           редакторе. Тема вырезана из проекта целиком 2026-08-29 (решение
@@ -644,14 +658,14 @@ export function renderFsLinePanel(c) {
           бага в этом проекте; поймано разбором правок, а не жалобой. */}
       <button onClick={() => call(c, 'fsВзятьИзРедактора')}
         style={s('appearance: none; border: none; background: none; color: var(--muted-soft);'
-          + ' font-family: inherit; font-size: 9px; padding: 2px 0; margin-bottom: 12px; cursor: pointer;')}>
+          + ' font-family: inherit; font-size: 9px; padding: 2px 0; margin-bottom: 6px; cursor: pointer;')}>
         взять настройки строфы из редактора</button>
 
       <div style={s(CAP)}>строка · режим</div>
-      <div style={s('display: flex; gap: 4px; margin-bottom: 7px;')}>
+      <div style={s('display: flex; gap: 3px; margin-bottom: 4px;')}>
         {algoModes.map(function (g) { return <button key={g.name} onClick={g.onPick} style={s(g.style)}>{g.name}</button>; })}
       </div>
-      <p style={s('margin: 0 0 15px; font-size: 9px; line-height: 1.55; color: var(--muted-soft); text-wrap: pretty;')}>{genNote}</p>
+      <p style={s('margin: 0 0 6px; font-size: 9px; line-height: 1.5; color: var(--muted-soft); text-wrap: pretty;')}>{genNote}</p>
 
       <div style={s(algoStyle)}>
         <div style={s(CAP)}>параметры</div>
@@ -696,31 +710,35 @@ export function renderFsLinePanel(c) {
         {/* Полосы редкости сцены — свои, как params/spec/тема. Рисовалка одна
             на оба режима (render.gen.jsx): два экземпляра ста ячеек разошлись
             бы в первый же ремонт. */}
-        {полосаРедкости(c, 'слова', 'редкость слов', 'какие слова',
+        {полосаРедкости(c, 'слова', 'редкость слов',
+                        безКолонки(st, 'редкость_слов', 'редкости слов') || 'какие слова',
                         ((st.fsПолосы || st.полосы || {}).слова),
                         function (ось, строка) { call(c, 'fsSetПолосы', ось, строка); })}
-        {полосаРедкости(c, 'пара', 'редкость сочетаний', 'как они стоят рядом',
+        {полосаРедкости(c, 'пара', 'редкость сочетаний',
+                        безКолонки(st, 'редкость_сочетаний', 'редкости сочетаний') || 'как они стоят рядом',
                         ((st.fsПолосы || st.полосы || {}).пара),
                         function (ось, строка) { call(c, 'fsSetПолосы', ось, строка); })}
         {полосаРедкости(c, 'плотность', 'плотность звука',
-                        безЗвукописи(st) || 'один согласный на всю строку',
+                        безКолонки(st, 'плотность_звука', 'плотности звука')
+                          || 'один согласный на всю строку',
                         ((st.fsПолосы || st.полосы || {}).плотность),
                         function (ось, строка) { call(c, 'fsSetПолосы', ось, строка); })}
         {stanzaNote
-          ? <p style={s('margin: 15px 0 0; font-size: 9px; line-height: 1.6; color: var(--muted-soft); white-space: pre-line;')}>{stanzaNote}</p>
+          ? <p style={s('margin: 6px 0 0; font-size: 9px; line-height: 1.5; color: var(--muted-soft); white-space: pre-line;')}>{stanzaNote}</p>
           : null}
       </div>
 
-      <div style={s('border-top: 1px solid var(--border-subtle); margin: 15px 0 13px;')}></div>
+      <div style={s('border-top: 1px solid var(--border-subtle); margin: 7px 0 6px;')}></div>
       <div style={s(CAP)}>источник</div>
-      <div style={s('display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;')}>
-        <div style={s('display: flex; gap: 4px;')}>
+      <div style={s('display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px;')}>
+        <div style={s('display: flex; gap: 3px;')}>
           {srcModes.map(function (m) { return <button key={m.name} type="button" onClick={m.onPick} style={s(m.style)}>{m.name}</button>; })}
         </div>
         <div style={s(srcMode === 'свой текст' ? '' : 'display: none;')}>
           <textarea value={st.srcText || ''} onChange={(e) => { c._srcPos = 0; c.setState({ srcText: e.target.value }); }}
+            aria-label="Свой текст для freestyle"
             placeholder="вставь текст — строки пойдут по очереди" spellCheck="false"
-            style={s('width: 100%; min-height: 68px; resize: vertical; appearance: none; border: none; border-radius: var(--radius); padding: 7px 8px; font-family: inherit; font-size: 10.5px; line-height: 1.5; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none;')}></textarea>
+            style={s('width: 100%; min-height: 56px; resize: vertical; appearance: none; border: none; border-radius: var(--radius); padding: 5px 7px; font-family: inherit; font-size: 10.5px; line-height: 1.5; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none;')}></textarea>
           <div style={s('display: flex; align-items: center; gap: 8px; margin-top: 7px;')}>
             <button type="button" onClick={() => { if (c._srcFile) c._srcFile.click(); }} className={hov(HOVINK)} style={s(MINI)}>＋ файл</button>
             <input type="file" ref={(el) => { c._srcFile = el; }} accept=".txt,.md,.rtf" style={s('display: none;')}
@@ -736,7 +754,7 @@ export function renderFsLinePanel(c) {
           {/* «Шаг» переехал в «подачу» (Раунд 36) — он общий для генератора и
               своего текста. Здесь остаётся только нарезка своего текста на
               куски: сколько слов в одном фрагменте, если резать не по строкам. */}
-          <div style={s('display: grid; grid-template-columns: 1fr 1fr; gap: 13px 18px; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 11px 12px; margin-top: 11px;')}>
+          <div style={s('display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 6px 8px; margin-top: 6px;')}>
             <Row label="слов в куске">
               <MyRange min="1" max="20" step="1" value={String(fsv('srcWords'))} onIn={mySl('srcWords')} show={String(fsv('srcWords'))}
                 wrap={srcChunk === 'слова' ? '' : ' opacity: 0.32; pointer-events: none;'} />
@@ -816,7 +834,7 @@ function renderRecBtn(c, st) {
   var css = fsBtn(on, true) + (on ? ' animation: recPulse 1.6s infinite;' : '')
     + (can ? '' : ' opacity: 0.45; cursor: default;');
   return (
-    <button type="button" id="btnRecord" disabled={!can} onClick={() => call(c, 'recToggle')} title={title}
+    <button type="button" id="btnRecord" aria-label={title} disabled={!can} onClick={() => call(c, 'recToggle')} title={title}
       className={can ? hov(HOVINK) : undefined} style={s(css)}>
       <svg viewBox="0 0 24 24" width="13" height="13"><circle cx="12" cy="12" r="6.5" fill="currentColor"></circle></svg>
     </button>
@@ -836,7 +854,7 @@ export function renderFsBar(c) {
     var on = (st.aspect || 'полный') === a;
     return {
       name: a,
-      style: 'appearance: none; border: none; background: ' + (on ? 'color-mix(in srgb, var(--ink) 10%, transparent)' : 'none') + '; border-radius: var(--radius); padding: 5px 8px; font-family: inherit; font-size: 10.5px; font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; color: ' + (on ? 'var(--ink)' : 'var(--muted)') + ';',
+      style: 'appearance: none; border: none; background: ' + (on ? 'color-mix(in srgb, var(--ink) 10%, transparent)' : 'none') + '; border-radius: var(--radius); padding: 3px 8px; font-family: inherit; font-size: 10.5px; font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; color: ' + (on ? 'var(--ink)' : 'var(--muted)') + ';',
       onPick: function () { c.closePop({ aspect: a === 'полный' ? '' : a }); setTimeout(function () { call(c, 'fitStage'); }, 0); }
     };
   });
@@ -858,10 +876,10 @@ export function renderFsBar(c) {
         {/* микрофон и трек — реальный аудио-граф (methods.fsglue.js → freestyle/
             audio.js). В дизайне обе кнопки лишь переключали флаг состояния:
             звуком заведовал внешний скрипт движка, которого больше нет */}
-        <button type="button" id="btnMic" onClick={() => call(c, 'fsToggleMic')} title="Микрофон" className={hov(HOVINK)} style={s(fsBtn(st.micOn))}>
+        <button type="button" id="btnMic" aria-label="Микрофон" onClick={() => call(c, 'fsToggleMic')} title="Микрофон" className={hov(HOVINK)} style={s(fsBtn(st.micOn))}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><line x1="12" y1="18" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line></svg>
         </button>
-        <button type="button" id="btnTrack" onClick={() => call(c, 'fsToggleTrack')} title={st.trackOn ? 'Снять трек' : 'Трек из файла'} className={hov(HOVINK)} style={s(fsBtn(st.trackOn))}>
+        <button type="button" id="btnTrack" aria-label={st.trackOn ? 'Снять трек' : 'Трек из файла'} onClick={() => call(c, 'fsToggleTrack')} title={st.trackOn ? 'Снять трек' : 'Трек из файла'} className={hov(HOVINK)} style={s(fsBtn(st.trackOn))}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l11-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="17" cy="16" r="3"></circle></svg>
         </button>
         {/* Синтетический шум — подпорка, которая ВОДИТ картинку, пока нет
@@ -869,7 +887,7 @@ export function renderFsBar(c) {
             снял микрофон и трек — шум вернулся сам, а иногда его не хочется.
             Подсвечена, только когда шум реально водит (st.synthOn), а не когда
             «разрешён»: иначе она горела бы при живом микрофоне и врала. */}
-        <button type="button" id="btnSynth" onClick={() => call(c, 'fsToggleSynth')}
+        <button type="button" id="btnSynth" aria-label="Синтетический шум" onClick={() => call(c, 'fsToggleSynth')}
           title={st.synthWanted === false ? 'Синтетический шум выключен'
             : (st.synthOn ? 'Синтетический шум водит картинку' : 'Синтетический шум уступил живому звуку')}
           className={hov(HOVINK)} style={s(fsBtn(!!st.synthOn))}>
@@ -878,14 +896,14 @@ export function renderFsBar(c) {
         {/* ПЕРЕЗАПУСК ДВИЖКА (Раунд 56). Требование: перезапускать визуализатор, не перезапуская приложение..
             Контекст WebGL2 браузер вправе отобрать в любой момент — сцена
             чернеет молча, и до этой кнопки лечилось только перезапуском окна. */}
-        <button type="button" id="btnBcRestart" onClick={() => call(c, 'fsRestartEngine')}
+        <button type="button" id="btnBcRestart" aria-label="Перезапустить движок" onClick={() => call(c, 'fsRestartEngine')}
           title="Перезапустить движок Butterchurn — если сцена почернела или замерла"
           className={hov(HOVINK)} style={s(fsBtn(false))}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"></path><path d="M21 3v6h-6"></path></svg>
         </button>
         {/* ПАПКА ЗАПИСЕЙ — ПОСТОЯННО (Раунд 56). Была только в итоге
             законченной записи; запрос: сделать её постоянной. Открывает корень, а не последнюю сессию. */}
-        <button type="button" id="btnRecDir"
+        <button type="button" id="btnRecDir" aria-label="Открыть папку записей"
           onClick={() => { fetch('/api/rec/open-dir', { method: 'POST' }).catch(() => {}); }}
           title="Открыть папку записей" className={hov(HOVINK)} style={s(fsBtn(false))}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
@@ -895,12 +913,12 @@ export function renderFsBar(c) {
 
       {/* ---- строка: авто, дальше, настройки ---- */}
       <div data-pop="1" style={s('display: flex; align-items: center; gap: 10px;')}>
-        <button type="button" id="btnAuto" onClick={() => call(c, 'fsTog', 'autoOn')} title="Автосмена строки" className={hov(HOVINK)} style={s(fsBtn(st.autoOn))}>
+        <button type="button" id="btnAuto" aria-label="Автосмена строки" onClick={() => call(c, 'fsTog', 'autoOn')} title="Автосмена строки" className={hov(HOVINK)} style={s(fsBtn(st.autoOn))}>
           {st.autoOn
             ? <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>
             : <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><polygon points="7,5 20,12 7,19"></polygon></svg>}
         </button>
-        <button type="button" id="btnNext" onClick={() => call(c, 'fsAdvance')} title="Следующая строка" className={hov(HOVINK)} style={s(fsBtn(false))}>
+        <button type="button" id="btnNext" aria-label="Следующая строка" onClick={() => call(c, 'fsAdvance')} title="Следующая строка" className={hov(HOVINK)} style={s(fsBtn(false))}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7.5a8 8 0 1 1-1 4"></path><polyline points="4 3.5 4 8 8.5 8"></polyline></svg>
         </button>
         <button onClick={() => (st.fsLineOpen ? c.closePop() : c.openPop({ fsLineOpen: true }))} aria-label="Настройки строки" title="Настройки строки" className={hov(HOVINK)} style={s(hudBtn(st.fsLineOpen))}>
@@ -923,8 +941,8 @@ export function renderFsBar(c) {
           className={hov(HOVINK)} style={s(hudBtn(st.openPill === 'prof' || !!profNow))}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6.5h6l1.6 2H20v9H4z"></path></svg>
         </button>
-        <div data-pa="down" data-po={pO('prof')} style={s(menuBox(st.openPill === 'prof', 246, 'block'))}>
-          <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px;')}>
+        <div data-panel="popover" data-pa="down" data-po={pO('prof')} style={s(menuBox(st.openPill === 'prof', 246, 'block') + ' max-width: calc(100vw - 24px);')}>
+          <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px;')}>
             <span style={s('font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft);')}>профили сцены</span>
             <button onClick={() => c.saveFsProfile()} className={hov(HOVINK)} style={s('appearance: none; background: none; border: none; padding: 0; font-family: inherit; font-size: 9px; color: var(--muted); cursor: pointer; white-space: nowrap;')}>＋ сохранить</button>
           </div>
@@ -936,16 +954,16 @@ export function renderFsBar(c) {
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="6" width="16" height="12" rx="1.6"></rect><line x1="9" y1="6" x2="9" y2="18"></line></svg>
         </button>
         <span style={s('font-size: 9px; color: var(--muted-soft); font-variant-numeric: tabular-nums;')}>{st.aspect || ''}</span>
-        <div data-pa="down" data-po={pO('aspect')} style={s(menuBox(st.openPill === 'aspect', 118, 'flex'))}>
+        <div data-panel="popover" data-pa="down" data-po={pO('aspect')} style={s(menuBox(st.openPill === 'aspect', 118, 'flex') + ' max-width: calc(100vw - 24px);')}>
           {aspectOpts.map(function (a) { return <button key={a.name} type="button" onClick={a.onPick} style={s(a.style)}>{a.name}</button>; })}
           {/* поле неуправляемое по той же причине, что кегль: пока «21:9» не
               дописан, обработчик молчит, а управляемому React вернул бы старое
               значение и набрать было бы нечего. key — выбор из списка сверху */}
-          <input key={st.aspect || ''} type="text" defaultValue={ASP[st.aspect] ? '' : (st.aspect || '')} onChange={onAspectCustom} placeholder="свой 21:9" spellCheck="false"
-            style={s('width: 100%; margin-top: 6px; appearance: none; border: none; border-radius: var(--radius); padding: 5px 7px; font-family: inherit; font-size: 9px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none;')} />
+          <input key={st.aspect || ''} type="text" aria-label="Свой формат кадра" defaultValue={ASP[st.aspect] ? '' : (st.aspect || '')} onChange={onAspectCustom} placeholder="свой 21:9" spellCheck="false"
+            style={s('width: 100%; margin-top: 4px; appearance: none; border: none; border-radius: var(--radius); padding: 2px 7px; font-family: inherit; font-size: 9px; background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); outline: none;')} />
           <button type="button" onClick={() => c.setState({ fitFrame: !st.fitFrame }, function () { call(c, 'fitLine'); })}
-            style={s('appearance: none; display: flex; align-items: center; gap: 6px; width: 100%; border: none; background: none; border-radius: var(--radius); padding: 5px 8px; font-family: inherit; font-size: 10.5px; text-align: left; cursor: pointer; color: ' + (st.fitFrame ? 'var(--ink)' : 'var(--muted)') + ';')}>
-            <span style={s('display: inline-flex; align-items: center; justify-content: center; width: 11px; height: 11px; flex-shrink: 0; border-radius: var(--radius); font-size: 9px; line-height: 1; ' + (st.fitFrame ? 'background: var(--ink); color: var(--canvas);' : 'box-shadow: inset 0 0 0 1px var(--border-soft);'))}>{st.fitFrame ? '✓' : ''}</span>
+            style={s('appearance: none; display: flex; align-items: center; gap: 6px; width: 100%; border: none; background: none; border-radius: var(--radius); padding: 3px 8px; font-family: inherit; font-size: 10.5px; text-align: left; cursor: pointer; color: ' + (st.fitFrame ? 'var(--ink)' : 'var(--muted)') + ';')}>
+            <span className="nl-check-mark" data-on={st.fitFrame ? '1' : '0'} aria-hidden="true"></span>
             вписывать текст
           </button>
         </div>

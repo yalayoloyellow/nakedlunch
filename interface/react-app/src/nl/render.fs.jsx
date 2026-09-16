@@ -255,6 +255,25 @@ export function renderFsStage(c) {
                 + ' white-space: pre-line; color: rgba(255,255,255,0.42);'
                 + ' pointer-events: none; user-select: none;')}>{c.fsЖдём()}</div>
             ) : null}
+            {isFs && st.fsEngineState === 'loading' && !c.fsЖдём() ? (
+              <div role="status" aria-live="polite" style={s(
+                'position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);'
+                + ' font: 11px/1.8 ui-monospace, SFMono-Regular, Menlo, monospace;'
+                + ' letter-spacing: 0.12em; text-transform: uppercase; text-align: center;'
+                + ' color: rgba(255,255,255,0.52); pointer-events: none; user-select: none;')}>запускаю визуализатор…</div>
+            ) : null}
+            {isFs && st.fsEngineState === 'error' ? (
+              <div role="alert" style={s(
+                'position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);'
+                + ' width: min(420px, calc(100% - 32px)); box-sizing: border-box; padding: 14px 16px;'
+                + ' border-left: 2px solid var(--danger, #e27b7b); background: rgba(20,20,20,0.9);'
+                + ' color: var(--muted-hard, #cfcfcf); font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;') }>
+                <div style={s('color: var(--danger, #e27b7b); margin-bottom: 5px;')}>визуализатор не запустился</div>
+                <div>{st.fsEngineError || 'причина не указана'}</div>
+                <button type="button" onClick={() => c.fsRestartEngine && c.fsRestartEngine()}
+                  style={s('margin-top: 10px; appearance: none; border: 1px solid var(--border-soft, #3d3d3d); border-radius: 3px; padding: 5px 8px; background: transparent; color: var(--ink, #ededed); font: inherit; cursor: pointer;')}>повторить запуск</button>
+              </div>
+            ) : null}
           </div>
 
           <div className="fs-postfx-layer" style={s(fsPostfxStyle)}>

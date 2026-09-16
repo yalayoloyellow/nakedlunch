@@ -15,6 +15,7 @@
 
 import { Fragment } from 'react';
 import { s, hov } from './style.js';
+import { pickStyle } from './methods.panels.js';
 import { РЕЖИМ_КЛАССИКА, ВНУТР_РИФМА, ПЕРЕКЛИЧКА, ПРЕСЕТЫ, подпись, ПОЗИЦИИ_РИФМЫ,
          ЯРУСЫ_РИФМЫ, имяМаскиРифмы, КЛАУЗУЛЫ_МАСКА } from './methods.shelves.js';
 
@@ -26,13 +27,13 @@ import { РЕЖИМ_КЛАССИКА, ВНУТР_РИФМА, ПЕРЕКЛИЧК�
 // молча переделать и его панель.
 
 // ---- общие рецепты стилей --------------------------------------------------
-const ЗАГОЛОВОК = 'font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 0 0 6px 2px;';
-const РАЗДЕЛ = 'border-top: 1px solid var(--border-subtle); margin-top: 13px; padding-top: 11px;';
-const ПОЛЕ = 'appearance: none; min-width: 0; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 3px 2px; font-family: inherit; font-size: 10.5px; color: var(--ink); cursor: pointer;';
-const ТЕКСТ = 'appearance: none; flex: 1; min-width: 0; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 3px 2px; font-family: inherit; font-size: 10.5px; color: var(--ink);';
+const ЗАГОЛОВОК = 'font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted-soft); margin: 0 0 4px 2px;';
+const РАЗДЕЛ = 'border-top: 1px solid var(--border-subtle); margin-top: 6px; padding-top: 6px;';
+const ПОЛЕ = 'appearance: none; min-width: 0; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 2px; font-family: inherit; font-size: 10.5px; color: var(--ink); cursor: pointer;';
+const ТЕКСТ = 'appearance: none; flex: 1; min-width: 0; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 2px; font-family: inherit; font-size: 10.5px; color: var(--ink);';
 const СЛОВО = 'appearance: none; background: none; border: none; padding: 0; font-size: 10.5px; color: var(--muted); cursor: pointer; white-space: nowrap;';
 const ПОЯС = 'font-size: 9px; color: var(--muted-soft);';
-const ГЛАВНАЯ = 'appearance: none; border: none; border-radius: var(--radius); padding: 5px 10px; font-family: inherit; font-size: 9px; cursor: pointer; background: var(--ink); color: var(--canvas);';
+const ГЛАВНАЯ = 'appearance: none; border: none; border-radius: var(--radius); padding: 3px 9px; font-family: inherit; font-size: 9px; cursor: pointer; background: var(--ink); color: var(--canvas);';
 
 // «2 строки», «5 строк», «21 строка» — иначе панель сама себе врёт грамматикой.
 // Счётчики звеньев и текстов убраны 2026-08-18 вместе с цепью и серией: считать
@@ -46,9 +47,9 @@ function склонение(n, одно, два, много) {
 }
 function строки(n) { return склонение(n, 'строка', 'строки', 'строк'); }
 
-function селект(value, onChange, опции, стиль) {
+function селект(value, onChange, опции, стиль, имя) {
   return (
-    <select value={value} onChange={onChange} style={s(ПОЛЕ + (стиль || ''))}>
+    <select value={value} onChange={onChange} aria-label={имя || undefined} style={s(ПОЛЕ + (стиль || ''))}>
       {опции.map(function (o, i) {
         return (<option key={i} value={o.v}>{o.n}</option>);
       })}
@@ -69,8 +70,8 @@ function св_кнопка(c, своя, onDelete) {
 // отдельное знание, и держать его внутри содержимого меню незачем.
 function попап(c, ключ, ширина, дети) {
   return (
-    <div data-pa="down" data-po={c.state.closing === ключ ? '1' : null}
-      style={s('position: absolute; top: calc(100% + 10px); right: 0; z-index: 80; width: ' + ширина + 'px; max-height: 78vh; overflow-y: auto; background: var(--menu-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 13px 15px; font-size: 10.5px; color: var(--muted);')}>
+    <div data-panel="popover" data-pa="down" data-po={c.state.closing === ключ ? '1' : null}
+      style={s('position: absolute; top: calc(100% + 6px); right: 0; z-index: 80; width: ' + ширина + 'px; max-width: calc(100vw - 24px); max-height: min(78vh, 760px); overflow-y: auto; background: var(--menu-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 7px 9px; font-size: 10.5px; color: var(--muted);')}>
       {дети}
     </div>
   );
@@ -89,49 +90,54 @@ function renderFormShelf(c) {
   var свои = {};
   (forms.custom || []).forEach(function (f) { свои[f.name] = 1; });
   var схема = spec.map(function (l) { return l.letter; }).join('');
-  var lo = spec.reduce(function (m, l) { return Math.min(m, l.min_syl); }, 99);
-  var hi = spec.reduce(function (m, l) { return Math.max(m, l.max_syl); }, 0);
 
   return (
     <div>
-      <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px;')}>
+      <div style={s('display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 3px;')}>
         {селект(st.stanzaProfile || '', function (e) { c.pickStanzaForm(e.target.value); },
                 [{ v: '', n: 'своя форма' }].concat(все.map(function (f) { return { v: f.name, n: f.name }; })),
-                ' flex: 1;')}
+                ' flex: 1;', 'Форма строфы')}
         {св_кнопка(c, свои[st.stanzaProfile], function () { c.deleteStanzaProfile(st.stanzaProfile); })}
       </div>
-      <div style={s(ПОЯС + ' margin-bottom: 7px; font-variant-numeric: tabular-nums;')}>
-        {схема} · {строки(spec.length)} · {lo}–{hi} слог</div>
+      <div data-stanza-line-head="1">
+        <span>№</span><span>риф.</span><span>слоги</span>
+        <span style={s('grid-column: 4 / 6; text-align: right; font-variant-numeric: tabular-nums;')}>{схема} · {строки(spec.length)}</span>
+      </div>
 
       {spec.map(function (l, i) {
         return (
-          <div key={i} data-row="1" style={s('display: flex; align-items: center; gap: 7px; padding: 3px 2px; min-height: 24px;')}>
-            <span style={s('font-size: 9px; color: var(--muted-soft); font-variant-numeric: tabular-nums; width: 15px;')}>{String(i + 1).padStart(2, '0')}</span>
+          <div key={i} data-row="1" data-stanza-line="1">
+            <span style={s('font-size: 9px; color: var(--muted-soft); font-variant-numeric: tabular-nums;')}>{String(i + 1).padStart(2, '0')}</span>
             <button onClick={function (e) { c.cycleLetter(i, e.altKey); }}
               title="клик — следующая буква рифмовки, ⌥-клик — предыдущая"
+              aria-label={'Строка ' + (i + 1) + ': буква рифмовки ' + l.letter}
               style={s('appearance: none; border: none; border-radius: var(--radius); width: 21px; height: 19px; font-family: inherit; font-size: 10.5px; cursor: pointer; background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink);')}
               className={hov('background: color-mix(in srgb, var(--ink) 16%, transparent)')}>{l.letter}</button>
-            <span style={s(ПОЯС)}>слоги</span>
-            <input type="number" min="1" max="30" value={l.min_syl}
-              onChange={function (e) { c.setLineSyl(i, 'min_syl', e.target.value); }}
-              style={s('width: 32px; appearance: textfield; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 1px 2px; font-family: inherit; font-size: 10.5px; color: var(--ink); text-align: center; font-variant-numeric: tabular-nums;')} />
-            <span style={s('color: var(--muted-soft);')}>–</span>
-            <input type="number" min="1" max="30" value={l.max_syl}
-              onChange={function (e) { c.setLineSyl(i, 'max_syl', e.target.value); }}
-              style={s('width: 32px; appearance: textfield; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 1px 2px; font-family: inherit; font-size: 10.5px; color: var(--ink); text-align: center; font-variant-numeric: tabular-nums;')} />
-            <span style={s('flex: 1;')}></span>
+            <span data-stanza-syllables="1">
+              <input type="number" min="1" max="30" value={l.min_syl}
+                aria-label={'Строка ' + (i + 1) + ': минимум слогов'}
+                onChange={function (e) { c.setLineSyl(i, 'min_syl', e.target.value); }}
+                style={s('width: 32px; appearance: textfield; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 1px 2px; font-family: inherit; font-size: 10.5px; color: var(--ink); text-align: center; font-variant-numeric: tabular-nums;')} />
+              <span style={s('color: var(--muted-soft); text-align: center;')}>–</span>
+              <input type="number" min="1" max="30" value={l.max_syl}
+                aria-label={'Строка ' + (i + 1) + ': максимум слогов'}
+                onChange={function (e) { c.setLineSyl(i, 'max_syl', e.target.value); }}
+                style={s('width: 32px; appearance: textfield; background: none; border: none; border-bottom: 1px solid var(--border-subtle); padding: 1px 2px; font-family: inherit; font-size: 10.5px; color: var(--ink); text-align: center; font-variant-numeric: tabular-nums;')} />
+            </span>
             <button onClick={function () { c.dropStanzaLine(i); }} title="убрать строку"
-              style={s('appearance: none; background: none; border: none; padding: 2px 4px; font-size: 10.5px; color: var(--muted-soft); cursor: pointer;')}
+              aria-label={'Строка ' + (i + 1) + ': убрать'}
+              style={s('grid-column: 5; appearance: none; background: none; border: none; padding: 2px 4px; font-size: 10.5px; color: var(--muted-soft); cursor: pointer;')}
               className={hov('color: var(--ink)')}>✕</button>
           </div>
         );
       })}
 
-      <div style={s('display: flex; align-items: center; gap: 10px; padding: 6px 2px 0;')}>
+      <div style={s('display: flex; align-items: center; gap: 6px; padding: 3px 2px 0;')}>
         <button onClick={function () { c.addStanzaLine(); }} style={s(СЛОВО)}
           className={hov('color: var(--ink)')}>+ строка</button>
         <span style={s('flex: 1;')}></span>
         <input type="text" value={st.profNameDraft || ''} placeholder={st.stanzaProfile || 'имя формы'} spellCheck={false}
+          aria-label="Имя формы строфы"
           onChange={function (e) { c.setState({ profNameDraft: e.target.value }); }}
           onKeyDown={function (e) { if (e.key === 'Enter') { e.preventDefault(); c.saveStanzaProfile(); } }}
           style={s(ТЕКСТ + ' flex: 0 1 120px;')} />
@@ -199,9 +205,64 @@ function запас(ф) {
           слогов ЭТОЙ формы, и разойтись они могут на два порядка. Без второго
           числа строка «на целую строфу не хватит» под числом 190 выглядит
           враньём одного из двух. */}
-      {'в вилку слогов попадают ' + Number(ф['под_форму'] || 0).toLocaleString('ru-RU') + ': '}
+      {'верхняя оценка: в вилку слогов попадают ' + Number(ф['под_форму'] || 0).toLocaleString('ru-RU') + ': '}
       {н === 0 ? 'на целую строфу не хватит' : ('хватит не больше чем на ' + н + ' ' + слово)}
       {совет}
+    </div>
+  );
+}
+
+// ФОРМА — ПОСЛЕДНЯЯ ВОРОНКА (2026-09-12). Число в `запас` выше — только
+// верхняя оценка по слогам: она ещё не знает связей между строками. Здесь
+// показывается то, что действительно собрал планировщик, включая невозможную
+// цель и недостроенный остаток. Две строки рядом намеренно разные: «есть в
+// пуле» и «можно сложить в готовые строфы» — не одно и то же.
+function сборка_формы(ст) {
+  if (!ст || ст['заказано_строф'] == null) return null;
+  var ч = function (n) { return Number(n || 0).toLocaleString('ru-RU'); };
+  var заказано = Number(ст['заказано_строф'] || 0);
+  var собрано = Number(ст['собрано_строф'] || 0);
+  var строк = Number(ст['собрано_строк'] || 0);
+  var цельСтрок = Number(ст['к_сборке'] || 0);
+  var исходныйЗапрос = Number(ст['заказано_строк'] || цельСтрок);
+  var сыраяВерхняяГраница = ст['верхняя_оценка_строф'];
+  var естьВерхняяГраница = сыраяВерхняяГраница != null;
+  var верхняяГраница = Number(сыраяВерхняяГраница || 0);
+  var ограничен = Number(ст['поиск_ограничен'] || 0) > 0;
+  var недоступные = Array.isArray(ст['недоступные_ворота'])
+    ? ст['недоступные_ворота'] : [];
+  // «Максимум доказан» имеет смысл только после полного поиска. Не принимаем
+  // одиночное поле от старого/частичного ответа за доказательство: иначе
+  // интерфейс уверенно объявит недостижимой цель, которую просто не успели
+  // проверить.
+  var поискЗавершён = ст['поиск_завершён'] === true;
+  var максимумДоказан = поискЗавершён && ст['максимум_доказан'] === true;
+  var цвет = недоступные.length ? 'var(--muted-soft)'
+    : (собрано === заказано ? 'var(--muted-soft)'
+      : (собрано ? 'var(--ink)' : 'var(--danger, var(--ink))'));
+  var подпись = недоступные.length
+    ? 'сборка не проверена: нет ' + недоступные.join(', ')
+    : (собрано === заказано
+      ? 'цель собрана'
+      : (максимумДоказан
+        ? 'запрошенное количество недостижимо'
+        : (ограничен
+          ? (собрано ? 'сборка остановлена лимитом поиска' : 'сборка не подтверждена: лимит поиска')
+          : (собрано === 0
+            ? 'сборка невозможна при текущих воротах'
+            : 'часть сочетаний не завершилась'))));
+  return (
+    <div style={s('display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 7px; margin-top: 4px; padding: 4px 6px; border-left: 2px solid ' + цвет + '; background: color-mix(in srgb, var(--ink) 4%, transparent); font-size: 9.5px; line-height: 1.4; font-variant-numeric: tabular-nums;')}>
+      <span style={s('color: ' + цвет + ';')}>{подпись}</span>
+      <span style={s('color: var(--muted-soft);')}>{ч(собрано)} из {ч(заказано)} строф</span>
+      {максимумДоказан && собрано < заказано ? (
+        <span style={s('color: var(--muted-hard);')}>· максимум доказан: {ч(собрано)} строф</span>
+      ) : null}
+      <span style={s('color: var(--muted-hard);')}>· {ч(строк)} из {ч(цельСтрок)} строк
+        {исходныйЗапрос !== цельСтрок ? ' · запрошено ' + ч(исходныйЗапрос) : ''}</span>
+      {!максимумДоказан && естьВерхняяГраница && верхняяГраница < заказано ? (
+        <span style={s('color: var(--muted-hard);')}>· верхняя граница {ч(верхняяГраница)} строф</span>
+      ) : null}
     </div>
   );
 }
@@ -209,7 +270,10 @@ function запас(ф) {
 function пул_и_воронка(ф, f, ярус) {
   var готов = !!(ф && ф['готово']);
   var ст = (f && f.ступени) || null;
-  var естьВоронка = !!(ст && ст['корпус']);
+  // НУЛЕВОЙ ПУЛ — ТОЖЕ ОТВЕТ. Проверка на truthy прятала всю карточку, когда
+  // ворота оставляли ровно 0 строк, хотя именно тогда нужно сказать «сборка
+  // невозможна» и показать, на каком этапе всё исчезло.
+  var естьВоронка = !!(ст && (ст['корпус'] != null || ст['заказано_строф'] != null));
   if (!готов && !естьВоронка) return null;   // «ещё не спрашивали» ≠ «пусто»
   var ч = function (n) { return Number(n || 0).toLocaleString('ru-RU'); };
   // ПОРЯДОК — ОТ СВОЕГО К ОТСЕВУ (2026-08-20). Стояло «корпус → ворота → пул»,
@@ -245,6 +309,7 @@ function пул_и_воронка(ф, f, ярус) {
         </div>
       ) : null}
       {готов ? запас(ф) : null}
+      {естьВоронка ? сборка_формы(ст) : null}
       {естьВоронка ? (
         <div style={s('display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 7px; margin-top: 3px; font-size: 9px; color: var(--muted-soft); font-variant-numeric: tabular-nums;')}
              /* ПОДПИСЬ ГОВОРИТ ТО, ЧТО ПРОИСХОДИТ СЕЙЧАС. Стояло «жребий берёт
@@ -324,22 +389,32 @@ function строкаИзЯчеек(я) {
   return куски.join(',');
 }
 
-// ЧЕСТНАЯ ПОДПИСЬ, КОГДА КОЛОНКИ НЕТ (2026-08-30). Обе оси звукописи живут
-// колонками индекса, а колонки появляются только после перепечки. Пока их нет,
-// обе ручки не отбирают ничего — и молчать об этом нельзя: ручка, которая
-// стоит и не действует, это контрол-обманка. `форма_пула` отвечает полем
-// `звукопись`; пока формы нет вовсе (пул ещё не спрошен), молчим — иначе
+// ЧЕСТНАЯ ПОДПИСЬ, КОГДА КОЛОНКИ НЕТ (2026-08-30). Индексные колонки
+// появляются только после перепечки. Пока нужной колонки нет, ручка не
+// отбирает ничего — и молчать об этом нельзя: ручка, которая стоит и не
+// действует, это контрол-обманка. `форма_пула` отвечает отдельным флагом по
+// каждой оси; пока формы нет вовсе (пул ещё не спрошен), молчим — иначе
 // подпись мигала бы при каждом открытии панели.
 export function безЗвукописи(st) {
   var ф = st.poolShape;
-  return (ф && ф.готово !== false && ф.звукопись === false)
+  return (ф && ф.готово !== false && ф.звукопись !== true)
     ? 'индекс без колонок звукописи — перепеки индекс' : '';
+}
+
+export function безКолонки(st, ключ, имя) {
+  var ф = st.poolShape;
+  return (ф && ф.готово !== false && ф[ключ] !== true)
+    ? 'индекс без колонки ' + имя + ' — перепеки индекс' : '';
 }
 
 export function полосаРедкости(c, ось, имя, поясн, строка, onSet) {
   строка = строка || '';
   var я = ячейкиИзСтроки(строка);
   var выбрано = я.filter(Boolean).length;
+  var неактивна = поясн && (поясн.indexOf('классика') === 0
+    || поясн.indexOf('индекс без') === 0);
+  var подсказка = неактивна ? поясн : 'проведи по шкале';
+  var наведение = hov('background: var(--muted-hard) !important; transform: translateY(-1px);');
 
   // ТЯНУТЬ — ЗНАЧИТ КРАСИТЬ ВЕСЬ ПРОЛЁТ, А НЕ ТЕКУЩУЮ ЯЧЕЙКУ (2026-08-26).
   //
@@ -352,6 +427,7 @@ export function полосаРедкости(c, ось, имя, поясн, ст
   // всегда ровно между двумя концами жеста, а не след, который курсор оставил.
   function мазнуть(i) {
     var м = c._мазок;
+    if (неактивна) return;
     if (!м) return;
     var н = м.база.slice();
     var a = Math.min(м.якорь, i), b = Math.max(м.якорь, i);
@@ -360,11 +436,11 @@ export function полосаРедкости(c, ось, имя, поясн, ст
   }
 
   return (
-    <div data-row="1" style={s('padding: 6px 0;')}>
-      <div style={s('display: flex; align-items: baseline; gap: 8px;')}>
+    <div data-row="1" role="group" aria-label={имя} style={s('padding: 4px 0 3px;')}>
+      <div style={s('display: flex; align-items: baseline; gap: 8px; min-height: 16px;')}>
         <span style={s('font-size: 10.5px; color: var(--muted);')}>{имя}</span>
-        <span style={s('font-size: 9px; color: var(--muted); opacity: .7; margin-left: auto;')}>
-          {выбрано ? выбрано + '% корпуса · ' + строка.replace(/,/g, ', ') : 'не отбирает'}
+        <span style={s('font-size: 9px; color: ' + (неактивна ? 'var(--muted-soft)' : 'var(--muted-hard)') + '; opacity: .82; margin-left: auto; font-variant-numeric: tabular-nums;')}>
+          {неактивна ? поясн : (выбрано ? выбрано + '% корпуса · ' + строка.replace(/,/g, ', ') : 'не выбрано')}
         </span>
         {выбрано ? (
           <button onClick={function () { onSet(ось, ''); }}
@@ -373,24 +449,31 @@ export function полосаРедкости(c, ось, имя, поясн, ст
       </div>
       {/* Тянуть мышью — так полоса набирается одним жестом, а не сотней
           нажатий. Отпустили кнопку где угодно — мазок кончился. */}
-      <div style={s('display: flex; gap: 1px; margin-top: 4px; height: 20px; cursor: crosshair;')}
+      <div style={s('position: relative; display: flex; gap: 1px; margin-top: 3px; height: 14px; padding: 1px; border: 1px solid var(--border-soft); border-radius: var(--radius); background: color-mix(in srgb, var(--ink) 4%, var(--canvas)); cursor: ' + (неактивна ? 'not-allowed' : 'crosshair') + '; opacity: ' + (неактивна ? '.55' : '1') + ';')}
         onMouseLeave={function () { c._мазок = null; }}
         onMouseUp={function () { c._мазок = null; }}>
         {я.map(function (вкл, i) {
           return (<div key={i} title={i + '–' + (i + 1) + '%'}
             onMouseDown={function (e) {
+              if (неактивна) return;
               e.preventDefault();
               c._мазок = { режим: !вкл, якорь: i, база: я.slice() };
               мазнуть(i);
             }}
-            onMouseEnter={function () { мазнуть(i); }}
-            style={s('flex: 1 1 0; border-radius: var(--radius); '
+            onMouseEnter={function () { if (!неактивна) мазнуть(i); }}
+            style={s('flex: 1 1 0; min-width: 0; border-radius: 1px; transition: background .12s var(--ease), transform .12s var(--ease); '
+              + (i && i % 10 === 0 ? 'border-left: 1px solid color-mix(in srgb, var(--ink) 27%, transparent); margin-left: 1px;' : '')
               + (вкл ? 'background: var(--ink);'
-                     : 'background: color-mix(in srgb, var(--ink) 9%, transparent);'))} />);
+                     : 'background: color-mix(in srgb, var(--ink) 15%, var(--canvas));'))}
+            className={неактивна ? undefined : наведение} />);
         })}
+        {неактивна || !выбрано ? (
+          <span style={s('position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; font-size: 9px; letter-spacing: .04em; color: var(--muted-hard); text-shadow: 0 1px 0 var(--canvas);')}>
+            {подсказка}
+          </span>) : null}
       </div>
-      <div style={s('display: flex; justify-content: space-between; margin-top: 3px; font-size: 9px; color: var(--muted); opacity: .65;')}>
-        <span>0% нередкие</span><span>{поясн}</span><span>редкие 100%</span>
+      <div style={s('display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 3px; font-size: 9px; color: var(--muted); opacity: .72; font-variant-numeric: tabular-nums;')}>
+        <span>0 · нередкие</span><span>{неактивна ? '' : (поясн || 'процентиль корпуса')}</span><span>редкие · 100</span>
       </div>
     </div>
   );
@@ -532,11 +615,11 @@ function полоскаДолей(ось, сорта, маска, строка, 
     window.addEventListener('mouseup', кончить, true);
   }
 
-  // Отступ 66px = ширина подписи ряда (58) плюс зазор (8): полоска стоит ровно
-  // под чипами, которые делит, а не под их именем.
+  // Полоска занимает второй столбец той же сетки, что и чипы: при смене
+  // ширины подписи она не начинает жить по старому магическому отступу.
   var край = 0;
   return (
-    <div style={s('flex: 1 1 100%; margin: 3px 0 1px 66px;')}
+    <div className="nl-gate-share" style={s('width: 100%; margin: 1px 0;')}
       onDoubleClick={function () { onSet(ось, ''); }}>
       {/* Сегменты без зазоров: сумма ширин ровно сто, и граница на экране
           стоит там же, где считает жест. Разделяет их волосок рукояти. */}
@@ -613,9 +696,9 @@ function классикаНеЧитает(st) {
 function рядМаски(имя, полосы, маска, onSet, пусто, хвост, доли) {
   var м = Number(маска) || 0;
   return (
-    <div data-row="1" style={s('display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; padding: 4px 0; min-height: 26px;')}>
-      <span style={s('font-size: 10.5px; color: var(--muted); flex: 0 0 58px;')}>{имя}</span>
-      <div style={s('display: flex; flex-wrap: wrap; gap: 3px;')}>
+    <div data-row="1" data-gate-row="1">
+      <span className="nl-gate-label">{имя}</span>
+      <div className="nl-picks">
         {полосы.map(function (п) {
           var on = !!(м & п[1]);
           return (<button key={п[0]} onClick={function () {
@@ -626,13 +709,11 @@ function рядМаски(имя, полосы, маска, onSet, пусто, �
               }
               onSet(нов);
             }}
-            style={s('appearance: none; border: none; border-radius: var(--radius); padding: 4px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
-              + (on ? 'background: var(--ink); color: var(--canvas);'
-                    : 'background: color-mix(in srgb, var(--ink) 6.5%, transparent); color: var(--muted);'))}
+            aria-pressed={on} style={s(pickStyle(on))}
             className={hov('color: var(--ink)')}>{п[0]}</button>);
         })}
       </div>
-      {хвост ? <span style={s(ПОЯС)}>{хвост}</span> : null}
+      {хвост ? <span className="nl-gate-tail">{хвост}</span> : null}
       {доли || null}
     </div>
   );
@@ -641,19 +722,17 @@ function рядМаски(имя, полосы, маска, onSet, пусто, �
 
 function переключатель(имя, опции, активен, onPick, хвост) {
   return (
-    <div data-row="1" style={s('display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; padding: 4px 0; min-height: 26px;')}>
-      <span style={s('font-size: 10.5px; color: var(--muted); flex: 0 0 58px;')}>{имя}</span>
-      <div style={s('display: flex; flex-wrap: wrap; gap: 3px;')}>
+    <div data-row="1" data-gate-row="1">
+      <span className="nl-gate-label">{имя}</span>
+      <div className="nl-picks">
         {опции.map(function (o, i) {
           var on = активен === i;
-          return (<button key={o} onClick={function () { onPick(i); }}
-            style={s('appearance: none; border: none; border-radius: var(--radius); padding: 4px 8px; font-family: inherit; font-size: 9px; cursor: pointer; white-space: nowrap; '
-              + (on ? 'background: var(--ink); color: var(--canvas);'
-                    : 'background: color-mix(in srgb, var(--ink) 6.5%, transparent); color: var(--muted);'))}
+          return (<button key={o} onClick={function () { onPick(i); }} aria-pressed={on}
+            style={s(pickStyle(on))}
             className={hov('color: var(--ink)')}>{o}</button>);
         })}
       </div>
-      {хвост ? <span style={s(ПОЯС)}>{хвост}</span> : null}
+      {хвост ? <span className="nl-gate-tail">{хвост}</span> : null}
     </div>
   );
 }
@@ -733,13 +812,11 @@ function renderНастройки(c) {
   return (
     <div>
       <div style={s(ЗАГОЛОВОК)}>пресет</div>
-      <div style={s('display: flex; flex-wrap: wrap; gap: 4px;')}>
+      <div style={s('display: flex; flex-wrap: wrap; gap: 3px;')}>
         {ПРЕСЕТЫ.map(function (п) {
           var on = п.name === текущий;
-          return (<button key={п.name} onClick={function () { c.pickПресет(п.name); }} title={п.зачем}
-            style={s('appearance: none; border: none; border-radius: var(--radius); padding: 5px 10px; font-family: inherit; font-size: 10.5px; cursor: pointer; '
-              + (on ? 'background: var(--ink); color: var(--canvas);'
-                    : 'background: color-mix(in srgb, var(--ink) 6.5%, transparent); color: var(--muted);'))}
+          return (<button key={п.name} onClick={function () { c.pickПресет(п.name); }} title={п.зачем} aria-pressed={on}
+            style={s(pickStyle(on) + ' font-size: 10.5px;')}
             className={hov('color: var(--ink)')}>{п.name}</button>);
         })}
       </div>
@@ -749,10 +826,10 @@ function renderНастройки(c) {
           наугад ближайший: в `settings.json` лежат положения годичной
           давности, и подменить их молча значило бы соврать о том, что уедет
           на бэк. */}
-      <div style={s(ПОЯС + ' margin-top: 5px; text-wrap: pretty;')}>
+      <div style={s(ПОЯС + ' margin-top: 4px; text-wrap: pretty;')}>
         {выбран ? выбран.зачем : 'настройки не совпадают ни с одним пресетом — нажми любой'}</div>
 
-      <div style={s(ЗАГОЛОВОК + ' margin-top: 13px;')}>ворота · пресет их не трогает</div>
+      <div style={s(ЗАГОЛОВОК + ' margin-top: 6px;')}>ворота · пресет их не трогает</div>
       {переключатель('мат', ['естественно', 'без мата', 'поровну', 'только мат'], матИдx,
                      function (i) { c.setKnob('Мат', [-1, 0, 0.5, 1][i]); },
                      матИдx < 0 ? подпись('Мат', м) : '')}
@@ -811,8 +888,10 @@ function renderНастройки(c) {
                 // и ряд выглядел живым в режиме, где он не действует.
                 (st.knobMode || '') === РЕЖИМ_КЛАССИКА
                   ? 'классика рифмовку не читает — позиция для алгоритма'
-                  : ((Number(st.params['Позиция рифмы']) & 7) === 1
-                      ? 'рифма только последним словом' : ''),
+                  : (((Number(st.params['Позиция рифмы']) & 7) !== 1
+                      ? безКолонки(st, 'позиция_рифмы', 'позиции рифмы') : '')
+                      || ((Number(st.params['Позиция рифмы']) & 7) === 1
+                          ? 'рифма только последним словом' : '')),
                 полоскаДолей('позиция', ПОЗИЦИИ_РИФМЫ,
                              (Number(st.params['Позиция рифмы']) & 7) || 1,
                              (st.доли || {}).позиция, c.setДоли.bind(c)))}
@@ -829,16 +908,21 @@ function renderНастройки(c) {
       {переключатель('перекличка', ПЕРЕКЛИЧКА,
                      Math.max(0, Math.min(1, Math.round(Number(st.params['Перекличка']) || 0))),
                      function (i) { c.setKnob('Перекличка', i); },
-                     классикаНеЧитает(st) || безЗвукописи(st))}
+                     классикаНеЧитает(st)
+                       || безКолонки(st, 'перекличка', 'переклички'))}
       {/* ДВЕ ОСИ, А НЕ ОДНА. Замер на боевом корпусе: связь между ними
           r = +0.298, то есть они правда разные. Слить их в одну ручку нельзя —
           теряется целый угол «обычные слова в диком сочетании», который в
           единой шкале размазывается по середине и становится недостижим. */}
       {полосаРедкости(c, 'слова', 'редкость слов',
-                      классикаНеЧитает(st) || 'какие слова',
+                      классикаНеЧитает(st)
+                        || безКолонки(st, 'редкость_слов', 'редкости слов')
+                        || 'какие слова',
                       (st.полосы || {}).слова, c.setПолосы.bind(c))}
       {полосаРедкости(c, 'пара', 'редкость сочетаний',
-                      классикаНеЧитает(st) || 'как они стоят рядом',
+                      классикаНеЧитает(st)
+                        || безКолонки(st, 'редкость_сочетаний', 'редкости сочетаний')
+                        || 'как они стоят рядом',
                       (st.полосы || {}).пара, c.setПолосы.bind(c))}
       {/* ЗВУКОПИСЬ, ОСЬ ВТОРАЯ: один согласный залил строку, встречаясь в трёх
           и более РАЗНЫХ словах. Шкала сплошная, поэтому полосами — тем же
@@ -846,7 +930,8 @@ function renderНастройки(c) {
           перекличкой r = +0.034, то есть оси правда разные (замер в
           core/звукопись.py). */}
       {полосаРедкости(c, 'плотность', 'плотность звука',
-                      классикаНеЧитает(st) || безЗвукописи(st)
+                      классикаНеЧитает(st)
+                        || безКолонки(st, 'плотность_звука', 'плотности звука')
                         || 'один согласный на всю строку',
                       (st.полосы || {}).плотность, c.setПолосы.bind(c))}
       {/* РИФМА ЧЕТЫРЬМЯ ЯРУСАМИ, А НЕ ПОЛЗУНКОМ (2026-08-18, второй заход).
@@ -902,7 +987,7 @@ export function renderStanzaMenu(c) {
 
   return попап(c, 'stanza', 372, (
     <Fragment>
-      <div style={s('display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px;')}>
+      <div style={s('display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px;')}>
         <span style={s(ЗАГОЛОВОК + ' margin: 0;')}>форма</span>
         {/* КЛАВИША ЗДЕСЬ НАЗЫВАЕТСЯ ТА, ЧТО РАБОТАЕТ (2026-08-18). Стояло ⌘↵ —
             правда до переписи экрана, ложь после: голый ↵ стал основным путём
@@ -945,6 +1030,16 @@ export function renderStanzaMenu(c) {
       {/* В классике ярусы не действуют (профиль обрезается до ворот классики,
           бэк считает корзины дефолтом) — называть маску здесь значило бы
           врать; передаём null, подпись честно говорит «разных рифм». */}
+      {st.poolShapeState === 'checking' ? (
+        <div role="status" style={s('margin-top: 8px; padding: 6px 8px; border-left: 2px solid var(--info); background: color-mix(in srgb, var(--info) 8%, transparent); color: var(--muted-hard); font-size: 10px; line-height: 1.4;')}>
+          проверяю актуальный пул · прошлые цифры могут относиться к предыдущим настройкам
+        </div>
+      ) : null}
+      {st.poolShapeState === 'error' ? (
+        <div role="alert" style={s('margin-top: 8px; padding: 6px 8px; border-left: 2px solid var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); color: var(--muted-hard); font-size: 10px; line-height: 1.4;')}>
+          не удалось проверить форму пула · {st.poolShapeError || 'повтори запрос'}
+        </div>
+      ) : null}
       {пул_и_воронка(st.poolShape, st.funnelLast,
                      классика ? null : st.params['Ярусы рифмы'])}
 
@@ -954,9 +1049,10 @@ export function renderStanzaMenu(c) {
           побуквенно. Замер: до этого два одинаковых вызова подряд совпадали на
           0.0%. Штамп рядом — не украшение: семя воспроизводит ВЫБОР, а не
           материал, и когда материал сменился, это видно по штампу. */}
-      <div style={s(ЗАГОЛОВОК + ' margin-top: 12px;')}>номер прогона</div>
+      <div style={s(ЗАГОЛОВОК + ' margin-top: 9px;')}>номер прогона</div>
       <div style={s('display: flex; align-items: center; gap: 8px;')}>
         <input type="text" value={st.seedDraft || ''} placeholder="пусто — новый" spellCheck={false}
+          aria-label="Номер прогона"
           inputMode="numeric"
           onChange={function (e) { c.setState({ seedDraft: e.target.value.replace(/[^0-9]/g, '') }); }}
           style={s(ТЕКСТ)} />
@@ -978,7 +1074,7 @@ export function renderStanzaMenu(c) {
           {' · '}пул {st.seedStamp.pool} · скрыто {st.seedStamp.hidden} · {st.seedStamp.index}</div>
       ) : null}
 
-      <div style={s('display: flex; justify-content: flex-end; margin-top: 12px;')}>
+      <div data-sticky-action="1" style={s('position: sticky; bottom: -7px; display: flex; justify-content: flex-end; margin: 6px -9px -7px; padding: 6px 9px 7px; background: linear-gradient(180deg, color-mix(in srgb, var(--menu-bg) 0%, transparent), var(--menu-bg) 25%);')}>
         {/* Кнопка зовёт ТОТ ЖЕ путь, что ⌘↵ (lentaСтрофа). Второго входа в
             генерацию нет: genStanza вырезана вместе с документом 2026-08-18. */}
         <button onClick={function () { c.closePop(); c.lentaСтрофа(); }} style={s(ГЛАВНАЯ)}>

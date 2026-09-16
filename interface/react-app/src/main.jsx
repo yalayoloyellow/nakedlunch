@@ -1,3 +1,4 @@
+import { Component } from 'react'
 import { createRoot } from 'react-dom/client'
 import Nakedlunch from './nl/Nakedlunch.jsx'
 import './index.css'
@@ -61,4 +62,60 @@ const _вЖурналИсх = вЖурнал;
 };
 window.__вЖурнал = вЖурнал;
 
-createRoot(document.getElementById('root')).render(<Nakedlunch />)
+// Ошибка рендера иначе оставляет пустой root: глобальный обработчик её видит,
+// но React уже не может показать человеку, что произошло. Граница держит
+// приложение объяснимым и даёт единственное безопасное восстановление —
+// перезапуск интерфейса с чистым деревом.
+class ИнтерфейсОшибка extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null, copied: false };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    var сообщение = error && error.stack ? error.stack : String(error);
+    var стекКомпонентов = info && info.componentStack ? '\n' + info.componentStack : '';
+    вЖурнал('ошибка рендера: ' + сообщение + стекКомпонентов, 'ошибка');
+  }
+
+  отчёт() {
+    var error = this.state.error;
+    return 'nakedlunch: ошибка интерфейса\n\n'
+      + (error && error.stack ? error.stack : String(error))
+      + '\n\nлокальный журнал:\n'
+      + ((window.__журналОкна || []).join('\n') || 'пусто');
+  }
+
+  скопировать = () => {
+    var text = this.отчёт();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => this.setState({ copied: true }), () => {});
+      }
+    } catch (e) { /* отчёт можно взять из текста ниже */ }
+  };
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <main style={{ height: '100vh', boxSizing: 'border-box', overflow: 'auto', padding: '40px 28px', background: '#131313', color: '#ededed', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 13, lineHeight: 1.5 }}>
+        <div style={{ maxWidth: 760, margin: '0 auto' }}>
+          <div style={{ color: '#e27b7b', fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 12 }}>ошибка интерфейса</div>
+          <h1 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 500 }}>Экран не удалось отрисовать</h1>
+          <p style={{ margin: '0 0 18px', color: '#cfcfcf' }}>Данные не потеряны. Перезапусти интерфейс; если ошибка повторится, скопируй отчёт и пришли его вместе с журналом.</p>
+          <pre style={{ margin: '0 0 18px', padding: 12, overflow: 'auto', whiteSpace: 'pre-wrap', color: '#e27b7b', borderLeft: '2px solid #e27b7b', background: '#1b1b1b' }}>{String(this.state.error.message || this.state.error)}</pre>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => window.location.reload()} style={{ padding: '7px 12px', border: 0, borderRadius: 3, background: '#ededed', color: '#131313', cursor: 'pointer', font: 'inherit' }}>перезапустить</button>
+            <button type="button" onClick={this.скопировать} style={{ padding: '7px 12px', border: '1px solid #3d3d3d', borderRadius: 3, background: 'transparent', color: '#ededed', cursor: 'pointer', font: 'inherit' }}>{this.state.copied ? 'отчёт скопирован' : 'скопировать отчёт'}</button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+}
+
+createRoot(document.getElementById('root')).render(<ИнтерфейсОшибка><Nakedlunch /></ИнтерфейсОшибка>)

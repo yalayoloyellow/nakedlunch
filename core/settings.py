@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 
 import склад
 
@@ -82,6 +83,13 @@ SETTINGS_PATH = DATA_DIR / "settings.json"
 # из файла. Сторож — tests/test_умные_папки_ушли.py.
 _ALLOWED = {"nl_params", "stanza", "stanza_profile",
             "nl_fs_profiles", "nl_ui_profiles", "nl_palette", "nl_view"}
+
+# Flask обслуживает запросы в разных потоках. Запись — это не только
+# `os.replace`: до него идут чтение и слияние, поэтому запирать нужно весь
+# цикл. Иначе два почти одновременных сохранения используют один и тот же
+# `settings.json.новый`: первый забирает его, второй получает FileNotFoundError
+# и, что хуже, может потерять изменения, увиденные первым.
+_ЗАПИСЬ = threading.Lock()
 
 
 def _nl_params(raw) -> dict:
@@ -166,6 +174,13 @@ def read() -> dict:
 
 
 def write(payload: dict) -> dict:
+    # Один процесс сервера — один последовательный поток изменений. Это
+    # сохраняет и атомарность файла, и смысл merge при параллельных запросах.
+    with _ЗАПИСЬ:
+        return _write(payload)
+
+
+def _write(payload: dict) -> dict:
     """Merge `payload` into the stored settings and persist. Merge, not
     replace: the UI saves the whole panel at once today, but a partial save
     from anywhere else must not silently wipe the keys it didn't mention.

@@ -89,10 +89,26 @@ if [ "$have_index" = "0" ]; then
   echo "      tools/перенос.sh развернуть /путь/к/перенос.tar"
 fi
 
+# --------------------------------------------------------------- ярлык
+
+if command -v xattr >/dev/null 2>&1; then
+  xattr -dr com.apple.quarantine "$ROOT/nakedlunch.app" 2>/dev/null || true
+fi
+
+DESKTOP="$HOME/Desktop"
+LINK="$DESKTOP/nakedlunch.app"
+if [ -L "$LINK" ] || [ ! -e "$LINK" ]; then
+  mkdir -p "$DESKTOP"
+  ln -sfn "$ROOT/nakedlunch.app" "$LINK"
+  echo "ярлык: $LINK"
+else
+  echo "ярлык: не трогаю уже существующий $LINK"
+fi
+
 # ------------------------------------------------------------------ пуск
 
 echo
 echo "готово. запускаю…"
-echo "  дальше открывай двойным кликом по nakedlunch.app"
+echo "  дальше открывай двойным кликом по nakedlunch.app на Рабочем столе"
 echo
 exec .venv/bin/python launch.py

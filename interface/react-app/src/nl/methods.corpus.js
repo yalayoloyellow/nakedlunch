@@ -51,12 +51,71 @@ export const corpusMethods = {
   // висит вечно полным кругом.
   ГОТОВО_ДЕРЖИМ: 8000,
 
+  // Один снимок текущей генерации для кнопки и панели фоновых работ. Раньше
+  // его отдельно рисовал глобальный статус-док, из-за чего одна и та же
+  // генерация существовала в двух местах и успевала мелькнуть при быстрых
+  // ответах. Теперь это локальная часть уже существующей панели работ.
+  generationSummary() {
+    var st = this.state || {};
+    var mode = st.genState || 'idle';
+    var active = !!(st.genBusy || mode === 'running' || mode === 'background');
+    var problem = mode === 'error' || mode === 'cancelled' || mode === 'stale' || mode === 'impossible';
+    if (!active && !problem) return null;
+
+    var spec = this.curSpec ? this.curSpec() : [];
+    var n = Array.isArray(spec) ? spec.length : 0;
+    var форма = st.stanzaProfile || 'своя форма';
+    var sec = Math.max(0, Math.round(Number(st.genElapsedMs || 0) / 1000));
+    var время = sec < 60 ? sec + ' с'
+      : Math.floor(sec / 60) + ' мин ' + String(sec % 60).padStart(2, '0') + ' с';
+
+    if (active) {
+      var title;
+      if (mode === 'background') {
+        title = st.genPhase === 'следующая строфа в очереди'
+          ? 'следующая строфа в очереди'
+          : (st.genResult ? 'строфа собрана · готовлю запас' : 'готовлю запас следующих строф');
+      } else {
+        title = st.genPhase || st.genStatus || 'собираю полную строфу';
+      }
+      var detail = форма + ' · ' + n + ' строк · ' + время;
+      if (!st.genElapsedMs) detail += ' · запускаю точный расчёт';
+      else if (mode !== 'background') detail += ' · точный процент этапа неизвестен';
+      return { state: 'работа', title: title, detail: detail, elapsed: время };
+    }
+
+    if (mode === 'impossible') {
+      return { state: 'ошибка', title: 'полная строфа не найдена',
+               detail: st.genError || 'полной совместимой комбинации нет при текущих воротах' };
+    }
+    if (mode === 'stale') {
+      return { state: 'ошибка', title: 'настройки изменились',
+               detail: st.genError || 'готовый ответ не применён к новым настройкам' };
+    }
+    if (mode === 'cancelled') {
+      return { state: 'ошибка', title: 'расчёт отменён',
+               detail: st.genError || 'результат не применён' };
+    }
+    return { state: 'ошибка', title: 'расчёт завершился ошибкой',
+             detail: st.genError || 'ядро не вернуло результат' };
+  },
+
   jobsSummary() {
     var работы = this.state.jobs || [];
-    if (!работы.length) return { state: 'покой', pct: 0, n: 0, running: 0 };
+    var ген = this.generationSummary ? this.generationSummary() : null;
+    if (!работы.length && !ген) return { state: 'покой', pct: 0, n: 0, running: 0 };
     var идут = работы.filter(function (j) { return j.state === 'running'; });
     var беда = работы.filter(function (j) { return j.state === 'error' || j.state === 'stalled'; });
-    if (беда.length) return { state: 'ошибка', pct: 0, n: работы.length, running: идут.length };
+    if (беда.length || (ген && ген.state === 'ошибка')) {
+      return { state: 'ошибка', pct: 0, n: работы.length + (ген ? 1 : 0), running: идут.length,
+               detail: ген ? ген.title + ' · ' + ген.detail : 'фоновая работа встала или упала' };
+    }
+    if (ген && ген.state === 'работа') {
+      // Точный процент генерации не измеряется. Не подставляем выдуманное
+      // число: круг работает как индикатор занятости, подробности — в панели.
+      return { state: 'работа', pct: 0, n: работы.length + 1, running: идут.length + 1,
+               indeterminate: true, detail: ген.title + ' · ' + ген.detail };
+    }
     if (идут.length) {
       // Процент общий: сумма сделанного к сумме плана. Показывать «первую из
       // двух» было бы враньём о том, сколько осталось.
@@ -85,12 +144,15 @@ export const corpusMethods = {
   },
 
   async statusTick() {
-    if (this._statusDead) return;
+    if (this._statusDead || this._mounted === false) return;
     try {
       var res = await api.status();
+      if (this._statusDead || this._mounted === false) return;
       var работы = (res && res.items) || [];
+      var генерация = res && res.generation;
       var шли = (this.state.jobs || []).some(function (j) { return j.state === 'running'; });
       var идут = работы.some(function (j) { return j.state === 'running'; });
+      var идётГенерация = !!(генерация && генерация.state === 'running');
       if (шли && !идут) this._jobsDoneAt = Date.now();   // момент окончания — для 'готово'
       // Состояние трогаем, только когда сводка реально изменилась: опрос идёт
       // всегда, а перерисовывать документ каждые 1.2 секунды незачем.
@@ -102,6 +164,16 @@ export const corpusMethods = {
       // а меткой в шапке, которая не уходит сама и ведёт прямо к отправке.
       var ош = res && res['ошибок'] || 0;
       if (ош !== this.state.логОшибок) this.setState({ логОшибок: ош });
+      // Во время генерации локальный секундомер даёт мгновенный отклик, а
+      // серверный снимок уточняет настоящую фазу и время. Процент не рисуем:
+      // бэк его не измеряет и подмена неизвестного числа «прогрессом» была бы
+      // ложью. После ответа /api/generate локальный метод сам фиксирует итог.
+      if ((this.state.genBusy || this.state.genState === 'background') && идётГенерация) {
+        var генПатч = {};
+        if (генерация.phase && генерация.phase !== this.state.genPhase) генПатч.genPhase = генерация.phase;
+        if (Number.isFinite(генерация.elapsed_ms) && генерация.elapsed_ms !== this.state.genElapsedMs) genПатч.genElapsedMs = генерация.elapsed_ms;
+        if (Object.keys(генПатч).length) this.setState(генПатч);
+      }
       if (res && res['аварийно'] && !this.state.логАвария && !this._аварияПоказана) {
         this._аварияПоказана = true;
         this.setState({ логАвария: true });
@@ -117,8 +189,9 @@ export const corpusMethods = {
       // ничего — поэтому на каждый сдвиг счётчика дёргались reloadSeriesState и
       // reloadSheets. Убрано 2026-08-18 вместе с серией: фоновых производителей
       // листов в программе не осталось, листы меняются только руками.
-      this.statusSchedule(идут ? ОПРОС_РАБОТА : ОПРОС_ПОКОЙ);
+      this.statusSchedule(идут || идётГенерация ? ОПРОС_РАБОТА : ОПРОС_ПОКОЙ);
     } catch (e) {
+      if (this._statusDead || this._mounted === false) return;
       // ЖИВОЙ СЕРВЕР С ОШИБКОЙ — НЕ МЁРТВОЕ ЯДРО (2026-09-02).
       //
       // Сюда попадало ВСЁ подряд, и пятисотая от работающего сервера считалась
@@ -162,6 +235,7 @@ export const corpusMethods = {
 
   statusSchedule(ms) {
     clearTimeout(this._statusT);
+    if (this._statusDead || this._mounted === false) { this._statusT = null; return; }
     var self = this;
     this._statusT = setTimeout(function () { self.statusTick(); }, ms);
   },
@@ -592,10 +666,15 @@ export const corpusMethods = {
         document.body.removeChild(ta);
       } catch (e) { ок = false; }
     }
+    if (this._mounted === false) return;
     this.setState({ логСкопирован: ок });
     if (!ок) this.flash('не удалось скопировать — выдели текст и скопируй вручную');
     var self = this;
-    setTimeout(function () { self.setState({ логСкопирован: false }); }, 2000);
+    clearTimeout(this._логКопияT);
+    this._логКопияT = setTimeout(function () {
+      self._логКопияT = null;
+      if (self._mounted !== false) self.setState({ логСкопирован: false });
+    }, 2000);
   },
 
   // ================= статистика =================

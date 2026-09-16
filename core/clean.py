@@ -68,6 +68,7 @@ def семя(raw) -> int | None:
 _STANZA_MAX_LINES = 32
 _SYL_MIN, _SYL_MAX = 1, 30
 _STANZA_LETTER_RE = re.compile(r"^[а-яё]$")
+SHORTLIST_MAX = 400
 
 
 def stanza_spec(raw) -> list[dict] | None:
@@ -230,7 +231,7 @@ def knobs(raw: dict | None) -> dict:
         # raised from 200: "количество строф" × scheme length can legitimately
         # exceed it (e.g. 30 abab stanzas = 120, fine, but a long custom
         # scheme × many stanzas can run past 200 too).
-        "shortlist": whole("shortlist", 1, 400, 40),
+        "shortlist": whole("shortlist", 1, SHORTLIST_MAX, 40),
         "nl_mix": nl_mix,
         # 0.25 (2026-07-17) — ИЗМЕРЕННОЕ среднее пользователя по 125 прогонам, не
         # догадка. Прежний дефолт 0.0 стоял по осторожной причине: ползунок был

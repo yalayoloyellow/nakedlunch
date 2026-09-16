@@ -20,7 +20,7 @@ import { shelfMethods, ПРЕСЕТЫ } from './methods.shelves.js';
 import { corpusMethods } from './methods.corpus.js';
 import { fsMethods } from './methods.fs.js';
 import { fsProfileMethods } from './methods.fsprofiles.js';
-import { fsGlueMethods, журнал } from './methods.fsglue.js';
+import { fsGlueMethods } from './methods.fsglue.js';
 import { fsRecMethods } from './methods.fsrec.js';
 import { lentaMethods } from './methods.lenta.js';
 import { renderHeader, renderLegend, renderFlash } from './render.panels.jsx';
@@ -29,7 +29,7 @@ import { renderFsBar } from './render.fspanels.jsx';
 import { renderLenta } from './render.lenta.jsx';
 
 // корневой div — стили дословно из дизайна (строка 156 шаблона)
-const ROOT_STYLE = "height: 100vh; position: relative; --canvas:#131313; --panel:#1b1b1b; --ink:#ededed; --muted-hard:#cfcfcf; --muted:#949494; --muted-soft:#5c5c5c; --border-soft:#3d3d3d; --border-subtle:#242424; --menu-bg:var(--panel); --content-max-width: min(clamp(440px, 24vw, 540px), calc(100% - 120px)); --radius:3px; --ease:cubic-bezier(0.4,0,0.2,1); --ease-spring:cubic-bezier(0.32,0.72,0,1); font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; background: var(--canvas); color: var(--ink); font-size: 13px; line-height: 1.5; display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased;";
+const ROOT_STYLE = "height: 100vh; position: relative; --canvas:#131313; --panel:#1b1b1b; --ink:#ededed; --muted-hard:#cfcfcf; --muted:#949494; --muted-soft:#5c5c5c; --border-soft:#3d3d3d; --border-subtle:#242424; --ok:#82c69b; --warn:#e0b56e; --danger:#e27b7b; --info:#8dbddd; --menu-bg:var(--panel); --content-max-width: min(clamp(440px, 24vw, 540px), calc(100% - 120px)); --radius:3px; --ease:cubic-bezier(0.4,0,0.2,1); --ease-spring:cubic-bezier(0.32,0.72,0,1); font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; background: var(--canvas); color: var(--ink); font-size: 13px; line-height: 1.5; display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased;";
 
 // SVG-фильтры сцены: #nl-text-warp и #nl-text-warp-aber ведут строку,
 // #nl-postfx — слой поверх; крутилки к ним подключает фристайл.
@@ -154,7 +154,7 @@ function renderЯдроМолчит(c) {
     <div style={s('position: fixed; inset: 0; z-index: 999; display: flex; align-items: center; '
       + 'justify-content: center; background: rgba(0,0,0,.82); backdrop-filter: blur(3px);')}>
       <div style={s('max-width: 520px; padding: 26px 24px; border-radius: var(--radius); '
-        + 'background: var(--panel); border: 1px solid var(--border-subtle); text-align: left;')}>
+        + 'background: var(--menu-bg); border: 1px solid var(--border-subtle); text-align: left;')}>
         <div style={s('font-size: 13px; color: var(--ink); margin-bottom: 8px;')}>Ядро не отвечает</div>
         <div style={s('font-size: 10.5px; line-height: 1.6; color: var(--muted); margin-bottom: 16px;')}>
           Часть программы, которая считает, перестала отвечать. Окно живо, но
@@ -260,10 +260,18 @@ export default class Nakedlunch extends Component {
     // не показывал никто (инфографику вырезали в Раунде 50), и крупнейшая
     // ступень каскада была невидима.
     funnelLast: null,
+    // Состояние визуализатора — отдельная правда от `bcOn`: включённая кнопка
+    // ещё не означает, что WebGL и аудио действительно поднялись.
+    fsEngineState: 'idle', fsEngineError: '',
+    // Состояние расчёта видно постоянно. `genState` не заменяет серверный
+    // результат: он описывает только жизненный цикл текущего запроса и не
+    // позволяет выдать промежуточную цифру за доказанный максимум.
+    genState: 'idle', genPhase: '', genStartedAt: null, genElapsedMs: 0,
+    genError: '', genResult: null,
     // Форма пула: из чего сейчас будет выбираться. Спрашивается при движении
     // ручек с дебаунсом — живого предпросмотра выдачи нет (замер 3.7), а это
     // есть, и стоит единицы миллисекунд.
-    poolShape: null,
+    poolShape: null, poolShapeState: 'idle', poolShapeError: '', poolShapeUpdatedAt: null,
     // ярус сжатия шапки, 0..HDR_MAX; считает hdrFit по фактической ширине
     hdrTier: 0,
     // Раунд 39: фоновые работы (/api/status) и всё, что вернулось из потерянных
@@ -276,8 +284,11 @@ export default class Nakedlunch extends Component {
     // blackDraft вырезан (Раунд 63): поле-черновик чёрного списка не читал никто.
     favQ: '', histQ: '', favEdit: '', favUndo: '', histCfg: false, statsData: null, funnel: null, black: null };
 
-  DARK = { '--canvas': '#131313', '--ink': '#ededed', '--muted-hard': '#cfcfcf', '--muted': '#949494', '--muted-soft': '#5c5c5c', '--border-soft': '#3d3d3d', '--border-subtle': '#242424' };
-  LIGHT = { '--canvas': '#ffffff', '--ink': '#101010', '--muted-hard': '#222222', '--muted': '#555555', '--muted-soft': '#999999', '--border-soft': '#c8c8c8', '--border-subtle': '#e0e0e0' };
+  // --panel принадлежит слою изображения во freestyle. Фон меню вынесен в
+  // отдельную роль: иначе светлая тема либо красила сцену, либо оставляла
+  // тёмные панели с тёмным текстом.
+  DARK = { '--canvas': '#131313', '--menu-bg': '#1b1b1b', '--ink': '#ededed', '--muted-hard': '#cfcfcf', '--muted': '#949494', '--muted-soft': '#888888', '--border-soft': '#3d3d3d', '--border-subtle': '#242424', '--ok': '#82c69b', '--warn': '#e0b56e', '--danger': '#e27b7b', '--info': '#8dbddd' };
+  LIGHT = { '--canvas': '#ffffff', '--menu-bg': '#f6f6f6', '--ink': '#101010', '--muted-hard': '#222222', '--muted': '#555555', '--muted-soft': '#666666', '--border-soft': '#c8c8c8', '--border-subtle': '#e0e0e0', '--ok': '#287a45', '--warn': '#8b5e11', '--danger': '#a13737', '--info': '#245f85' };
   // ROLES (заголовки секций) и LETTERS вырезаны 2026-08-18 вместе с документом:
   // заголовок секции был строкой, которую генерация клала НАД строфой в лист, а
   // класть больше некуда. JMARK (значки стыков) ушёл раньше, вместе со стыками.
@@ -347,7 +358,17 @@ export default class Nakedlunch extends Component {
 
   // ---- вкладки ----
   // бегунок вкладок: ширину и место снимаем с активной кнопки, первый замер без анимации
-  tabsRef = (el) => { this._tabs = el; if (el) { this.moveTabInd(); setTimeout(() => this.moveTabInd(), 0); } };
+  tabsRef = (el) => {
+    this._tabs = el;
+    clearTimeout(this._tabFitT);
+    if (el) {
+      this.moveTabInd();
+      this._tabFitT = setTimeout(() => {
+        this._tabFitT = null;
+        if (this._mounted !== false) this.moveTabInd();
+      }, 0);
+    }
+  };
 
   // ---- шапка: ярус сжатия (Раунд 38) ----
   // Поле класса, а не метод: новая функция на каждый рендер заставляла бы React
@@ -489,7 +510,12 @@ export default class Nakedlunch extends Component {
     var self = this;
     clearTimeout(this._flashMsgT);
     this.setState({ flashMsg: msg });
-    this._flashMsgT = setTimeout(function () { self.setState({ flashMsg: '' }); }, 2000);
+    // Toast — дополнительный сигнал, а не единственное место, где живёт
+    // ошибка. Держим его дольше, чтобы не исчезал между переключением панели
+    // и чтением текста; важные ошибки дублируются в панели фоновых работ.
+    this._flashMsgT = setTimeout(function () {
+      if (self._mounted !== false) self.setState({ flashMsg: '' });
+    }, 5000);
   }
   // ВСЕ КЛАВИШИ ЛЕНТЫ ЖИВУТ В methods.lenta.js, И ЭТО ПОЧИНКА (2026-08-18).
   //
@@ -526,6 +552,7 @@ export default class Nakedlunch extends Component {
       grab(api.stanzaProfiles()),
       grab(api.history('')),
     ]);
+    if (this._mounted === false) return;
     // Сохранённых положений нет (чистая установка) — открываемся на П1, а не на
     // голых дефолтах (см. состояние выше). Есть сохранённые — берём их КАК
     // ЕСТЬ и ничего не подтягиваем:
@@ -609,18 +636,7 @@ export default class Nakedlunch extends Component {
 
   // ---- lifecycle ----
   componentDidMount() {
-    // ЛЮБАЯ ошибка окна — в журнал (Раунд 56). Консоли у pywebview нет, и без
-    // этого «не работает» приходит ко мне без единого слова о том, что именно.
-    if (typeof window !== 'undefined' && !window.__nlLogged) {
-      window.__nlLogged = true;
-      window.addEventListener('error', function (e) {
-        журнал('ошибка окна: ' + (e && e.message ? e.message : e) + ' @ ' + (e && e.filename ? e.filename : '?') + ':' + (e && e.lineno));
-      });
-      window.addEventListener('unhandledrejection', function (e) {
-        var r = e && e.reason;
-        журнал('необработанный отказ: ' + (r && r.message ? r.message : String(r)));
-      });
-    }
+    this._mounted = true;
     var self = this;
     injectBase();
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { self._tabInd = false; self.moveTabInd(); });
@@ -721,6 +737,7 @@ export default class Nakedlunch extends Component {
     // ни каретки больше нет.
   }
   componentWillUnmount() {
+    this._mounted = false;
     window.removeEventListener('keydown', this._keys);
     window.removeEventListener('resize', this._resize);
     window.removeEventListener('pointerdown', this._away, true);
@@ -728,12 +745,21 @@ export default class Nakedlunch extends Component {
     if (this._uiRAF) cancelAnimationFrame(this._uiRAF);
     this._uiRAF = 0;
     clearTimeout(this._flashMsgT);
+    clearTimeout(this._tabFitT);
+    clearInterval(this._genClock);
+    clearTimeout(this._формаT);
+    clearTimeout(this._буферДолитьT);
     clearTimeout(this._popT);
     // таймеры миксинов: подтверждение очистки истории, галочка профиля,
     // очередь mark_shown (автосохранение листа ушло вместе с листами)
     clearTimeout(this._confT);
     clearTimeout(this._flashT);
     clearTimeout(this._shownT);
+    clearTimeout(this._histReloadT);
+    clearTimeout(this._genProfT);
+    clearTimeout(this._profFlashT);
+    clearTimeout(this._логКопияT);
+    this.statusStop();
     // фристайл: зерно, интервалы, наблюдатели и поток камеры (methods.fs.js),
     // отложенная запись вида и сброс сцены (methods.fsprofiles.js), движок и
     // аудио-граф (methods.fsglue.js)

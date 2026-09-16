@@ -37,13 +37,14 @@ export const FONTS_BASE = ['JetBrains Mono', 'Georgia', 'Helvetica'];
 
 // рецепт кнопки-варианта в строках настроек — из renderVals дизайна (3410)
 export function pickStyle(a) {
-  return 'appearance: none; border: none; border-radius: var(--radius); padding: 3px 8px; font-size: 9px; letter-spacing: 0.01em; cursor: pointer; white-space: nowrap; transition: background-color 0.12s var(--ease), color 0.12s var(--ease); '
-    + (a ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 6.5%, transparent); color: var(--muted);');
+  return 'appearance: none; border: 1px solid; border-radius: var(--radius); padding: 1px 6px; font-family: inherit; font-size: 9px; letter-spacing: 0.01em; cursor: pointer; white-space: nowrap; transition: background-color 0.12s var(--ease), border-color 0.12s var(--ease), color 0.12s var(--ease); '
+    + (a ? 'border-color: var(--ink); background: var(--ink); color: var(--canvas);'
+         : 'border-color: var(--border-subtle); background: transparent; color: var(--muted);');
 }
 
 // одна настройка — одна строка: подпись слева, контрол справа, единая высота.
 // волосок ставим сверху всем, кроме первой, — так блок читается как список, а не как таблица
-const CFGROW = 'display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 2px 10px; padding: 7px 10px; min-height: 32px;';
+const CFGROW = 'display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 2px 7px; padding: 2px 8px; min-height: 20px;';
 
 // подсказка под подписью — только там, где название непонятно без объяснения
 function hint(it, text) { it.hint = text; return it; }
@@ -155,7 +156,7 @@ export const panelMethods = {
     var wide = opts.length > 3;
     return { label: label, isRange: false, isPick: true, show: '', min: 0, max: 1, step: 1, val: '0', onIn: function () {},
       optsStyle: 'display: flex; gap: 3px; justify-content: flex-end; align-items: center;' + (wide ? ' grid-column: 1 / -1; margin-top: 1px;' : ''),
-      opts: opts.map(function (o) { var lbl = o === true ? 'да' : (o === false ? 'нет' : String(o)); return { name: lbl, style: pickStyle(String(cur) === String(o)), onPick: function () { self.setCfg(key, o); } }; }) };
+      opts: opts.map(function (o) { var lbl = o === true ? 'да' : (o === false ? 'нет' : String(o)); var active = String(cur) === String(o); return { name: lbl, active: active, style: pickStyle(active), onPick: function () { self.setCfg(key, o); } }; }) };
   },
   cfgRowsCalc(items) {
     items.forEach(function (it, i) {
@@ -262,6 +263,7 @@ export const genProfileMethods = {
     var self = this;
     clearTimeout(this._genProfT);
     this._genProfT = setTimeout(function () {
+      if (self._mounted === false) return;
       var st = self.state;
       api.settingsSet({
         stanza: self.curSpec(),
@@ -356,11 +358,14 @@ export const genProfileMethods = {
       name = 'Моя строфа ' + n;
     }
     api.stanzaProfileSave(name, this.curSpec()).then(function (res) {
+      if (self._mounted === false) return;
       var forms = Object.assign({}, self.state.stanzaForms, { custom: (res && res.custom) || [] });
       self.setState({ stanzaForms: forms, stanzaProfile: name, profNameDraft: '', profSaveFlash: true },
         self.saveGenProfileSoon.bind(self));
       clearTimeout(self._profFlashT);
-      self._profFlashT = setTimeout(function () { self.setState({ profSaveFlash: false }); }, 1700);
+      self._profFlashT = setTimeout(function () {
+        if (self._mounted !== false) self.setState({ profSaveFlash: false });
+      }, 1700);
     }).catch(function (e) { self.flash(e && e.message ? e.message : String(e)); });
   },
 

@@ -5,165 +5,180 @@
 #   python tools/make_icon.py            → interface/icon/nakedlunch.icns
 #   python tools/make_icon.py --png 1024 → плюс interface/icon/preview-1024.png
 #
-# ЗНАК: строки текста, разрезанные вертикально; правая половина съехала на
-# строку вниз, нижняя завернулась наверх — это и есть cut-up, на котором стоит
-# вся программа. Левый край выключен, правый рваный: так выглядит стихотворение,
-# а не список дел.
+# ЯЗЫК: чёрное поле и процедурный светящийся рисунок. Короткие фрагменты — это
+# строки корпуса, собранные в несколько неровных рядов; диагональный розовый
+# срез — единственное крупное вмешательство. У отзвука позаимствована логика
+# фосфорных точек, у минимальмы — резкий неоновый контраст и воздух.
 #
-# ПОЧЕМУ рисуем каждый размер отдельно, а не давим 1024 вниз: на 16 pt четыре
-# строки по 0.9 px превращаются в серую кашу. Число строк выбирается по
-# ЭКРАННОМУ размеру (pt), а не по пикселям, иначе на ретине и без неё иконка
-# одного и того же размера выглядела бы по-разному. Всё, что мельче 64 px,
-# сажается на целые пиксели — иначе полосы мылятся.
-#
-# ФОРМА ПЛИТКИ сверена с системной иконкой (замер альфы Notes.app): контент
-# занимает 0.80 холста, угол ложится на суперэллипс n=5 с тем же отклонением,
-# что и на окружность (~4 px из 408). Круглые углы дали бы заметно другой силуэт.
-#
-# ЦВЕТА — палитра самого приложения (Nakedlunch.jsx, DARK): чернила #ededed
-# на холсте #131313, поэтому иконка и окно выглядят одним предметом.
+# Каждый размер рисуется отдельно. На 16 px сложный узор превращается в крупные
+# точки и короткие штрихи, поэтому знак остаётся живым пятном, а не серой кашей.
 import math
+import struct
 import subprocess
 import sys
 import tempfile
+import zlib
 from pathlib import Path
-
-from AppKit import (
-    NSBezierPath, NSBitmapImageRep, NSCalibratedRGBColorSpace, NSColor,
-    NSGradient, NSGraphicsContext,
-)
-from Foundation import NSMakePoint, NSMakeRect
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "interface" / "icon"
 
-INK = '#ededed'
-GND_TOP, GND_BOTTOM, GND_HAIR = '#1e1e1e', '#0c0c0c', '#3a3a3a'
-
-# длины строк как доля ширины блока — рваный правый край стихотворения
-RAGGED = {4: [1.00, 0.62, 0.90, 0.46], 3: [1.00, 0.60, 0.88], 2: [1.00, 0.58]}
-CUT_AT = 0.44          # где проходит рез, в долях ширины блока
-
-
-def color(h, alpha=1.0):
-    h = h.lstrip('#')
-    r, g, b = (int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
-    return NSColor.colorWithCalibratedRed_green_blue_alpha_(r, g, b, alpha)
+ФОН = (0x05, 0x07, 0x09)
+ЗЕЛЁНЫЙ = (0xB2, 0xFF, 0x78)
+ЗЕЛЁНЫЙ_ТЁМНЫЙ = (0x4E, 0xB5, 0x6D)
+ЦИАН = (0x14, 0xD8, 0xE8)
+РОЗОВЫЙ = (0xF5, 0x0D, 0x8B)
 
 
-def squircle(x, y, side, n=5.0, steps=1440):
-    """Суперэллипс — приближение непрерывной кривизны системных иконок."""
-    p = NSBezierPath.bezierPath()
-    c, a = x + side / 2.0, side / 2.0
-    cy = y + side / 2.0
-    for i in range(steps):
-        t = 2.0 * math.pi * i / steps
-        ct, st = math.cos(t), math.sin(t)
-        px = c + a * math.copysign(abs(ct) ** (2.0 / n), ct)
-        py = cy + a * math.copysign(abs(st) ** (2.0 / n), st)
-        p.moveToPoint_(NSMakePoint(px, py)) if i == 0 else p.lineToPoint_(NSMakePoint(px, py))
-    p.closePath()
-    return p
+def шум(x, y, seed=0):
+    """Стабильный целочисленный шум: случайность здесь не нужна."""
+    n = (x * 374761393 + y * 668265263 + seed * 1442695041) & 0xffffffff
+    n = ((n ^ (n >> 13)) * 1274126177) & 0xffffffff
+    n ^= n >> 16
+    return (n & 0xffff) / 65535.0
 
 
-def draw(S, rows):
-    """S — сторона в пикселях, rows — число строк для этого экранного размера."""
-    snap = S <= 64
-    inset = S * 100.0 / 1024.0
-    path = squircle(inset, inset, S - 2 * inset)
-
-    # плитка: почти плоская, с еле заметным градиентом — предмет, не заливка
-    NSGradient.alloc().initWithStartingColor_endingColor_(color(GND_TOP), color(GND_BOTTOM)) \
-        .drawInBezierPath_angle_(path, -90.0)
-    if S >= 128:                                   # волосок мельче — просто грязь
-        color(GND_HAIR).setStroke()
-        path.setLineWidth_(max(1.0, S / 512.0))
-        path.stroke()
-        ctx = NSGraphicsContext.currentContext()   # блик на верхней грани:
-        ctx.saveGraphicsState()                    # без него почти чёрный квадрат
-        NSBezierPath.bezierPathWithRect_(          # читается в доке как дыра
-            NSMakeRect(0, S * 0.56, S, S * 0.44)).addClip()
-        NSColor.colorWithCalibratedWhite_alpha_(1.0, 0.10).setStroke()
-        path.setLineWidth_(max(1.0, S / 190.0))
-        path.stroke()
-        ctx.restoreGraphicsState()
-
-    ink = color(INK)
-    rag = RAGGED[rows]
-    k = (4.0 / rows) ** 0.55                       # меньше строк — толще полосы
-    m, bh, gap = S * 0.20, S * 0.062 * k, S * 0.062 * k
-    if snap:
-        m, bh, gap = round(m), max(1, round(bh)), max(1, round(gap))
-    pitch = bh + gap
-    block = rows * bh + (rows - 1) * gap
-    y0 = round((S - block) / 2.0) if snap else (S - block) / 2.0
-    width = S - 2 * m
-    cut = m + width * CUT_AT
-    gut = max(1, round(S * 0.028)) if snap else S * 0.014   # рез, а не колонка
-
-    def bar(x, y, w, h):
-        if snap:
-            x, y, w, h = round(x), round(y), max(1, round(w)), max(1, round(h))
-        ink.setFill()
-        NSBezierPath.bezierPathWithRect_(NSMakeRect(x, y, w, h)).fill()
-
-    for i in range(rows):
-        y = y0 + (rows - 1 - i) * pitch            # сверху вниз
-        end = m + width * rag[i]
-        bar(m, y, min(end, cut) - m, bh)           # левая половина на месте
-        if end > cut + gut:
-            ry = y - pitch                         # правая съехала на строку
-            if ry < y0 - 0.5:
-                ry += rows * pitch                 # нижняя завернулась наверх
-            bar(cut + gut, ry, end - (cut + gut), bh)
+def клеток(размер):
+    return 22 if размер >= 256 else 18 if размер >= 128 else \
+           14 if размер >= 64 else 10 if размер >= 32 else 7
 
 
-def render(px, rows, path):
-    rep = NSBitmapImageRep.alloc().initWithBitmapDataPlanes_pixelsWide_pixelsHigh_bitsPerSample_samplesPerPixel_hasAlpha_isPlanar_colorSpaceName_bytesPerRow_bitsPerPixel_(
-        None, px, px, 8, 4, True, False, NSCalibratedRGBColorSpace, 0, 0)
-    rep.setSize_((px, px))
-    ctx = NSGraphicsContext.graphicsContextWithBitmapImageRep_(rep)
-    NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.setCurrentContext_(ctx)
-    ctx.setShouldAntialias_(True)
-    draw(float(px), rows)
-    ctx.flushGraphics()
-    NSGraphicsContext.restoreGraphicsState()
-    rep.representationUsingType_properties_(4, {}).writeToFile_atomically_(str(path), True)
+def цвет(a, b, доля):
+    return tuple(round(x + (y - x) * доля) for x, y in zip(a, b))
 
 
-# (имя файла, пиксели, строк) — строк выбираем по ЭКРАННОМУ размеру: 16 pt и его
-# @2x рисуются одинаково, иначе на ретине иконка выглядела бы иначе, чем без неё
+def точка(пиксели, размер, cx, cy, радиус, rgb):
+    """Круглая люминофорная точка с целыми границами."""
+    x0 = max(0, int(cx - радиус - 1))
+    x1 = min(размер - 1, int(cx + радиус + 1))
+    y0 = max(0, int(cy - радиус - 1))
+    y1 = min(размер - 1, int(cy + радиус + 1))
+    r2 = радиус * радиус
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            if (x + .5 - cx) ** 2 + (y + .5 - cy) ** 2 <= r2:
+                i = (y * размер + x) * 3
+                пиксели[i:i + 3] = bytes(rgb)
+
+
+def штрих(пиксели, размер, x, y, ширина, высота, rgb):
+    x0 = max(0, int(x))
+    x1 = min(размер, int(x + ширина + .999))
+    y0 = max(0, int(y))
+    y1 = min(размер, int(y + высота + .999))
+    for py in range(y0, y1):
+        начало = (py * размер + x0) * 3
+        конец = (py * размер + x1) * 3
+        пиксели[начало:конец] = bytes(rgb) * (x1 - x0)
+
+
+def срез(пиксели, размер, x0, y0, x1, y1, ширина, rgb):
+    длина = math.hypot(x1 - x0, y1 - y0)
+    шаги = max(1, round(длина * 2))
+    for i in range(шаги + 1):
+        t = i / шаги
+        точка(пиксели, размер, x0 + (x1 - x0) * t,
+              y0 + (y1 - y0) * t, ширина, rgb)
+
+
+def рисунок(размер):
+    """Светящиеся фрагменты строк: плотный центр, рваные края, один срез."""
+    сетка = клеток(размер)
+    клетка = размер / сетка
+    пиксели = bytearray(bytes(ФОН) * (размер * размер))
+
+    # Неровные строки читаются как текстовый материал, но не превращаются в
+    # буквальную пиктограмму документа. У каждой строки свой ритм и длина.
+    рядов = 7 if размер >= 128 else 6 if размер >= 32 else 5
+    for ряд in range(рядов):
+        y = размер * (0.335 + ряд * 0.073)
+        старт = размер * (0.17 + (ряд % 3) * 0.024)
+        сдвиг = клетка * ((ряд * 3) % 5) * 0.16
+        for колонка in range(сетка):
+            x = старт + колонка * клетка * 0.72 + сдвиг
+            if x >= размер * 0.84:
+                continue
+            сила = шум(колонка, ряд, 17)
+            порог = 0.25 + abs(ряд - (рядов - 1) / 2) * 0.045
+            if сила < порог:
+                continue
+            длина = клетка * (0.23 + шум(колонка, ряд, 31) * 0.58)
+            высота = max(1.0, размер * (0.006 + шум(колонка, ряд, 47) * 0.012))
+            центр = 1.0 - abs(колонка - (сетка - 1) / 2) / сетка
+            if сила > .86:
+                rgb = ЦИАН
+            elif шум(колонка, ряд, 61) > .91:
+                rgb = РОЗОВЫЙ
+            else:
+                rgb = цвет(ЗЕЛЁНЫЙ_ТЁМНЫЙ, ЗЕЛЁНЫЙ, min(1.0, сила * .72 + центр * .35))
+            штрих(пиксели, размер, x, y + (шум(колонка, ряд, 73) - .5) * высота,
+                   длина, высота, rgb)
+            # Внутри некоторых фрагментов появляется отдельный яркий
+            # фосфорный пиксель — он держит характер отзвука на мелких px.
+            if сила > .70:
+                точка(пиксели, размер, x + длина, y + высота / 2,
+                      max(.55, размер * .006 * (1 + центр)), rgb)
+
+    # Один крупный цветовой разрез пересекает материал, но не обрамляет его и
+    # не превращается в декоративную полосу. На малом размере это один пиксель.
+    срез(пиксели, размер, размер * .36, размер * .70,
+         размер * .65, размер * .30, max(.65, размер * .010), РОЗОВЫЙ)
+    точка(пиксели, размер, размер * .36, размер * .70,
+          max(.9, размер * .018), ЦИАН)
+    return bytes(пиксели)
+
+
+def png(путь, размер, пиксели):
+    строки = b''.join(b'\x00' + пиксели[y * размер * 3:(y + 1) * размер * 3]
+                      for y in range(размер))
+
+    def кусок(имя, данные):
+        тело = имя + данные
+        return (struct.pack('>I', len(данные)) + тело
+                + struct.pack('>I', zlib.crc32(тело) & 0xffffffff))
+
+    путь.write_bytes(
+        b'\x89PNG\r\n\x1a\n'
+        + кусок(b'IHDR', struct.pack('>IIBBBBB', размер, размер, 8, 2, 0, 0, 0))
+        + кусок(b'IDAT', zlib.compress(строки, 9))
+        + кусок(b'IEND', b'')
+    )
+
+
+# (имя файла, пиксели) — @2x получает тот же рисунок, чтобы Retina и обычный
+# экран не показывали две разные иконки.
 ICONSET = [
-    ('icon_16x16.png', 16, 2), ('icon_16x16@2x.png', 32, 2),
-    ('icon_32x32.png', 32, 3), ('icon_32x32@2x.png', 64, 3),
-    ('icon_128x128.png', 128, 4), ('icon_128x128@2x.png', 256, 4),
-    ('icon_256x256.png', 256, 4), ('icon_256x256@2x.png', 512, 4),
-    ('icon_512x512.png', 512, 4), ('icon_512x512@2x.png', 1024, 4),
+    ('icon_16x16.png', 16), ('icon_16x16@2x.png', 32),
+    ('icon_32x32.png', 32), ('icon_32x32@2x.png', 64),
+    ('icon_128x128.png', 128), ('icon_128x128@2x.png', 256),
+    ('icon_256x256.png', 256), ('icon_256x256@2x.png', 512),
+    ('icon_512x512.png', 512), ('icon_512x512@2x.png', 1024),
 ]
 
 
 def main() -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    icns = OUT_DIR / "nakedlunch.icns"
+    icns = OUT_DIR / 'nakedlunch.icns'
     with tempfile.TemporaryDirectory() as tmp:
-        iconset = Path(tmp) / "nakedlunch.iconset"
+        iconset = Path(tmp) / 'nakedlunch.iconset'
         iconset.mkdir()
-        for name, px, rows in ICONSET:
-            render(px, rows, iconset / name)
-        r = subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(icns)])
-        if r.returncode != 0:
-            print("iconutil не собрал .icns", file=sys.stderr)
+        готовые = {}
+        for name, размер in ICONSET:
+            готовые.setdefault(размер, рисунок(размер))
+            png(iconset / name, размер, готовые[размер])
+        result = subprocess.run(['iconutil', '-c', 'icns', str(iconset), '-o', str(icns)])
+        if result.returncode != 0:
+            print('iconutil не собрал .icns', file=sys.stderr)
             return 1
-    print(icns, icns.stat().st_size, "байт")
-    if "--png" in sys.argv:
-        i = sys.argv.index("--png")
-        px = int(sys.argv[i + 1]) if len(sys.argv) > i + 1 else 1024
-        prev = OUT_DIR / f"preview-{px}.png"
-        render(px, 4, prev)
-        print(prev)
+    print(icns, icns.stat().st_size, 'байт')
+    if '--png' in sys.argv:
+        i = sys.argv.index('--png')
+        размер = int(sys.argv[i + 1]) if len(sys.argv) > i + 1 else 1024
+        preview = OUT_DIR / f'preview-{размер}.png'
+        png(preview, размер, рисунок(размер))
+        print(preview)
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())

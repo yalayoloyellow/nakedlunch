@@ -190,10 +190,11 @@ export const fsMethods = {
   // догоняющие перерисовки: кадр, оба типичных момента подгрузки шрифта и готовность шрифтов
   bandLater() {
     var self = this;
-    requestAnimationFrame(function () { self.paintBand(); });
-    setTimeout(function () { self.paintBand(); }, 160);
-    setTimeout(function () { self.paintBand(); }, 520);
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { self.paintBand(); });
+    var paint = function () { if (self._mounted !== false && self._fsWrap) self.paintBand(); };
+    requestAnimationFrame(paint);
+    setTimeout(paint, 160);
+    setTimeout(paint, 520);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(paint);
   },
   // текст слоёв строки — императивно (React рендерит их пустыми): слои читает
   // и движок, и paintBand по фактическим прямоугольникам.
@@ -448,7 +449,7 @@ export const fsMethods = {
   },
   // дозаказ в фоне: одна заявка за раз, тяжёлую генерацию редактора не перебиваем
   fsFill() {
-    if (this._fsFetching) return;
+    if (this._mounted === false || this._fsFetching) return;
     if (this.state.tab !== 'fs') return;
     var self = this;
     // Тяжёлую генерацию редактора не перебиваем — но и заявку не бросаем:
@@ -456,7 +457,7 @@ export const fsMethods = {
     // (автосмена по умолчанию выключена, а fsSeed срабатывает один раз за вход)
     if (this._busy) {
       clearTimeout(this._fsRetryT);
-      this._fsRetryT = setTimeout(function () { self._fsRetryT = null; self.fsFill(); }, 600);
+      this._fsRetryT = setTimeout(function () { self._fsRetryT = null; if (self._mounted !== false) self.fsFill(); }, 600);
       return;
     }
     this._fsFetching = true;
@@ -471,6 +472,7 @@ export const fsMethods = {
     this._fsFilled = true;
     this.genFsLines(сколько).then(function (rows) {
       self._fsFetching = false;
+      if (self._mounted === false || self.state.tab !== 'fs') return;
       // Числа снимаем С РАБОЧЕЙ МАШИНЫ: взять их иначе негде, а гадать про
       // его нагрузку я уже пробовала — вышло три круга (см. журнал движка).
       журнал('фристайл: пачка ' + (rows ? rows.length : 0) + ' строк за '
@@ -501,6 +503,7 @@ export const fsMethods = {
       if (!self._lineTxt) self.fsAdvance();
     }, function (e) {
       self._fsFetching = false;
+      if (self._mounted === false || self.state.tab !== 'fs') return;
       // поток фристайла не должен молча вставать: первый отказ показываем
       if (!self._fsErrFlashed) { self._fsErrFlashed = true; self.flash(e && e.message ? e.message : String(e)); }
     });
@@ -804,10 +807,15 @@ export const fsMethods = {
   // который на каждой смене переписывает стили слоёв, незачем. Замер кадров
   // ниже оставлен — он стоит один rAF-цикл и в следующий раз ответит сразу.
   fsКадры() {
-    if (this._кадрыИдут || typeof requestAnimationFrame !== 'function') return;
+    if (this._кадрыИдут || this._mounted === false || typeof requestAnimationFrame !== 'function') return;
     this._кадрыИдут = true;
     var self = this, прошлый = 0, ждём = 0, n = 0;
     (function тик(t) {
+      if (self._mounted === false || self.state.tab !== 'fs') {
+        self._кадрыИдут = false;
+        self._кадрыRAF = 0;
+        return;
+      }
       if (прошлый) {
         var d = t - прошлый;
         if (ждём) {
@@ -824,7 +832,7 @@ export const fsMethods = {
       }
       прошлый = t;
       if (self._сменаБыла) { self._сменаБыла = false; ждём = 1; }
-      requestAnimationFrame(тик);
+      self._кадрыRAF = requestAnimationFrame(тик);
     })(typeof performance !== 'undefined' ? performance.now() : Date.now());
   },
 
@@ -1035,15 +1043,27 @@ export const fsMethods = {
       window.dispatchEvent(new Event('resize'));
       this.sizeBuffers();
       var self = this;
-      setTimeout(function () { self.sizeBuffers(); }, 120);
+      clearTimeout(this._fitT);
+      this._fitT = setTimeout(function () {
+        self._fitT = null;
+        if (self._mounted !== false && self.state.tab === 'fs') self.sizeBuffers();
+      }, 120);
     }
     this.fitLine();
   },
   // движок вешает свой resize и мерит канвас по окну — переписываем буферы после него
   watchStage() {
     if (this._stageWatch) return;
-    var self = this, again = function () { requestAnimationFrame(function () { self.sizeBuffers(); }); };
-    this._stageWatch = function () { self.sizeBuffers(); again(); setTimeout(again, 60); };
+    var self = this, again = function () {
+      if (self._mounted === false || self.state.tab !== 'fs') return;
+      requestAnimationFrame(function () { if (self._mounted !== false && self.state.tab === 'fs') self.sizeBuffers(); });
+    };
+    this._stageWatch = function () {
+      if (self._mounted === false || self.state.tab !== 'fs') return;
+      self.sizeBuffers(); again();
+      clearTimeout(self._stageFitT);
+      self._stageFitT = setTimeout(again, 60);
+    };
     window.addEventListener('resize', this._stageWatch);
     var stage = this.fsStage();
     if (stage && window.ResizeObserver) {
@@ -1115,15 +1135,27 @@ export const fsMethods = {
     try {
       var want = this.state.camId;
       var st = await navigator.mediaDevices.getUserMedia({ video: want ? { deviceId: { exact: want } } : true, audio: false });
+      if (this._mounted === false) {
+        st.getTracks().forEach(function (t) { t.stop(); });
+        return;
+      }
       this.camStop(true);
       this._camStream = st;
       if (this._cam) { this._cam.srcObject = st; this._cam.play().catch(function () {}); }
       var devs = await navigator.mediaDevices.enumerateDevices();
+      if (this._mounted === false) {
+        st.getTracks().forEach(function (t) { t.stop(); });
+        if (this._camStream === st) this._camStream = null;
+        if (this._cam) this._cam.srcObject = null;
+        return;
+      }
       var cams = devs.filter(function (d) { return d.kind === 'videoinput'; })
         .map(function (d, i) { return { id: d.deviceId, name: d.label || ('камера ' + (i + 1)) }; });
       var track = st.getVideoTracks()[0];
       this.setState({ camOn: true, camList: cams, camId: want || (track && track.getSettings ? track.getSettings().deviceId : '') || (cams[0] && cams[0].id) || '' });
-    } catch (e) { this.setState({ camOn: false, camErr: 1 }); }
+    } catch (e) {
+      if (this._mounted !== false) this.setState({ camOn: false, camErr: 1 });
+    }
   },
   camStop(keepFlag) {
     if (this._camStream) { this._camStream.getTracks().forEach(function (t) { t.stop(); }); this._camStream = null; }
@@ -1239,6 +1271,11 @@ export const fsMethods = {
 
   // таймеры и потоки сцены гасим явно: componentWillUnmount интегратора их не знает
   fsUnmount() {
+    clearTimeout(this._fitT); this._fitT = null;
+    clearTimeout(this._stageFitT); this._stageFitT = null;
+    if (this._кадрыRAF) cancelAnimationFrame(this._кадрыRAF);
+    this._кадрыRAF = 0;
+    this._кадрыИдут = false;
     if (this._grainRAF) cancelAnimationFrame(this._grainRAF);
     this._grainRAF = 0;
     clearInterval(this._autoT); this._autoT = null;

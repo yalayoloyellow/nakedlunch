@@ -42,6 +42,34 @@ import сдвиг as _сдвиг
 _ГЛАСНЫЕ = "аеёиоуыэюя"
 
 
+def _недоступные_ворота(idx, *, редкость_слова=None, редкость_пары=None,
+                        внутр_рифма: int = 0, перекличка: int = 0,
+                        плотность=None, позиции_рифмы: int = 0) -> list[str]:
+    """Назвать включённые гейты, для которых в индексе нет колонки.
+
+    Отсутствующая колонка — это не «ручка ничего не сделала». Это неизвестное
+    условие, поэтому строгий отбор обязан дать пустой результат, а интерфейс —
+    назвать причину отдельно. Функция держит этот договор в одном месте для
+    маски, предпросмотра, воронки и прямой тяги.
+    """
+    нет: list[str] = []
+    if редкость_слова and getattr(idx, "rare_word", None) is None:
+        нет.append("редкость слов")
+    if редкость_пары and getattr(idx, "rare_pair", None) is None:
+        нет.append("редкость сочетаний")
+    if внутр_рифма and getattr(idx, "inner", None) is None:
+        нет.append("внутренняя рифма")
+    if перекличка and getattr(idx, "echo", None) is None:
+        нет.append("перекличка")
+    if плотность and getattr(idx, "dens", None) is None:
+        нет.append("плотность звука")
+    поз = int(позиции_рифмы or 0) & 7
+    if поз and поз != 1 and any(getattr(idx, к, None) is None
+                                for к in ("wk_ids", "wk_pos", "wk_off")):
+        нет.append("позиция рифмы")
+    return нет
+
+
 def _подрезать(строка: str, вилка, ворота: dict):
     """Отрезать голову, пока строка не влезет в вилку слогов. None — не вышло.
 
@@ -207,6 +235,7 @@ class Index:
         self.keys = meta.get("keys") or []
         self.lemmas = meta.get("lemmas") or []
         self.tokens = meta.get("tokens") or []
+        self._lem_id: dict[str, int] | None = None
         load = lambda name: np.load(d / f"{name}.npy", mmap_mode="r")  # noqa: E731
         self.banal = load("banal")
         self.taut = load("taut")
@@ -613,6 +642,11 @@ class Index:
         то есть мнение автора кода о том, что затаскано.
         2026-08-20: ступень БАНАЛЬНОСТИ убрана вместе с ручкой, и параметр
         `ворота` снят с сигнатуры — см. надгробие в начале файла."""
+        if _недоступные_ворота(
+                self, редкость_слова=редкость_слова, редкость_пары=редкость_пары,
+                внутр_рифма=внутр_рифма, перекличка=перекличка,
+                плотность=плотность):
+            return np.zeros(self.n, dtype=bool)
         m = (np.asarray(self.taut) == 0) & self.whole_mask()
         # СТРОКА ОБЯЗАНА ИМЕТЬ ХОТЯ БЫ ДВА ОБЫЧНЫХ СЛОВА (Раунд 57).
         #
@@ -774,7 +808,13 @@ def штамп(idx=None) -> str:
     idx = idx if idx is not None else load()
     if idx is None:
         return "без индекса"
-    return f"{idx.n}@{idx.отпечаток()}"
+    # Маленькие тестовые/внешние индексы могут реализовывать только старый
+    # минимальный протокол (`n`, без отпечатка). Штамп — диагностическое поле,
+    # он не должен превращать саму выдачу в 500.
+    отпечаток = getattr(idx, "отпечаток", None)
+    if callable(отпечаток):
+        return f"{idx.n}@{отпечаток()}"
+    return f"{idx.n}@без-отпечатка"
 
 
 # ---------------------------------------------------------------------------
@@ -936,13 +976,33 @@ def select(idx, *, pool_mask, hidden_mask,
     счёт = {"корпус": int(idx.n),
             "твои_книги": int(pool_mask.sum()),
             "показано": int((pool_mask & hidden_mask).sum()),
-            "ворота": int(len(table_ids)), "пул": n_survived}
+            "ворота": int(len(table_ids)), "пул": n_survived,
+            "недоступные_ворота": list(_недоступные_ворота(
+                idx, редкость_слова=редкость_слова, редкость_пары=редкость_пары,
+                внутр_рифма=внутр_рифма, перекличка=перекличка,
+                плотность=плотность, позиции_рифмы=позиции_рифмы))}
     порядок = np.arange(len(ids))
 
     # ПРЯМАЯ ТЯГА — БЕЗ ПАЧКИ ВООБЩЕ (2026-08-20, единственный путь с
     # 2026-08-29). Строфа тянется здесь целиком: разворачиваем в строку только
     # выбранное. Разбор — в `тянуть_строфы`.
     if тянуть_сразу > 0 and syllable_spec:
+        if счёт["недоступные_ворота"]:
+            # `позиции_рифмы` — формальный гейт сборщика, а не аргумент
+            # старого `gate_mask`, поэтому `n_survived` уже посчитан по
+            # остальным колонкам. Для общего контракта воронки это не пул:
+            # ни одна из этих строк не может участвовать в данном запросе.
+            n_survived = 0
+            счёт["пул"] = 0
+            счёт.update({"жребий": 0, "резерв": 0, "в_сборку": 0,
+                         "предел_жребия": 0,
+                         "поиск_завершён": False,
+                         "максимум_доказан": False,
+                         "поиск_ограничен": 0,
+                         "верхняя_оценка_строф": None,
+                         "неполных_блоков": None,
+                         "узлы_поиска": 0, "тяга": 0})
+            return [], n_survived, {}, счёт
         строки = тянуть_строфы(idx, ids, syllable_spec, схема, int(тянуть_сразу), rng,
                                mat_share=mat_share, repeat_ok=repeat_ok, счёт=счёт,
                                ярусы_рифмы=ярусы_рифмы, доли_клаузул=доли_клаузул,
@@ -1033,7 +1093,7 @@ def корзина_яруса(маска: int):
     return None
 
 
-def тянуть_строфы(idx, ids, syllable_spec, схема, size, rng, *,
+def _тянуть_строфы_старый(idx, ids, syllable_spec, схема, size, rng, *,
                   mat_share=-1.0, repeat_ok=False,
                   счёт=None, ярусы_рифмы: int = 3, доли_клаузул=None, позиции_рифмы=0,
                   доли_позиций=None, доли_ярусов=None, подрезка=None):
@@ -1416,7 +1476,7 @@ def тянуть_строфы(idx, ids, syllable_spec, схема, size, rng, *,
         сколько = min(блок, size - начало)
         взятые: list = []
         леммы: set = set()
-        ключи_буквы: dict = {}
+        старые_ключи_буквы: dict = {}
         for поз in range(сколько):
             буква = схема[поз] if поз < len(схема) else ""
             вилка = вилки[поз % len(вилки)]
@@ -1441,10 +1501,10 @@ def тянуть_строфы(idx, ids, syllable_spec, схема, size, rng, *,
             # можно, только найдя партнёра, то есть проделав работу дважды.
             # Долг гасится по факту ниже, и очередь сама себя выправляет.
             свой_ярус = None
-            if жребий_ярусов is not None and буква not in ключи_буквы:
+            if жребий_ярусов is not None and буква not in старые_ключи_буквы:
                 свой_ярус = жребий_ярусов.следующий()
             свой_сорт = None
-            if жребий_клаузул is not None and буква not in ключи_буквы:
+            if жребий_клаузул is not None and буква not in старые_ключи_буквы:
                 свой_сорт = жребий_клаузул.следующий(
                     доступен=lambda б: тянуть(вилка, хочу_мат=хочу_мат,
                                               хочу_клаузулу=int(б).bit_length()) is not None)
@@ -1477,8 +1537,8 @@ def тянуть_строфы(idx, ids, syllable_spec, схема, size, rng, *,
                 if поле_сейчас is None or not len(поле_сейчас):
                     поле_сейчас, группы_сейчас = поле_вилки(вилка, 0)
                     запас = 0
-                if буква in ключи_буквы:
-                    гб, тб, кб, яб = ключи_буквы[буква]
+                if буква in старые_ключи_буквы:
+                    гб, тб, кб, яб = старые_ключи_буквы[буква]
                     # ПАРТНЁР ПРЕДПОЧИТАЕТ КОНЦОВКУ ПЕРВОЙ СТРОКИ ГРУППЫ. На
                     # точном ярусе она и так одна на двоих (ключи равны), а на
                     # широких ярусах ключи разной длины дают разные концовки —
@@ -1573,8 +1633,8 @@ def тянуть_строфы(idx, ids, syllable_spec, схема, size, rng, *,
                 # `ярус_пары`, что и ворота: второй формулы для одного правила
                 # в проекте быть не должно, даже ради скорости (зов один на
                 # взятую строку, а не на кандидата).
-                if буква in ключи_буквы and ключи_буквы[буква][1]:
-                    я = ярус_пары(idx.keys[int(ключи_буквы[буква][1][0])],
+                if буква in старые_ключи_буквы and старые_ключи_буквы[буква][1]:
+                    я = ярус_пары(idx.keys[int(старые_ключи_буквы[буква][1][0])],
                                   idx.keys[int(key[j])])
                     имя = {ЯРУС_ТОЧНАЯ: "ярус_точных", ЯРУС_БЛИЗКАЯ: "ярус_близких",
                            ЯРУС_СОЗВУЧИЕ: "ярус_созвучий",
@@ -1583,7 +1643,7 @@ def тянуть_строфы(idx, ids, syllable_spec, схема, size, rng, *,
                         счёт[имя] = счёт.get(имя, 0) + 1
                         if жребий_ярусов is not None:
                             жребий_ярусов.взять(я)
-                з = ключи_буквы.setdefault(
+                з = старые_ключи_буквы.setdefault(
                     буква, [int(гк[j]), [], int(клау[j]) if клау is not None else 0,
                             int(свой_ярус or 0)])
                 з[1].append(int(key[j]))
@@ -1603,8 +1663,8 @@ def тянуть_строфы(idx, ids, syllable_spec, схема, size, rng, *,
                 # короче, и это честно: дубль в строфе хуже недостающей строки,
                 # а вызывающий пустые позиции уже отбрасывает (см. `если` ниже).
                 for _ in range(ПОПЫТОК):
-                    if буква in ключи_буквы:
-                        гб, тб, _кб, _яб = ключи_буквы[буква]
+                    if буква in старые_ключи_буквы:
+                        гб, тб, _кб, _яб = старые_ключи_буквы[буква]
                         j = тянуть(вилка, ключ=гб, хочу_мат=None, занятые=тб)
                     else:
                         j = тянуть(вилка, хочу_мат=None)
@@ -1646,7 +1706,7 @@ def тянуть_строфы(idx, ids, syllable_spec, схема, size, rng, *,
                     # приходят, когда обычный отбор не дал ничего, и просить у
                     # партнёра ещё и ярус значит доломать то, что и так еле
                     # собралось.
-                    з = ключи_буквы.setdefault(
+                    з = старые_ключи_буквы.setdefault(
                         буква, [int(гк[j]), [],
                                 int(клау[j]) if клау is not None else 0, 0])
                     з[1].append(int(key[j]))
@@ -1731,6 +1791,727 @@ def _леммы_строки(idx, i: int) -> set:
     if i + 1 >= len(off):
         return set()
     return set(np.asarray(idx.lem_ids[int(off[i]):int(off[i + 1])]).tolist())
+
+
+def _леммы_текста(idx, текст: str) -> set | None:
+    """Леммы уже изменённого текста в пространстве индекса.
+
+    У исходной строки леммы лежат в колонке. После роста это уже другой текст,
+    поэтому брать старый срез `lem_ids` нельзя: добавленное слово иначе
+    проходит сквозь запрет повторов. Если морфология не смогла разобрать текст,
+    изменение отбрасывается консервативно.
+    """
+    try:
+        имена = _сдвиг._леммы(текст)
+    except Exception:
+        return None
+    if not имена:
+        return None
+    словарь = getattr(idx, "_lem_id", None)
+    if словарь is None:
+        леммы = getattr(idx, "lemmas", None)
+        if not леммы:
+            return None
+        словарь = {str(лемма): i for i, лемма in enumerate(леммы)}
+        try:
+            idx._lem_id = словарь
+        except Exception:
+            pass
+    return {словарь[имя] for имя in имена if имя in словарь}
+
+
+def тянуть_строфы(idx, ids, syllable_spec, схема, size, rng, *,
+                  mat_share=-1.0, repeat_ok=False,
+                  счёт=None, ярусы_рифмы: int = 3, доли_клаузул=None, позиции_рифмы=0,
+                  доли_позиций=None, доли_ярусов=None, подрезка=None):
+    """Найти максимум полных строф в переданном пуле.
+
+    Внутри остаётся случайный порядок кандидатов, но случайность больше не
+    решает, «повезло ли найти пару»: поиск перебирает все альтернативы, пока
+    не соберёт запрошенное число блоков или не докажет, что следующий блок
+    невозможен. Строка с несколькими допустимыми рифмо-ключами считается один
+    раз; ключ — только выбранное доказательство совместимости.
+    """
+    счёт = счёт if счёт is not None else {}
+    блок = max(1, len(схема), len(syllable_spec))
+    вилки = [tuple(r) for r in syllable_spec] or [(1, 99)]
+    целевой_размер = max(1, int(size))
+    целевые_блоки = max(1, (целевой_размер + блок - 1) // блок)
+    строки_ид = np.asarray(ids, dtype=np.int64)
+    n = len(строки_ид)
+
+    недоступные = _недоступные_ворота(
+        idx, внутр_рифма=0, перекличка=0, позиции_рифмы=позиции_рифмы)
+    if недоступные:
+        счёт.update({"недоступные_ворота": недоступные,
+                     "поиск_завершён": False, "максимум_доказан": False,
+                     "поиск_ограничен": 0, "неполных_блоков": целевые_блоки,
+                     "верхняя_оценка_строф": None, "узлы_поиска": 0,
+                     "тяга": 0})
+        return []
+
+    if not n:
+        счёт.update({"поиск_завершён": True, "максимум_доказан": True,
+                     "поиск_ограничен": 0, "неполных_блоков": целевые_блоки,
+                     "верхняя_оценка_строф": 0, "узлы_поиска": 0, "тяга": 0})
+        return []
+
+    row_syl = np.asarray(idx.syl)[строки_ид]
+    row_mat = np.asarray(getattr(idx, "mat", np.zeros(n, dtype=np.uint8)))[строки_ид]
+    row_clau = np.asarray(getattr(idx, "clau", np.ones(n, dtype=np.int8)))[строки_ид]
+    pos_mask = int(позиции_рифмы or 0) & 7
+    has_wk = all(getattr(idx, k, None) is not None
+                 for k in ("wk_ids", "wk_pos", "wk_off"))
+    # Даже «только конечная» должна брать именно ключ последнего слова. В
+    # старых данных `key_id` мог быть единственным ключом строки, хотя он
+    # относился к внутреннему слову; при наличии wk_* это различие видно.
+    expanded = bool(pos_mask and has_wk)
+
+    # Опции — это рифмо-ключи строки, а не независимые кандидаты. Такой
+    # разворот нужен только для оси позиции; без неё у строки один ключ.
+    if expanded:
+        off = np.asarray(idx.wk_off)
+        eligible_rows = np.flatnonzero(np.logical_or.reduce([
+            (row_syl >= lo) & (row_syl <= hi) for lo, hi in вилки]))
+        if len(eligible_rows):
+            counts = off[строки_ид[eligible_rows] + 1] - off[строки_ид[eligible_rows]]
+            flat = np.concatenate([
+                np.arange(int(a), int(b), dtype=np.int64)
+                for a, b in zip(off[строки_ид[eligible_rows]],
+                                 off[строки_ид[eligible_rows] + 1])
+                if b > a
+            ]) if int(counts.sum()) else np.empty(0, dtype=np.int64)
+            owners = np.repeat(eligible_rows, counts.astype(np.int64))
+            keys = np.asarray(idx.wk_ids)[flat].astype(np.int64, copy=False)
+            ppos = np.asarray(idx.wk_pos)[flat].astype(np.int64, copy=False)
+            pbits = np.where(ppos <= 0, ПОЗ_КОНЕЧНАЯ,
+                             np.where(ppos <= 2, ПОЗ_ВНУТРЕННЯЯ, ПОЗ_НАЧАЛЬНАЯ))
+            keep = ((pbits & pos_mask) != 0) & (keys != _пустой_ключ(idx))
+            owners, keys, pbits = owners[keep], keys[keep], pbits[keep]
+        else:
+            owners = np.empty(0, dtype=np.int64)
+            keys = np.empty(0, dtype=np.int64)
+            pbits = np.empty(0, dtype=np.int64)
+    else:
+        owners = np.arange(n, dtype=np.int64)
+        keys = np.asarray(idx.key_id)[строки_ид].astype(np.int64, copy=False)
+        pbits = np.full(n, ПОЗ_КОНЕЧНАЯ, dtype=np.int64)
+        keep = keys != _пустой_ключ(idx)
+        owners, keys, pbits = owners[keep], keys[keep], pbits[keep]
+
+    if not len(owners):
+        счёт.update({"поиск_завершён": True, "максимум_доказан": True,
+                     "поиск_ограничен": 0, "неполных_блоков": целевые_блоки,
+                     "верхняя_оценка_строф": 0, "узлы_поиска": 0, "тяга": 0})
+        return []
+
+    # В голоде разрешаем кандидата за пределами вилки как запасной путь. Он
+    # всё равно обязан пройти реальную подрезку/наращивание и все содержательные
+    # ворота; смешивать запас с обычным равновероятным полем нельзя.
+    ворота = (подрезка or {}).get("ворота") if подрезка else None
+    if ворота is not None and any(str(ворота.get(k) or "").strip()
+                                  for k in ("dens", "rare_pair", "rare_word")):
+        ворота = None
+    запас_слогов, порог = 6, 5000
+    слот_опции = []
+    for lo, hi in вилки:
+        точные = ((row_syl[owners] >= lo) & (row_syl[owners] <= hi))
+        допустимы = точные.copy()
+        if ворота is not None and int(точные.sum()) < порог:
+            допустимы |= ((row_syl[owners] > hi)
+                          & (row_syl[owners] <= hi + запас_слогов))
+            if адреса() is not None:
+                допустимы |= ((row_syl[owners] < lo)
+                              & (row_syl[owners] >= max(1, lo - запас_слогов)))
+        слот_опции.append(np.flatnonzero(допустимы))
+
+    mask = int(ярусы_рифмы) or ЯРУС_ТОЧНАЯ
+    keys_all = np.asarray(keys, dtype=np.int64)
+    prefixes = {}
+    if mask & (ЯРУС_БЛИЗКАЯ | ЯРУС_СОЗВУЧИЕ | ЯРУС_АССОНАНС):
+        for width in (1, 2, 3):
+            prefixes[width] = _префиксы_ключей(idx, width)
+
+    def compatible(values, ref):
+        ref = int(ref)
+        good = np.zeros(len(values), dtype=bool)
+        if mask & ЯРУС_ТОЧНАЯ:
+            good |= values == ref
+        if mask & ЯРУС_БЛИЗКАЯ:
+            good |= (prefixes[3][values] == prefixes[3][ref]) & (values != ref)
+        if mask & ЯРУС_СОЗВУЧИЕ:
+            good |= ((prefixes[2][values] == prefixes[2][ref])
+                     & (prefixes[3][values] != prefixes[3][ref]))
+        if mask & ЯРУС_АССОНАНС:
+            good |= ((prefixes[1][values] == prefixes[1][ref])
+                     & (prefixes[2][values] != prefixes[2][ref]))
+        return good
+
+    def tier_for(values, ref):
+        """Исключительный фактический ярус пары, векторно."""
+        for width in (1, 2, 3):
+            if width not in prefixes:
+                prefixes[width] = _префиксы_ключей(idx, width)
+        ref = int(ref)
+        out = np.zeros(len(values), dtype=np.int8)
+        exact = values == ref
+        out[exact] = ЯРУС_ТОЧНАЯ
+        near = (~exact) & (prefixes[3][values] == prefixes[3][ref])
+        out[near] = ЯРУС_БЛИЗКАЯ
+        sound = ((out == 0) & (prefixes[2][values] == prefixes[2][ref]))
+        out[sound] = ЯРУС_СОЗВУЧИЕ
+        assonance = ((out == 0) & (prefixes[1][values] == prefixes[1][ref]))
+        out[assonance] = ЯРУС_АССОНАНС
+        return out
+
+    bucket_cache = {}
+    representative_cache = {}
+    capacity_cache = {}
+    first_feasible_cache = {}
+
+    def capacity_for_options(arr, cache_key, *, unique_owners=False):
+        cached = capacity_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        count = max(len(getattr(idx, "keys", ())),
+                    int(keys_all.max()) + 1 if len(keys_all) else 0)
+        key_values = keys_all[arr]
+        if unique_owners:
+            # Один ряд может иметь несколько допустимых слов/ключей. Для
+            # ёмкости рифмогруппы это всё равно одна строка, иначе первый
+            # якорь снова иногда выберет «партнёра», которым окажется сам.
+            пары = owners[arr].astype(np.int64) * count + key_values
+            key_values = np.unique(пары) % count
+        exact = np.bincount(key_values, minlength=count)
+        result = {0: exact}
+        if mask & (ЯРУС_БЛИЗКАЯ | ЯРУС_СОЗВУЧИЕ | ЯРУС_АССОНАНС):
+            p3 = prefixes[3][key_values]
+            c3 = np.bincount(p3, minlength=count)
+            c3_by_key = c3[prefixes[3]]
+            result[3] = c3_by_key - exact
+        if mask & (ЯРУС_СОЗВУЧИЕ | ЯРУС_АССОНАНС):
+            p2 = prefixes[2][key_values]
+            c2 = np.bincount(p2, minlength=count)
+            result[2] = c2[prefixes[2]] - c3_by_key
+        if mask & ЯРУС_АССОНАНС:
+            p1 = prefixes[1][key_values]
+            c1 = np.bincount(p1, minlength=count)
+            result[1] = c1[prefixes[1]] - c2[prefixes[2]]
+        capacity_cache[cache_key] = result
+        return result
+
+    def capacities(position):
+        """Число строк каждого ключа, доступных в слоговом поле."""
+        return capacity_for_options(слот_опции[position],
+                                    ("slot", tuple(вилки[position])))
+
+    def union_capacities(positions):
+        """Число строк ключа в объединении полей позиций буквы."""
+        signature = ("union", tuple(tuple(вилки[p]) for p in positions))
+        if len({tuple(вилки[p]) for p in positions}) == 1:
+            return capacities(positions[0])
+        arr = np.unique(np.concatenate([слот_опции[p] for p in positions]))
+        return capacity_for_options(arr, signature)
+
+    def compatible_capacity(position, key_values, cap=None):
+        """Сколько строк поля совместимо с каждым ключом."""
+        cap = capacities(position) if cap is None else cap
+        key_values = np.asarray(key_values, dtype=np.int64)
+        values = np.zeros(len(key_values), dtype=np.int64)
+        if mask & ЯРУС_ТОЧНАЯ:
+            values += cap[0][key_values]
+        if mask & ЯРУС_БЛИЗКАЯ:
+            values += cap[3][key_values]
+        if mask & ЯРУС_СОЗВУЧИЕ:
+            values += cap[2][key_values]
+        if mask & ЯРУС_АССОНАНС:
+            values += cap[1][key_values]
+        return values
+
+    def bucket_options(position, width, bucket):
+        """Быстрый срез кандидатов одной рифмо-корзины.
+
+        Полный DFS должен быть исчерпывающим, но не обязан каждый раз сканировать
+        сотни тысяч строк, чтобы найти партнёра уже выбранного ключа. Сортировка
+        каждой слоговой вилки выполняется один раз; дальше корзина достаётся
+        бинарным поиском.
+        """
+        cache_key = (position, width)
+        cached = bucket_cache.get(cache_key)
+        if cached is None:
+            arr = слот_опции[position]
+            значения = keys_all[arr] if width == 0 else prefixes[width][keys_all[arr]]
+            order = np.argsort(значения, kind="stable")
+            sorted_values = значения[order]
+            sorted_options = arr[order]
+            bucket_cache[cache_key] = (sorted_values, sorted_options)
+            cached = bucket_cache[cache_key]
+        sorted_values, sorted_options = cached
+        left = int(np.searchsorted(sorted_values, int(bucket), side="left"))
+        right = int(np.searchsorted(sorted_values, int(bucket), side="right"))
+        return sorted_options[left:right]
+
+    def letter_for(position):
+        """Рифмобуква позиции; хвост без схемы не образует общую группу."""
+        if position < len(схема):
+            return схема[position]
+        # `схема` может быть короче вилки в стрессовых/расширенных формах.
+        # Пустой маркер каждой такой позиции означает «рифма не задана», а не
+        # одну гигантскую рифмогруппу всех позиций хвоста.
+        return ("\x00", int(position))
+
+    # Индексы выбранных строк и текстов живут на всём запросе, поэтому откат
+    # одной неудачной первой строфы не может «съесть» ресурс для второй.
+    использованные_строки: set[int] = set()
+    использованные_тексты: set[str] = set()
+    использованные_леммы: set = set()
+    выбранные_блоки = []
+    лучшие_блоки = []
+    узлы = 0
+    клаузула_жребий = _доли.Жребий(доли_клаузул or {}) if доли_клаузул else None
+    позиции_жребий = (_доли.Жребий(доли_позиций or {})
+                      if (доли_позиций and expanded) else None)
+    ярус_жребий = _доли.Жребий(доли_ярусов or {}) if доли_ярусов else None
+    требовать_позиции = False
+    мат_цель = (None if float(mat_share) < 0 else
+                int(round(блок * min(1.0, max(0.0, float(mat_share))))))
+
+    def candidate_order(позиция, оставшиеся, picked_keys, used_rows,
+                        mat_count, *, shuffle=True):
+        """Уникальные владельцы случайны; альтернативные ключи того же
+        владельца идут следом и рассматриваются только при откате."""
+        оставшихся_число = len(оставшиеся)
+        arr = слот_опции[позиция]
+        if not len(arr):
+            return np.empty(0, dtype=np.int64)
+        letter = letter_for(позиция)
+        refs = picked_keys.get(letter, ())
+        if expanded and not shuffle and not refs:
+            # MRV only needs one representative per row. Reusing this view
+            # avoids `np.unique` over the complete wk-разворот at every node;
+            # the shuffled/committing path below still keeps all key options
+            # for exhaustive backtracking.
+            base = representative_cache.get(позиция)
+            if base is None:
+                _, first = np.unique(owners[arr], return_index=True)
+                base = arr[first]
+                representative_cache[позиция] = base
+            if used_rows:
+                base = base[~np.isin(owners[base], tuple(used_rows))]
+            return base
+        # Партнёра можно достать из готовой корзины по ключу/префиксу. Это
+        # верно и для разворота `wk_*`: у владельца может быть несколько слов,
+        # но все варианты одной рифмогруппы лежат в том же индексированном
+        # срезе и после него не должны теряться.
+        if refs:
+            width = (3 if mask & ЯРУС_БЛИЗКАЯ else
+                     (2 if mask & ЯРУС_СОЗВУЧИЕ else
+                      (1 if mask & ЯРУС_АССОНАНС else 0)))
+            ref = int(refs[0])
+            части = []
+            if width == 0:
+                части.append(bucket_options(позиция, 0, ref))
+            else:
+                if mask & ЯРУС_ТОЧНАЯ:
+                    части.append(bucket_options(позиция, 0, ref))
+                if mask & ЯРУС_БЛИЗКАЯ:
+                    части.append(bucket_options(позиция, 3, prefixes[3][ref]))
+                if mask & ЯРУС_СОЗВУЧИЕ:
+                    части.append(bucket_options(позиция, 2, prefixes[2][ref]))
+                if mask & ЯРУС_АССОНАНС:
+                    части.append(bucket_options(позиция, 1, prefixes[1][ref]))
+            if части:
+                valid = np.unique(np.concatenate(части))
+                valid = valid[compatible(keys_all[valid], ref)]
+                for ref2 in refs[1:]:
+                    valid = valid[compatible(keys_all[valid], int(ref2))]
+        else:
+            good = np.ones(len(arr), dtype=bool)
+            for ref in refs:
+                good &= compatible(keys_all[arr], ref)
+            valid = arr[good]
+        if not expanded and not refs:
+            # У первого кандидата буквы уже можно отсечь ключи, которым не
+            # хватит разных строк для всех её позиций. Это лишь необходимое
+            # условие: точный DFS всё равно проверит леммы, строки и
+            # пересечения полей. Зато заведомо слабые ключи не порождают
+            # миллионы одинаково бесплодных веток.
+            позиции_буквы = tuple(p for p in оставшиеся
+                                  if letter_for(p) == letter)
+            if len(позиции_буквы) > 1:
+                # Для первой строки этой буквы набор полей неизменен до тех
+                # пор, пока буква не открыта: другие ветви могут менять
+                # `оставшиеся`, но не саму группу. Считаем дорогую векторную
+                # проверку один раз на (позиция, группа), а не на каждом узле
+                # DFS. Это необходимое условие; точная проверка владельцев,
+                # лемм и строк ниже по-прежнему выполняется для каждой ветви.
+                cache_key = (позиция, позиции_буквы)
+                feasible_all = first_feasible_cache.get(cache_key)
+                if feasible_all is None:
+                    key_values = keys_all[valid]
+                    feasible = np.ones(len(valid), dtype=bool)
+                    for target in позиции_буквы:
+                        feasible &= (compatible_capacity(target, key_values)
+                                     >= 1)
+                    # Отдельных строк в каждой вилке может хватать, но одна и
+                    # та же строка не может занять две позиции. Поэтому
+                    # дополнительно проверяем ёмкость объединения вилок всей
+                    # буквы.
+                    feasible &= (compatible_capacity(
+                        позиции_буквы[0], key_values,
+                        union_capacities(позиции_буквы))
+                        >= len(позиции_буквы))
+                    feasible_all = np.zeros(len(owners), dtype=bool)
+                    feasible_all[valid] = feasible
+                    first_feasible_cache[cache_key] = feasible_all
+                valid = valid[feasible_all[valid]]
+        if used_rows:
+            valid = valid[~np.isin(owners[valid], tuple(used_rows))]
+        if not len(valid):
+            return np.empty(0, dtype=np.int64)
+
+        # Для обычного поля это один владелец = одна опция. Для разворота
+        # выбираем владельцев равновероятно, а не пропорционально числу ключей.
+        vo = owners[valid]
+        if not expanded:
+            # `owners` строго уникальны в этой ветке: не платим за np.unique
+            # на каждом узле поиска и не создаём лишних структур.
+            if shuffle:
+                valid = valid[rng.permutation(len(valid))]
+        else:
+            if not refs and shuffle and len(valid) > 20000:
+                # Без открытой рифмогруппы `valid` уже идёт блоками владельцев:
+                # разворот строится через `repeat(eligible_rows, counts)`.
+                # Полная случайная сортировка сотен тысяч опций здесь не даёт
+                # дополнительной честности — строка всё равно выбирается один
+                # раз, а её ключи являются альтернативами. Случайный циклический
+                # сдвиг по границам блоков даёт каждому владельцу одинаковый
+                # шанс быть первым и сохраняет все ключи для отката.
+                границы = np.flatnonzero(
+                    np.r_[True, vo[1:] != vo[:-1]])
+                if len(границы) > 1:
+                    начало = int(rng.integers(len(границы)))
+                    срез = int(границы[начало])
+                    valid = np.concatenate((valid[срез:], valid[:срез]))
+                    vo = owners[valid]
+            elif len(valid) <= 20000:
+                unique, first = np.unique(vo, return_index=True)
+                if not shuffle:
+                    valid = valid[first]
+                else:
+                    by_owner = {}
+                    for option, owner in zip(valid.tolist(), vo.tolist()):
+                        by_owner.setdefault(owner, []).append(option)
+                    result = []
+                    for ix in rng.permutation(len(unique)).tolist():
+                        варианты = np.asarray(by_owner[int(unique[ix])], dtype=np.int64)
+                        варианты = варианты[rng.permutation(len(варианты))]
+                        result.extend(варианты.tolist())
+                    valid = np.asarray(result, dtype=np.int64)
+            else:
+                # Большой разворот с уже открытой рифмогруппой приходит из
+                # нескольких отсортированных корзин и не обязан быть разбит
+                # по владельцам. Здесь группировка нужна; путь выше избегает
+                # её для первого якоря, где порядок уже готов.
+                unique, first = np.unique(vo, return_index=True)
+                порядок_владельцев = rng.permutation(len(unique))
+                ранг = np.empty(len(unique), dtype=np.int64)
+                ранг[порядок_владельцев] = np.arange(len(unique))
+                порядок_опций = np.argsort(
+                    ранг[np.searchsorted(unique, vo)], kind="stable")
+                valid = valid[порядок_опций]
+
+        # Мягкие доли задают порядок предпочтения, но не запрещают запасной
+        # сорт: иначе недоступный сорт превращал полную строфу в пустую.
+        if not shuffle:
+            return valid
+        желаемая_позиция = (позиции_жребий.следующий()
+                            if позиции_жребий is not None else None)
+        if требовать_позиции and expanded and refs and желаемая_позиция:
+            # Если у уже открытой рифмогруппы есть партнёр нужного сорта,
+            # сначала разрешаем только его. Это даёт DFS шанс откатить первый
+            # якорь и выбрать другую строку с тем же формальным условием,
+            # вместо того чтобы преждевременно принять смешанную пару.
+            желаемые_варианты = pbits[valid] == int(желаемая_позиция)
+            if желаемые_варианты.any():
+                valid = valid[желаемые_варианты]
+                if not len(valid):
+                    return np.empty(0, dtype=np.int64)
+        pref = []
+        if мат_цель is not None:
+            want = (mat_count < мат_цель
+                    and мат_цель - mat_count <= оставшихся_число)
+            pref.append(np.asarray(row_mat[owners[valid]] != 0) == want)
+        if клаузула_жребий is not None:
+            desired = клаузула_жребий.следующий()
+            if desired:
+                pref.append((1 << (row_clau[owners[valid]] - 1)) == int(desired))
+        if желаемая_позиция:
+            желаемые = pbits[valid] == int(желаемая_позиция)
+            # При первом ключе буквы предпочитаем не просто нужный сорт, а
+            # такой ключ, у которого есть нужный партнёр. Иначе случайная
+            # строка с начальной рифмой могла открыть ключ с единственной
+            # начальной строкой, после чего вторая строка вынужденно меняла
+            # сорт и доля терялась. Это только порядок: если такие ключи
+            # исчерпаны, полный перебор всё равно вернётся к остальным.
+            if expanded and not refs and желаемые.any():
+                позиции_буквы = tuple(p for p in оставшиеся
+                                      if letter_for(p) == letter)
+                viable = желаемые.copy()
+                for target in позиции_буквы:
+                    desired_options = слот_опции[target]
+                    desired_options = desired_options[
+                        pbits[desired_options] == int(желаемая_позиция)]
+                    desired_cap = capacity_for_options(
+                        desired_options,
+                        ("slot-pbit", tuple(вилки[target]),
+                         int(желаемая_позиция)),
+                        unique_owners=True)
+                    need = 2 if target == позиция else 1
+                    viable &= (compatible_capacity(
+                        target, keys_all[valid], desired_cap) >= need)
+                pref.append(viable if viable.any() else желаемые)
+            else:
+                pref.append(желаемые)
+        if ярус_жребий is not None and refs:
+            desired = ярус_жребий.следующий()
+            if desired:
+                pref.append(tier_for(keys_all[valid], int(refs[0])) == int(desired))
+        if pref:
+            preferred = np.logical_and.reduce(pref)
+            valid = np.concatenate((valid[preferred], valid[~preferred]))
+        return valid
+
+    def adjusted(option, позиция):
+        owner = int(owners[option])
+        row = int(строки_ид[owner])
+        original = idx.text(row)
+        lo, hi = вилки[позиция]
+        actual = int(row_syl[owner])
+        новый = original
+        if ворота is not None and actual > hi:
+            новый = _подрезать(original, (lo, hi), ворота)
+        elif ворота is not None and actual < lo:
+            новый = _удлинить(idx, row, original, (lo, hi), ворота)
+        if новый is None:
+            return None
+        if новый == original:
+            return owner, row, str(новый), actual
+        слогов = sum(1 for ch in str(новый).lower() if ch in _ГЛАСНЫЕ)
+        if not lo <= слогов <= hi:
+            return None
+        if actual > hi:
+            счёт["подрезано"] = счёт.get("подрезано", 0) + 1
+        elif actual < lo:
+            счёт["удлинено"] = счёт.get("удлинено", 0) + 1
+        return owner, row, str(новый), слогов
+
+    def block_solutions():
+        picked = []
+        picked_keys = {}
+        ключи_буквы: dict = {}
+        picked_rows = set()
+        picked_texts = set()
+        picked_lemmas = set()
+        used_mat = 0
+
+        def visit(remaining, mat_count):
+            nonlocal узлы, used_mat
+            if not remaining:
+                if мат_цель is None or mat_count == мат_цель:
+                    yield tuple(picked)
+                return
+            # MRV на текущем состоянии: сначала самое узкое поле/партнёр.
+            варианты = []
+            for pos in remaining:
+                opts = candidate_order(pos, remaining, picked_keys, picked_rows,
+                                       mat_count, shuffle=False)
+                количество = len(opts) if not expanded else len(set(owners[opts].tolist()))
+                варианты.append((количество, pos))
+            _, pos = min(варианты, key=lambda x: x[0])
+            opts = candidate_order(pos, remaining, picked_keys, picked_rows,
+                                  mat_count)
+            if not len(opts):
+                return
+            next_remaining = tuple(p for p in remaining if p != pos)
+            letter = letter_for(pos)
+            for option in opts:
+                узлы += 1
+                готово = adjusted(int(option), pos)
+                if готово is None:
+                    continue
+                owner, row, text_value, syllables = готово
+                if owner in picked_rows or row in использованные_строки:
+                    continue
+                if text_value in picked_texts or text_value in использованные_тексты:
+                    continue
+                is_mat = bool(row_mat[owner])
+                if мат_цель is not None:
+                    if mat_count + int(is_mat) > мат_цель:
+                        continue
+                    if mat_count + int(is_mat) + len(next_remaining) < мат_цель:
+                        continue
+                lem = _леммы_строки(idx, row)
+                # Укорачивание только убирает слова: колонка исходной строки
+                # остаётся безопасным консервативным набором лемм. Рост же
+                # добавляет новые слова и обязан разобрать изменённый текст.
+                if text_value != idx.text(row) and int(row_syl[owner]) < вилки[pos][0]:
+                    lem = _леммы_текста(idx, text_value)
+                    if lem is None:
+                        continue
+                if not repeat_ok and (lem & (использованные_леммы | picked_lemmas)):
+                    continue
+                key_id = int(keys_all[option])
+                if letter in ключи_буквы:
+                    якорь, члены, ярус, позиция_ключа = ключи_буквы[letter]
+                    refs = tuple(члены)
+                else:
+                    refs = picked_keys.get(letter, ())
+                if refs:
+                    # `candidate_order` уже отфильтровал несовместимые ключи;
+                    # этот вызов нужен для фактического счёта яруса.
+                    tier = ярус_пары(idx.keys[key_id], idx.keys[int(refs[0])])
+                    if not (tier & mask):
+                        continue
+                else:
+                    tier = 0
+                info = (pos, option, owner, row, text_value, syllables,
+                        key_id, is_mat, int(row_clau[owner]), int(pbits[option]),
+                        frozenset(lem), tier)
+                picked.append(info)
+                picked_rows.add(owner)
+                picked_texts.add(text_value)
+                picked_lemmas.update(lem)
+                picked_keys.setdefault(letter, []).append(key_id)
+                запись = ключи_буквы.setdefault(
+                    letter, [key_id, [], tier, int(pbits[option])])
+                запись[1].append(key_id)
+                old_debt = {}
+                for j in (клаузула_жребий, позиции_жребий, ярус_жребий):
+                    if j is not None:
+                        old_debt[id(j)] = dict(j.долг)
+                if клаузула_жребий is not None:
+                    клаузула_жребий.взять(1 << (int(row_clau[owner]) - 1))
+                if позиции_жребий is not None:
+                    позиции_жребий.взять(int(pbits[option]))
+                if ярус_жребий is not None and tier:
+                    ярус_жребий.взять(tier)
+                used_mat += int(is_mat)
+                yield from visit(next_remaining, mat_count + int(is_mat))
+                used_mat -= int(is_mat)
+                for j in (клаузула_жребий, позиции_жребий, ярус_жребий):
+                    if j is not None and id(j) in old_debt:
+                        j.долг.clear()
+                        j.долг.update(old_debt[id(j)])
+                picked_keys[letter].pop()
+                if not picked_keys[letter]:
+                    del picked_keys[letter]
+                ключи_буквы[letter][1].pop()
+                if not ключи_буквы[letter][1]:
+                    del ключи_буквы[letter]
+                picked_lemmas.difference_update(lem)
+                picked_texts.remove(text_value)
+                picked_rows.remove(owner)
+                picked.pop()
+
+        yield from visit(tuple(range(блок)), 0)
+
+    def seek(level):
+        nonlocal лучшие_блоки
+        if level > len(лучшие_блоки):
+            # При недостижимой цели рекурсия обязана вернуть лучший найденный
+            # префикс, а не обнулить его последним неудачным откатом. Копируем
+            # только кортежи решений; они неизменяемы и не держат состояние
+            # текущей ветви.
+            лучшие_блоки = list(выбранные_блоки)
+        if level >= целевые_блоки:
+            return True
+        for solution in block_solutions():
+            added_texts, added_rows, added_lemmas = set(), set(), set()
+            for info in solution:
+                _, _, owner, row, text_value = info[:5]
+                использованные_строки.add(row)
+                added_rows.add(row)
+                использованные_тексты.add(text_value)
+                added_texts.add(text_value)
+                added_леммы = info[-2]
+                использованные_леммы.update(added_леммы)
+                added_lemmas.update(added_леммы)
+            выбранные_блоки.append(solution)
+            if seek(level + 1):
+                return True
+            выбранные_блоки.pop()
+            использованные_строки.difference_update(added_rows)
+            использованные_тексты.difference_update(added_texts)
+            использованные_леммы.difference_update(added_lemmas)
+        return False
+
+    начальные_долги = [(жребий, dict(жребий.долг))
+                       for жребий in (клаузула_жребий, позиции_жребий,
+                                       ярус_жребий)
+                       if жребий is not None]
+
+    def запустить_поиск(строгие_позиции=False):
+        nonlocal требовать_позиции, лучшие_блоки
+        требовать_позиции = bool(строгие_позиции)
+        лучшие_блоки = []
+        полная = seek(0)
+        if not полная:
+            выбранные_блоки.clear()
+            выбранные_блоки.extend(лучшие_блоки)
+        return полная
+
+    # Доли — предпочтение, а не новый набор ворот. Сначала пробуем собрать
+    # полные строфы с ними; если конкретная раскладка несовместима с запретом
+    # повторов, запускаем тот же исчерпывающий поиск без этого предпочтения.
+    полная = запустить_поиск(bool(позиции_жребий is not None))
+    if not полная and позиции_жребий is not None:
+        выбранные_блоки.clear()
+        использованные_строки.clear()
+        использованные_тексты.clear()
+        использованные_леммы.clear()
+        for жребий, долг in начальные_долги:
+            жребий.долг.clear()
+            жребий.долг.update(долг)
+        полная = запустить_поиск(False)
+    # Если цель недостижима, `seek` исчерпал все решения и уже восстановил
+    # лучший найденный префикс: количество — доказанный максимум, а не
+    # случайный результат одного сёмена.
+    полных = len(выбранные_блоки)
+    выход = []
+    for номер, solution in enumerate(выбранные_блоки):
+        for info in sorted(solution, key=lambda x: x[0]):
+            pos, option, owner, row, text_value, syllables, key_id, is_mat, cl, pbit, lem, tier = info
+            выход.append((pos, row, text_value, syllables, key_id, pbit, lem, номер))
+    if выход:
+        rows = np.asarray([x[1] for x in выход], dtype=np.int64)
+        result = _строки(idx, rows, np.full(len(rows), 0.6, dtype=np.float32),
+                         np.zeros(len(rows), dtype=np.float32))
+        for r, (pos, row, text_value, syllables, key_id, pbit, lem, number) in zip(result, выход):
+            r.setdefault("_lem", set(lem))
+            r["_блок"], r["_поз"] = int(number), int(pos)
+            r["_рифмо_ключ"] = idx.keys[key_id]
+            if text_value != idx.text(int(row)):
+                r["_исходный"] = idx.text(int(row))
+                r["text"] = text_value
+                r["syllables"] = int(syllables)
+    # Фактические квоты — после сборки, не после намерения жребия.
+    for _, _, _, _, _, pbit, _, _, in выход:
+        счёт["поз_конечных"] = счёт.get("поз_конечных", 0) + int(pbit == ПОЗ_КОНЕЧНАЯ)
+        счёт["поз_внутренних"] = счёт.get("поз_внутренних", 0) + int(pbit == ПОЗ_ВНУТРЕННЯЯ)
+        счёт["поз_начальных"] = счёт.get("поз_начальных", 0) + int(pbit == ПОЗ_НАЧАЛЬНАЯ)
+    for solution in выбранные_блоки:
+        for info in solution:
+            if info[-1]:
+                names = {1: "ярус_точных", 2: "ярус_близких", 4: "ярус_созвучий", 8: "ярус_ассонансов"}
+                name = names.get(info[-1])
+                if name:
+                    счёт[name] = счёт.get(name, 0) + 1
+    счёт.update({"тяга": len(выход), "неполных_блоков": целевые_блоки - полных,
+                 "дыр_в_блоках": 0, "узлы_поиска": узлы,
+                 "поиск_ограничен": 0, "поиск_завершён": True,
+                 "максимум_доказан": True, "верхняя_оценка_строф": полных})
+    return result if выход else []
 
 
 def _первая_своей_буквы(поле, группа, схема, буква, rng, хочу_мат, mat):
@@ -2155,6 +2936,46 @@ def lag(texts, total: int) -> int | None:
     return ответ
 
 
+def lag_sources(idx, active_sources, expected_counts) -> int | None:
+    """Сколько фрагментов активных источников отсутствует в индексе.
+
+    Для свежего индекса достаточно сверить его колонку ``src`` с маленькой
+    описью книг. Это закрывает статусный путь без построения дорогой карты
+    ``текст → номер``: она нужна только для старой истории без номеров.
+    ``None`` означает, что индекс старого формата или опись недостаточна для
+    такой проверки, и вызывающий должен использовать ``lag``.
+    """
+    if idx is None or getattr(idx, "src", None) is None:
+        return None
+    if active_sources is None or expected_counts is None:
+        return None
+    source_names = tuple(getattr(idx, "sources", ()) or ())
+    if not source_names:
+        return None
+    expected = {
+        str(source): max(0, int(count or 0))
+        for source, count in expected_counts.items()
+    }
+    active = {str(source) for source in active_sources}
+    if not active:
+        return 0
+    indexed_sources = {str(source): i
+                       for i, source in enumerate(source_names)}
+    indexed_counts = np.bincount(
+        np.asarray(idx.src, dtype=np.int64),
+        minlength=len(source_names),
+    )
+    missing = 0
+    for source in active:
+        wanted = expected.get(source)
+        if wanted is None:
+            return None
+        position = indexed_sources.get(source)
+        have = int(indexed_counts[position]) if position is not None else 0
+        missing += max(0, wanted - have)
+    return missing
+
+
 def forget() -> None:
     """Забыть загруженный индекс и все производные карты. Отдельно от
     `reload`, потому что это единственная СИНХРОННАЯ и проверяемая часть:
@@ -2165,6 +2986,7 @@ def forget() -> None:
     `api/server.py` (`_перечитать_индекс`) и знал, среди прочего, про чужой кэш
     в `filters` — то есть про то, о чём вызывающему знать неоткуда."""
     global _idx, _tried, _text_ids, _pool_cache, _lag_cache
+    global _АДРЕСА, _КНИЖНЫЙ_КЭШ, _КНИЖНЫЙ_КЭШ_ИСТОЧНИК, _книги_кэш
     with ЗАМОК:
         with _ЗАМОК_ЗАГРУЗКИ:
             with _text_lock:
@@ -2173,6 +2995,10 @@ def forget() -> None:
                 _text_ids = None
         _pool_cache = None
         _lag_cache = None
+        _АДРЕСА = None
+        _КНИЖНЫЙ_КЭШ.clear()
+        _КНИЖНЫЙ_КЭШ_ИСТОЧНИК = None
+        _книги_кэш = None
         забыть_таблицу()
 
 
@@ -2266,8 +3092,19 @@ def форма_пула(idx, *, pool_mask, hidden_mask, no_mat=False, only_mat=F
     Числа считаются по ТОМУ ЖЕ пересечению, что и генерация (ворота ∩ активный
     пул ∩ не показанное): форма, посчитанная по другому множеству, обещала бы
     не то, что придёт."""
-    gate = idx.gate_mask(no_mat, only_mat, clausula, редкость_слова,
-                         редкость_пары, внутр_рифма, перекличка, плотность)
+    недоступные = _недоступные_ворота(
+        idx, редкость_слова=редкость_слова, редкость_пары=редкость_пары,
+        внутр_рифма=внутр_рифма, перекличка=перекличка, плотность=плотность,
+        позиции_рифмы=позиции_рифмы)
+    if недоступные:
+        # Позиционная рифма не входит в сигнатуру старого `gate_mask`, но для
+        # пользователя это такой же жёсткий гейт. Не показываем исходный пул
+        # рядом с надписью «позиция недоступна»: применимый пул в этом случае
+        # действительно пуст.
+        gate = np.zeros(idx.n, dtype=bool)
+    else:
+        gate = idx.gate_mask(no_mat, only_mat, clausula, редкость_слова,
+                             редкость_пары, внутр_рифма, перекличка, плотность)
     живые = np.flatnonzero(gate & pool_mask & ~hidden_mask)
     n = int(len(живые))
     # ЕСТЬ ЛИ В ИНДЕКСЕ КОЛОНКИ ЗВУКОПИСИ. Ручки на экране стоят всегда, а
@@ -2277,7 +3114,15 @@ def форма_пула(idx, *, pool_mask, hidden_mask, no_mat=False, only_mat=F
     # поэтому индекс отвечает прямо, а панель называет состояние словами.
     итог = {"строк": n,
             "звукопись": (getattr(idx, "echo", None) is not None
-                          and getattr(idx, "dens", None) is not None)}
+                          and getattr(idx, "dens", None) is not None),
+            "перекличка": getattr(idx, "echo", None) is not None,
+            "плотность_звука": getattr(idx, "dens", None) is not None,
+            "редкость_слов": getattr(idx, "rare_word", None) is not None,
+            "редкость_сочетаний": getattr(idx, "rare_pair", None) is not None,
+            "внутренняя_рифма": getattr(idx, "inner", None) is not None,
+            "позиция_рифмы": not any(getattr(idx, k, None) is None
+                                      for k in ("wk_ids", "wk_pos", "wk_off")),
+            "недоступные_ворота": недоступные}
     if n == 0:
         return {**итог, "ключей": 0, "крупнейшая_корзина": 0}
 
@@ -2475,6 +3320,11 @@ def маска_истории(idx, номера, тексты) -> np.ndarray:
 
 
 _АДРЕСА = None
+# Декодированный текст книги живёт дольше одного вызова удлинителя. Ключом
+# служит номер книги, а источник отдельно привязан к текущему набору адресов:
+# после перепечки нельзя отдать кусок старого blob с тем же номером.
+_КНИЖНЫЙ_КЭШ: dict[int, str] = {}
+_КНИЖНЫЙ_КЭШ_ИСТОЧНИК = None
 
 
 def адреса():
@@ -2545,13 +3395,21 @@ def _тот_же_текст(срез: str, текст: str) -> bool:
 
 
 def _текст_книги(номер: int) -> str:
+    global _КНИЖНЫЙ_КЭШ, _КНИЖНЫЙ_КЭШ_ИСТОЧНИК
     св = адреса()
     if св is None:
         return ""
+    if _КНИЖНЫЙ_КЭШ_ИСТОЧНИК is not св:
+        _КНИЖНЫЙ_КЭШ.clear()
+        _КНИЖНЫЙ_КЭШ_ИСТОЧНИК = св
+    if номер in _КНИЖНЫЙ_КЭШ:
+        return _КНИЖНЫЙ_КЭШ[номер]
     _, _, _, блоб, оф = св
     if номер < 0 or номер + 1 >= len(оф):
         return ""
-    return блоб[int(оф[номер]):int(оф[номер + 1])].decode("utf-8", "replace")
+    текст = блоб[int(оф[номер]):int(оф[номер + 1])].decode("utf-8", "replace")
+    _КНИЖНЫЙ_КЭШ[номер] = текст
+    return текст
 
 
 def _удлинить(idx, строка_ном: int, текст: str, вилка, ворота: dict):
@@ -2597,6 +3455,8 @@ def _удлинить(idx, строка_ном: int, текст: str, вилка
         if слогов < низ:
             continue
         if _сдвиг.причина_добавления(новый, ворота):
+            return None
+        if _нарушает_запрет(idx, новый) is not False:
             return None
         return новый
     return None
@@ -2742,6 +3602,10 @@ def _воронка(no_mat: bool, only_mat: bool,
         return None
     import numpy as _np
 
+    недоступные = _недоступные_ворота(
+        idx, редкость_слова=редкость_слова, редкость_пары=редкость_пары,
+        внутр_рифма=внутр_рифма, перекличка=перекличка, плотность=плотность)
+
     src = _np.asarray(idx.src) if getattr(idx, "src", None) is not None else None
     имена = getattr(idx, "sources", []) or []
 
@@ -2817,6 +3681,13 @@ def _воронка(no_mat: bool, only_mat: bool,
             подпись = ",".join(f"{int(а)}-{int(min(б, 100))}" for а, б in плотность)
             шаги.append((f"плотность звука {подпись}", маска.copy()))
 
+    # Отсутствие колонки — отдельная ступень и нулевой результат. Пропускать
+    # этот шаг означало бы показывать обычный пул под видом строгого гейта.
+    названия = {"перекличка": "перекличка согласных"}
+    for имя in недоступные:
+        маска = _np.zeros(idx.n, dtype=bool)
+        шаги.append((f"{названия.get(имя, имя)} недоступна", маска.copy()))
+
     всего = int(idx.n)
     ступени = [{"шаг": имя, "дожило": int(m.sum()),
                 "доля": round(100.0 * int(m.sum()) / всего, 1) if всего else 0.0,
@@ -2837,7 +3708,8 @@ def _воронка(no_mat: bool, only_mat: bool,
                     доли.append({"источник": имена[i] if i < len(имена) else str(i),
                                  "строк": int(сч[i]),
                                  "доля": round(100.0 * int(сч[i]) / len(s), 1)})
-    return {"всего": всего, "книг_всего": len(имена), "ступени": ступени, "источники": доли}
+    return {"всего": всего, "книг_всего": len(имена), "ступени": ступени,
+            "источники": доли, "недоступные_ворота": недоступные}
 
 
 # ---------------------------------------------------------------------------
@@ -2899,6 +3771,33 @@ def _правила() -> list[str]:
         return blacklist.читать()
     except Exception:
         return []
+
+
+def _нарушает_запрет(idx, текст: str) -> bool | None:
+    """Проверить чёрный список на изменённой строке.
+
+    Маска индекса уже проверила исходный фрагмент, но после наращивания текст
+    стал новым и мог получить запрещённую последовательность. Возвращается
+    `None` только при невозможности проверки; такой кандидат нельзя выпускать
+    под включённым запретом.
+    """
+    правила = _правила()
+    if not правила:
+        return False
+    try:
+        слова = _подряд(текст)
+        формы = [_нф(idx, слово) for слово in слова]
+        for правило in правила:
+            цель = [_нф(idx, слово) for слово in _подряд(правило)]
+            if not цель:
+                continue
+            длина = len(цель)
+            if any(формы[i:i + длина] == цель
+                   for i in range(max(0, len(формы) - длина + 1))):
+                return True
+    except Exception:
+        return None
+    return False
 
 
 # ЦЕНА РАЗБОРА, ЗАМЕРЕНО (2026-08-18, полный индекс 2 434 632 строки,

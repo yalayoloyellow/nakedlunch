@@ -136,6 +136,51 @@ console.log(JSON.stringify({строк: c.state.lenta.length,
     assert d["тексты"] == ["строка 5.0", "строка 5.1", "строка 5.2", "строка 5.3"]
 
 
+def test_nepolnaya_ili_slomannaya_pozitsiya_ne_stanovit_strofoy():
+    """Фронт не принимает блок с пропущенной или повторной позицией."""
+    d = node(ДВОЙНИК + """
+const spec = [{letter: 'а'}, {letter: 'б'}, {letter: 'а'}, {letter: 'б'}];
+const odgovor = (pozicii) => ({
+  shortlist: pozicii.map((p, i) => ({text: 'строка ' + i, _блок: 0, _поз: p})),
+  seed: {seed: 1}, funnel: {},
+});
+let ответ = odgovor([0, 1, 1, 3]);
+globalThis.fetch = async () => ({ok: true, json: async () => ответ});
+const плохая = держатель([]); плохая.curSpec = () => spec;
+await плохая.lentaНабрать(); плохая.слить();
+ответ = odgovor([0, 1, 2, 3]);
+const хорошая = держатель([]); хорошая.curSpec = () => spec;
+await хорошая.lentaНабрать(); хорошая.слить();
+console.log(JSON.stringify({плохая: плохая._буфер.length, хорошая: хорошая._буфер.length}));
+""")
+    assert d == {"плохая": 0, "хорошая": 1}
+
+
+def test_voronka_ne_vydayot_skrytyy_prefetch():
+    """Десять строф в ответе — внутренний запас, не публичная выдача."""
+    d = node(ДВОЙНИК + """
+const rows = Array.from({length: 40}, (_, i) =>
+  ({text: 'строка ' + i, _блок: Math.floor(i / 4), _поз: i % 4}));
+globalThis.fetch = async () => ({ok: true, json: async () => ({
+  shortlist: rows,
+  funnel: {shortlist: 40, ступени: {
+    корпус: 100, твои_книги: 90, показано: 0, пул: 80, тяга: 40,
+    заказано_строк: 40, к_сборке: 40, размер_строфы: 4,
+    заказано_строф: 10, собрано_строк: 40, собрано_строф: 10,
+    недособрано_строф: 0, поиск_ограничен: 0
+  }}
+})});
+const c = держатель([]);
+await c.lentaНабрать(); c.слить();
+console.log(JSON.stringify({верх: c.state.funnelLast.shortlist,
+  строки: c.state.funnelLast.ступени['заказано_строк'],
+  строфы: c.state.funnelLast.ступени['заказано_строф'],
+  собрано: c.state.funnelLast.ступени['собрано_строф'],
+  тяга: c.state.funnelLast.ступени.тяга}));
+""")
+    assert d == {"верх": 4, "строки": 4, "строфы": 1, "собрано": 1, "тяга": 4}
+
+
 def test_istoriya_pishetsya_po_faktu_pokaza():
     """Дословно: «мы показываем то, что показываем, добавляется в
     историю, а то, чего нет на экране, не добавляется».

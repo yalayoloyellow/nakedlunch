@@ -11,7 +11,7 @@
   <key>CFBundleInfoDictionaryVersion</key> <string>6.0</string>
   <key>CFBundleShortVersionString</key>    <string>2.0</string>
   <key>CFBundleVersion</key>               <string>2</string>
-  <key>LSMinimumSystemVersion</key>        <string>13.0</string>
+  <key>LSMinimumSystemVersion</key>        <string>10.15</string>
   <key>LSApplicationCategoryType</key>     <string>public.app-category.productivity</string>
   <key>NSHighResolutionCapable</key>       <true/>
   <key>NSMicrophoneUsageDescription</key>  <string>Микрофон нужен во фристайле: голос управляет картинкой и пишется на отдельную дорожку.</string>

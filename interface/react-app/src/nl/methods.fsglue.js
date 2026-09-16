@@ -75,26 +75,33 @@ export const fsGlueMethods = {
   fsAudio() { return this._audio || null; },
 
   async fsToggleMic() {
-    var a = this.fsAudioStart();
     try {
+      var a = this.fsAudioStart();
       var on = await a.toggleMic();
+      if (this._mounted === false) return;
       // synthetic — не «включена ли кнопка», а ВОДИТ ЛИ синтетика картинку
       // прямо сейчас: микрофон её вытесняет, и панель должна это показывать
       // сама, без второго источника правды (см. freestyle/audio.js: synthOn).
       this.setState({ micOn: on, synthOn: a.state().synthetic });
     } catch (e) {
-      this.setState({ micOn: false });
-      this.flash(e && e.message ? e.message : String(e));
+      if (this._mounted !== false) {
+        this.setState({ micOn: false });
+        this.flash(e && e.message ? e.message : String(e));
+      }
     }
   },
   // Синтетический шум вручную (Раунд 56, просьба пользователя). Кнопка нужна
   // потому, что вытеснение автоматическое: выключив микрофон и трек, шум
   // вернётся сам — а иногда его не хочется вовсе.
   fsToggleSynth() {
-    var a = this.fsAudioStart();
-    a.setSynth(!this.state.synthWanted);
-    var st = a.state();
-    this.setState({ synthWanted: st.synthWanted, synthOn: st.synthetic });
+    try {
+      var a = this.fsAudioStart();
+      a.setSynth(!this.state.synthWanted);
+      var st = a.state();
+      this.setState({ synthWanted: st.synthWanted, synthOn: st.synthetic });
+    } catch (e) {
+      this.flash(e && e.message ? e.message : String(e));
+    }
   },
   // трек: снять — сразу, поставить — через скрытый #trackFile (разметка сцены)
   fsToggleTrack() {
@@ -114,16 +121,19 @@ export const fsGlueMethods = {
     // сбрасываем значение: без этого повторный выбор того же файла не даёт change
     if (e && e.target) e.target.value = '';
     if (!file) return;
-    var a = this.fsAudioStart();
     try {
+      var a = this.fsAudioStart();
       var res = await a.loadTrack(file);
+      if (this._mounted === false) return;
       var lab = document.getElementById('trackLabel');
       if (lab) lab.textContent = '♪ ' + res.name;
       this.setState({ trackOn: true });
       this.flash('трек: ' + res.name);
     } catch (err) {
-      this.setState({ trackOn: false });
-      this.flash(err && err.message ? err.message : String(err));
+      if (this._mounted !== false) {
+        this.setState({ trackOn: false });
+        this.flash(err && err.message ? err.message : String(err));
+      }
     }
   },
 
@@ -156,7 +166,10 @@ export const fsGlueMethods = {
 
   enterFs() {
     this.fsХроника();
-    this.fsAudioStart();
+    try { this.fsAudioStart(); }
+    catch (e) {
+      журнал('сцена: звук не поднялся: ' + (e && e.message ? e.message : e));
+    }
     this.loadEngine();
     this.bloomLoop();
     if (this.bootProfile) this.bootProfile();
@@ -198,6 +211,7 @@ export const fsGlueMethods = {
     this.fsEngine = null;
     this._engErrAt = 0;
     this._fsDead = false;
+    if (this._engineSnapT) { clearTimeout(this._engineSnapT); this._engineSnapT = 0; }
     this.flash('перезапускаю движок…');
     // НОВЫЙ КАНВАС, а не тот же самый. `dispose` гасит контекст через
     // loseContext (иначе текстуры сцены висят до сборки мусора), и вернуть
@@ -205,22 +219,27 @@ export const fsGlueMethods = {
     // чистый элемент, и только после этого поднимаем движок.
     var self = this;
     this.setState({ bcEpoch: (this.state.bcEpoch || 0) + 1 }, function () {
-      self.loadEngine();
+      if (self._mounted !== false) self.loadEngine();
     });
   },
 
   loadEngine() {
     if (this._engineBusy || this.fsEngineRaw) return;
     this._engineBusy = true;
+    this.setState({ fsEngineState: 'loading', fsEngineError: '' });
     var self = this;
     // динамический импорт: пресеты (2.8 МБ) уезжают в отдельный чанк и не
     // утяжеляют первый экран редактора — как в дизайне, где движок грузился
     // отдельным скриптом при первом входе во фристайл
     import('./freestyle/engine.js').then(function (mod) {
       self._engineBusy = false;
-      if (self._fsDead) return;
+      if (self._fsDead || self._mounted === false) return;
       var canvas = document.getElementById('bcCanvas');
-      if (!canvas) { self.flash('сцена ещё не смонтирована'); return; }
+      if (!canvas) {
+        self.setState({ fsEngineState: 'error', fsEngineError: 'сцена ещё не смонтирована' });
+        self.flash('сцена ещё не смонтирована');
+        return;
+      }
       // Без живого звука движок собирать нельзя — он гарантированно умрёт на
       // первых кадрах (см. fsRestartEngine). Поднимаем граф, а если и это не
       // вышло — говорим честно и не строим обречённое.
@@ -234,6 +253,7 @@ export const fsGlueMethods = {
       }
       if (!драйвер) {
         журнал('движок: нет аудио-драйвера, сборку не начинаю (audio=' + (!!audio) + ')');
+        self.setState({ fsEngineState: 'error', fsEngineError: 'нет рабочего аудио-драйвера' });
         self.flash('движок не поднять без звука — проверь аудио');
         return;
       }
@@ -252,6 +272,7 @@ export const fsGlueMethods = {
       } catch (e) {
         // WebGL2 нет — честный текст вместо чёрного экрана
         журнал('движок: сборка упала: ' + (e && e.message ? e.message : e));
+        self.setState({ fsEngineState: 'error', fsEngineError: e && e.message ? e.message : String(e) });
         self.flash(e && e.message ? e.message : String(e));
         return;
       }
@@ -266,7 +287,9 @@ export const fsGlueMethods = {
       // Чёрная сцена без ошибки — это уже другой разговор: не запустился цикл,
       // нулевой канвас, выключенная визуализация, спящий звук. Спрашиваем всё
       // это разом через две секунды после сборки и пишем одной строкой.
-      setTimeout(function () {
+      self._engineSnapT = setTimeout(function () {
+        self._engineSnapT = 0;
+        if (self._mounted === false || self._fsDead || self.state.tab !== 'fs') return;
         // НЕВИДИМЫЙ ВИЗУАЛИЗАТОР — СКАЗАТЬ ВСЛУХ (Раунд 56).
         //
         // `blankScene()` намеренно гасит подложку визуализатора
@@ -302,11 +325,13 @@ export const fsGlueMethods = {
       }, 2000);
       var wait = self._engineWait || [];
       self._engineWait = null;
-      self.setState({ presetTick: (self.state.presetTick || 0) + 1 }, function () {
+      self.setState({ fsEngineState: 'ready', fsEngineError: '', presetTick: (self.state.presetTick || 0) + 1 }, function () {
         wait.forEach(function (fn) { try { fn(); } catch (e) { console.error('фристайл: отложенный вызов', e); } });
       });
     }, function (e) {
       self._engineBusy = false;
+      if (self._fsDead || self._mounted === false) return;
+      self.setState({ fsEngineState: 'error', fsEngineError: e && e.message ? e.message : String(e) });
       self.flash('движок не загрузился: ' + (e && e.message ? e.message : String(e)));
     });
   },
@@ -318,6 +343,7 @@ export const fsGlueMethods = {
   // связка. Нет движка — тишина, а не ошибка: автосмену включают до входа во
   // фристайл штатно
   randomPreset() {
+    if (this._mounted === false) return;
     var eng = this.fsEngineRaw;
     if (!eng || !eng.isAlive()) return;
     eng.randomPreset();
@@ -328,8 +354,12 @@ export const fsGlueMethods = {
   // следующий пресет, но не чаще раза в 5 секунд (иначе перебор битых уравнений
   // превратится в мельницу)
   onEngineError() {
+    if (this._mounted === false || this._fsDead) return;
     var eng = this.fsEngineRaw;
-    if (!eng || !eng.isAlive()) return;
+    if (!eng || !eng.isAlive()) {
+      this.setState({ fsEngineState: 'error', fsEngineError: 'визуализатор остановился' });
+      return;
+    }
     var now = Date.now();
     if (now - (this._engErrAt || 0) < 5000) return;
     this._engErrAt = now;
@@ -339,6 +369,7 @@ export const fsGlueMethods = {
     var e = this._engErr;
     var проЗвук = e && /getByteTimeDomainData|audio/i.test(String(e.message || e));
     if (проЗвук) {
+      this.setState({ fsEngineState: 'error', fsEngineError: 'движок остановлен: нет звука' });
       this.flash('движок остановлен: нет звука — включи микрофон, трек или синтетику');
       return;
     }
@@ -351,7 +382,9 @@ export const fsGlueMethods = {
   // toggleFav/random/recent). Каталог движка отдаёт имена, панель — строки.
   fsEngineFacade(eng) {
     var self = this;
-    var tick = function () { self.setState({ presetTick: (self.state.presetTick || 0) + 1 }); };
+    var tick = function () {
+      if (self._mounted !== false) self.setState({ presetTick: (self.state.presetTick || 0) + 1 });
+    };
     return {
       presets: function () {
         var st = self.state;
@@ -376,8 +409,12 @@ export const fsGlueMethods = {
     if (this._bloomRAF) return;
     var self = this;
     var tick = function (ts) {
+      if (self._mounted === false || self.state.tab !== 'fs') {
+        self._bloomRAF = 0;
+        return;
+      }
       self._bloomRAF = requestAnimationFrame(tick);
-      if (self.state.tab !== 'fs' || !self.state.bcOn) return;
+      if (!self.state.bcOn) return;
       if (self._bloomT && ts - self._bloomT < BLOOM_MS) return;
       self._bloomT = ts;
       self.drawBloom();
@@ -437,6 +474,7 @@ export const fsGlueMethods = {
       // шиной и сам аудио-граф живы — поэтому возврат мгновенный, без
       // пересборки и без паузы в показе (решение прожарки 10).
       if (eng && eng.isAlive() && eng.isRunning()) eng.stop();
+      if (this._хроникаT) { clearInterval(this._хроникаT); this._хроникаT = 0; }
       return;
     }
     // визуализация выключена — канвас скрыт, и гонять кадры незачем; включат
@@ -540,6 +578,8 @@ export const fsGlueMethods = {
   // ---- снос ------------------------------------------------------------
   fsGlueUnmount() {
     this._fsDead = true;
+    if (this._engineSnapT) { clearTimeout(this._engineSnapT); this._engineSnapT = 0; }
+    if (this._хроникаT) { clearInterval(this._хроникаT); this._хроникаT = 0; }
     if (this._bloomRAF) cancelAnimationFrame(this._bloomRAF);
     this._bloomRAF = 0;
     if (this.fsEngineRaw) { this.fsEngineRaw.dispose(); this.fsEngineRaw = null; }

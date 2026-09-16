@@ -456,7 +456,14 @@ export const shelfMethods = {
   спроситьФормуПула() {
     var self = this;
     clearTimeout(this._формаT);
+    // Старый снимок остаётся на экране, но помечается устаревшим сразу —
+    // пользователь видит, что цифры относятся к предыдущим настройкам, а не
+    // принимает их за текущую истину.
+    if (this.state.poolShapeState !== 'checking') {
+      this.setState({ poolShapeState: 'checking', poolShapeError: '' });
+    }
     this._формаT = setTimeout(function () {
+      if (self._mounted === false) return;
       // СЧЁТЧИК ИНИЦИАЛИЗИРУЕТСЯ ЯВНО. Здесь стояло просто `++self._формаN`, а
       // это на неинициализированном поле даёт NaN — и `NaN === NaN` ложь, то
       // есть сторож устаревших ответов отбрасывал ВСЕ ответы, включая свежий.
@@ -474,9 +481,19 @@ export const shelfMethods = {
         .then(function (res) {
           // ответ на УСТАРЕВШИЙ запрос выбрасываем: пользователь уже увёл
           // ручку дальше, и показать старое число хуже, чем не показать
-          if (н === self._формаN) self.setState({ poolShape: res && res.готово ? res : null });
+          if (self._mounted !== false && н === self._формаN) self.setState({
+            poolShape: res && res.готово ? res : null,
+            poolShapeState: res && res.готово ? 'ready' : 'error',
+            poolShapeError: res && res.готово ? '' : 'ядро не вернуло форму пула',
+            poolShapeUpdatedAt: Date.now(),
+          });
         })
-        .catch(function () { /* форма — удобство, а не обязанность */ });
+        .catch(function (e) {
+          if (self._mounted === false || н !== self._формаN) return;
+          var текст = e && e.message ? e.message : 'не удалось проверить форму пула';
+          self.setState({ poolShapeState: 'error', poolShapeError: текст });
+          if (self.flash) self.flash('проверка пула: ' + текст);
+        });
     }, 140);
   },
 

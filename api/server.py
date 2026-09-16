@@ -56,6 +56,38 @@ DIST = пути.ЧТЕНИЕ / "interface" / "react-app" / "dist"
 
 app = Flask(__name__, static_folder=None)
 
+# Генерация остаётся синхронной для клиента, но её состояние должно быть
+# наблюдаемым во время долгого запроса. Flask запускается threaded=True, поэтому
+# `/api/status` может читать этот снимок, пока `/api/generate` держит вычисление.
+# Это не «процент ради процента»: этапы меняются только в местах, где работа
+# действительно перешла в следующую фазу, а неизвестная доля так и называется.
+_ГЕНЕРАЦИЯ_ЗАМОК = threading.Lock()
+_ГЕНЕРАЦИЯ_СОСТОЯНИЕ_ЗАМОК = threading.Lock()
+_ГЕНЕРАЦИЯ_СОСТОЯНИЕ = {
+    "state": "idle", "phase": "", "started_at": None,
+    "updated_at": None, "elapsed_ms": 0, "error": "", "result": None,
+}
+
+
+def _генерация_обновить(**patch):
+    with _ГЕНЕРАЦИЯ_СОСТОЯНИЕ_ЗАМОК:
+        _ГЕНЕРАЦИЯ_СОСТОЯНИЕ.update(patch)
+        started = _ГЕНЕРАЦИЯ_СОСТОЯНИЕ.get("started_at")
+        if started:
+            _ГЕНЕРАЦИЯ_СОСТОЯНИЕ["elapsed_ms"] = max(0, round((time.time() - started) * 1000))
+        _ГЕНЕРАЦИЯ_СОСТОЯНИЕ["updated_at"] = round(time.time() * 1000)
+
+
+def _генерация_снимок():
+    with _ГЕНЕРАЦИЯ_СОСТОЯНИЕ_ЗАМОК:
+        снимок = dict(_ГЕНЕРАЦИЯ_СОСТОЯНИЕ)
+    # Между двумя изменениями фазы вычисление продолжается, поэтому сохранённое
+    # поле времени быстро устаревает. Возвращаем актуальный возраст снимка на
+    # каждом чтении, не трогая общий словарь и не создавая гонку.
+    if снимок["state"] == "running" and снимок.get("started_at"):
+        снимок["elapsed_ms"] = max(0, round((time.time() - снимок["started_at"]) * 1000))
+    return None if снимок["state"] == "idle" else снимок
+
 
 # ---------------------------------------------------------------------------
 # ВСЁ, ЧТО СЛОМАЛОСЬ, ОБЯЗАНО НАЗВАТЬ СЕБЯ (Раунд 59).
@@ -893,7 +925,7 @@ def _nl_index_ensure_running() -> None:
 
 
 _NL_TEXTS_CACHE: tuple | None = None      # (сколько фрагментов, множество текстов)
-_NL_ACTIVE_TEXTS_CACHE: tuple | None = None
+_NL_ACTIVE_TEXTS_CACHE: tuple | None = None  # (число, активные id, множество текстов)
 # Композиция, для которой цепочку уже запускали: чтобы не перепекать по кругу.
 _ИНДЕКС_ПРОБОВАЛИ: tuple | None = None
 
@@ -912,10 +944,16 @@ def _nl_active_texts() -> set:
     global _NL_ACTIVE_TEXTS_CACHE
     пул = _nl().get_active_pool()
     n = len(пул)
-    if _NL_ACTIVE_TEXTS_CACHE is not None and _NL_ACTIVE_TEXTS_CACHE[0] == n:
-        return _NL_ACTIVE_TEXTS_CACHE[1]
+    # Число строк не идентифицирует активный состав: две книги могут иметь
+    # одинаковую длину. Маленький active.json читается дёшево и закрывает
+    # случай внешнего переключения, когда HTTP-роут не успел вызвать явный
+    # сброс кэша.
+    активные = frozenset(nlbridge.активные_книги() or ())
+    if (_NL_ACTIVE_TEXTS_CACHE is not None
+            and _NL_ACTIVE_TEXTS_CACHE[:2] == (n, активные)):
+        return _NL_ACTIVE_TEXTS_CACHE[2]
     тексты = set(пул)
-    _NL_ACTIVE_TEXTS_CACHE = (n, тексты)
+    _NL_ACTIVE_TEXTS_CACHE = (n, активные, тексты)
     return тексты
 
 
@@ -1069,10 +1107,24 @@ def _nl_index_status() -> dict | None:
         return None
     global _ИНДЕКС_ПРОБОВАЛИ
     _подхватить_свежий_индекс()
-    тексты = _nl_active_texts()
-    всего = len(тексты)
     idx = nlindex.load()
-    отстал = nlindex.lag(тексты, всего)
+    активные = nlbridge.активные_книги()
+    опись = nlbridge.опись_книг()
+    счётчики = ({str(к.get("id")): к.get("fragment_count")
+                 for к in (опись or []) if к.get("id") is not None}) \
+        if опись is not None else None
+    # У свежего индекса состав книг уже записан в колонке `src`. Сверяем его
+    # с маленькой описью источников и не строим карту всех текстов только ради
+    # статусной строки. Карта остаётся fallback для старых индексов.
+    тексты = None
+    if опись is not None and активные is not None:
+        всего = sum(int(к.get("fragment_count") or 0) for к in опись
+                    if к.get("id") in активные)
+        отстал = nlindex.lag_sources(idx, активные, счётчики)
+    else:
+        тексты = _nl_active_texts()
+        всего = len(тексты)
+        отстал = nlindex.lag(тексты, всего)
     база = {"id": "nl_index", "label": "Индекс корпуса", "total": всего}
     # ЖИВОЙ ПРОГРЕСС ИЗ САЙДКАРА (Раунд 56). Требование: показывать состояние в
     # реальном времени и из реальных данных. Раньше здесь было «перепекается» и
@@ -1097,8 +1149,16 @@ def _nl_index_status() -> dict | None:
         return {**база, "state": "not_started", "done": 0, "pct": 0,
                 "detail": "индекса нет — генерация идёт медленным путём"}
     if отстал is None:
-        return {**база, "state": "running", "done": 0, "pct": 0,
-                "detail": "проверяю состав…"}
+        # Старый индекс или неполная опись: только здесь допустима тяжёлая
+        # точная сверка по текстам. В новом формате до этой строки не доходим.
+        if тексты is None:
+            тексты = _nl_active_texts()
+            всего = len(тексты)
+            база = {**база, "total": всего}
+        отстал = nlindex.lag(тексты, всего)
+        if отстал is None:
+            return {**база, "state": "running", "done": 0, "pct": 0,
+                    "detail": "проверяю состав…"}
     done = всего - отстал
     # Процент ОКРУГЛЯЕТСЯ ВНИЗ: «100%» обязано значить «не осталось ни одной
     # строки», а не «99.79 округлилось».
@@ -1243,7 +1303,13 @@ def _nl_rhyme_status() -> dict | None:
     # текстом, а фрагментов на 17 886 больше — одна и та же строка нарезана из
     # двух книг. Из-за этого полностью готовый кэш показывал 99% и читался как
     # «книга ещё не доехала».
-    total = len(_nl_texts())
+    # На обычной установке опись уже существует и содержит число фрагментов
+    # всех источников. Не грузим тяжёлый `state.json` только ради знаменателя
+    # статусной строки: он нужен панели корпуса, но не индикатору кэша. Старый
+    # путь через тексты сохраняем для установки без описи.
+    опись = nlbridge.опись_книг()
+    total = (sum(int(к.get("fragment_count") or 0) for к in опись)
+             if опись is not None else len(_nl_texts()))
     base = {"id": "nl_rhyme", "label": "Рифма nakedlunch", "total": total}
 
     # Сайдкара нет — значит сборка НЕ ИДЁТ. Про то, есть ли готовый кэш, он
@@ -1476,6 +1542,7 @@ def api_status():
     # даже если человек её проглядел, — а «проглядел» здесь норма, потому что
     # ошибка случается в момент, когда он занят строкой, а не программой.
     return {"items": items,
+            "generation": _генерация_снимок(),
             "ошибок": sum(1 for з in журнал.записи(3000) if з["уровень"] == "ошибка"),
             "аварийно": журнал.не_закрыто()}
 
@@ -1952,7 +2019,7 @@ def api_nl_funnel():
         # (колонка `src`), не хватает лишь её имени; оно появится со следующей
         # генерации, когда склад дочитается сам.
         _склад = nlbridge.store_if_ready()
-        for c in (_склад.list_corpora() if _склад else []):
+        for c in (_склад.list_corpora() if _склад else (nlbridge.опись_книг() or [])):
             имена[c.get("id")] = c.get("name") or c.get("id")
     except Exception:
         pass
@@ -1988,8 +2055,9 @@ def api_pool_shape():
     вот она дёшева: **2.3–9.7 мс** на полном индексе, замерено на пяти
     положениях ручки. Это укладывается в движение ползунка, в отличие от прогона.
 
-    Отдаёт только те три формы, что ЖИВЫ по замеру (см. nlindex.форма_пула);
-    мёртвые не отдаются нарочно, чтобы интерфейсу нечем было врать движением."""
+    Отдаёт форму пула и явные флаги доступности индексных колонок (см.
+    `nlindex.форма_пула`); мёртвые формы не считаются нарочно, а отсутствие
+    колонки называется отдельно, чтобы интерфейсу нечем было врать движением."""
     payload = request.get_json(force=True, silent=True) or {}
     if isinstance(payload.get("params"), dict) or payload.get("mode"):
         knobs = clean.knobs(clean.knobs_from_profile(
@@ -2008,14 +2076,32 @@ def api_pool_shape():
     форма_строфы = clean.stanza_spec(payload.get("stanza"))
     with nlindex.ЗАМОК:
         idx = nlindex.load()
-        if idx is None or not _nl_ready():
+        if idx is None or not _ПРОГРЕВ["готов"]:
             # Честный отказ вместо нулей: нулевой пул и «ещё не готово» — разные
             # сообщения, и путать их значит врать о причине.
             return {"готово": False}
-        пул = _nl().get_active_pool()
+        # Индексный путь знает источник каждой строки по колонке `src`. Не
+        # тащим склад и не строим карту «текст → номер» только ради
+        # предпросмотра: это был холодный налог в 10–12 секунд. Текстовый
+        # fallback оставлен для старого индекса без `src` или чужого состава.
+        книги_для_маски = nlbridge.активные_книги()
+        if книги_для_маски is None:
+            пул = _nl().get_active_pool()
+            маска_пула = nlindex.pool_mask(idx, пул)
+        else:
+            маска_пула = nlindex.маска_книг(idx, книги_для_маски)
+            if маска_пула is None:
+                пул = _nl().get_active_pool()
+                маска_пула = nlindex.pool_mask(idx, пул)
+        # История уже привязана к номерам строк. Не будим карту «текст → номер»
+        # на 2,3 млн записей только ради предпросмотра: основной отбор и этот
+        # предпросмотр должны видеть одну и ту же маску, но платить за неё
+        # одинаково мало.
+        скрыто = filters._маска_истории(  # noqa: SLF001 — единый доменный путь
+            idx, CORPUS, CORPUS.hidden_set(), None)
         форма = nlindex.форма_пула(
-            idx, pool_mask=nlindex.pool_mask(idx, пул),
-            hidden_mask=nlindex.mask_of(idx, CORPUS.hidden_set()),
+            idx, pool_mask=маска_пула,
+            hidden_mask=скрыто,
             no_mat=bool(knobs.get("no_mat", False)), only_mat=bool(knobs.get("only_mat", False)),
             clausula=int(knobs.get("clausula", 0)),
             редкость_слова=_редкость.разобрать_полосы(knobs.get("rare_word")),
@@ -2038,8 +2124,15 @@ def api_pool_shape():
     # СКОЛЬКО КНИГ ВЫКЛЮЧЕНО — чтобы совет был по адресу. Советовать «включи
     # ещё книги», когда включены все, значит послать человека в тупик.
     try:
-        книги = _nl().list_corpora()
-        форма["книг_выключено"] = sum(1 for к in книги if not к.get("active"))
+        # Счётчик подсказки тоже не должен будить склад. Опись — маленький
+        # производный список имён, а при её отсутствии число источников уже
+        # есть в метаданных индекса; активные id пришли из `active.json` выше.
+        книги = nlbridge.опись_книг()
+        if книги is not None:
+            форма["книг_выключено"] = sum(1 for к in книги if not к.get("active"))
+        elif книги_для_маски is not None:
+            источники = getattr(idx, "sources", []) or []
+            форма["книг_выключено"] = sum(1 for и in источники if и not in книги_для_маски)
     except Exception:
         pass
     return {"готово": True, **форма}
@@ -2047,8 +2140,33 @@ def api_pool_shape():
 
 @app.post("/api/generate")
 def api_generate():
+    # Один прогон на приложение: два одновременных запроса не дают честного
+    # ответа о пуле и могут конкурировать за историю/индекс. Пользовательский
+    # интерфейс дополнительно блокирует повторную кнопку, но сервер обязан
+    # защищать инвариант и для второго клиента, старого бандла или скрипта.
+    if not _ГЕНЕРАЦИЯ_ЗАМОК.acquire(blocking=False):
+        return {"error": "расчёт уже идёт", "detail": "дождись текущей строфы"}, 409
+    _генерация_обновить(state="running", phase="подготовка", started_at=time.time(),
+                        updated_at=round(time.time() * 1000), elapsed_ms=0,
+                        error="", result=None)
+    try:
+        result = _api_generate_body()
+        _генерация_обновить(state="done", phase="готово",
+                            result={"stanzas": 0 if not result.get("shortlist") else 1,
+                                    "lines": len(result.get("shortlist") or [])})
+        return result
+    except Exception as e:
+        _генерация_обновить(state="error", phase="ошибка",
+                            error=f"{type(e).__name__}: {e}")
+        raise
+    finally:
+        _ГЕНЕРАЦИЯ_ЗАМОК.release()
+
+
+def _api_generate_body():
     t0 = time.time()
     payload = request.get_json(force=True, silent=True) or {}
+    _генерация_обновить(phase="проверяю настройки")
 
     # НАДГРОБИЕ 2026-08-29: ЗДЕСЬ ПРИНИМАЛАСЬ ТЕМА. Поле `theme` разбиралось
     # `clean.theme` в список тегов и `clean.theme_forced` в обязательные слова
@@ -2057,8 +2175,6 @@ def api_generate():
     # запроса просто игнорируется — старый бандл в браузере не падает.
     theme_raw = ""
 
-    # Bias and rhyme from unified mode (new params)
-    bias = (payload.get("bias", "") or "").strip()
     # Строфа-конструктор (2026-07-18, PLAN.md 0.7) — если пришёл валидный
     # `stanza` (список {letter,min_syl,max_syl}), он ПЕРЕОПРЕДЕЛЯЕТ `rhyme`:
     # буквы схемы выводятся ИЗ спеки (clean.stanza_letters), не из отдельно
@@ -2190,8 +2306,12 @@ def api_generate():
             книги = {к["id"] for к in _nl().list_corpora() if к.get("active")}
         except Exception:
             pass      # склада нет — уходим на прежний путь через тексты
+    _генерация_обновить(phase="проверяю полную базу и совместимость")
     result = filters.run(lines, knobs, CORPUS, nl_fragments=nl_frags, rhyme=rhyme,
                          stanza=stanza, семя=семя, книги=книги)
+    _генерация_обновить(phase="оформляю результат",
+                        result={"stanzas": 0 if not result.get("shortlist") else 1,
+                                "lines": len(result.get("shortlist") or [])})
     _подписать_источники(result.get("shortlist") or [])
     # NOT marked into history here (2026-07-14 — was `CORPUS.mark_seen(...)`
     # unconditionally on every generate). History now records what's actually
@@ -2790,8 +2910,9 @@ def _forget_pool_mask() -> None:
 
     Заодно забываем множество текстов хранилища: его кэш ключуется числом
     фрагментов, а источник могли и переключить (число то же, состав другой)."""
-    global _NL_TEXTS_CACHE
+    global _NL_TEXTS_CACHE, _NL_ACTIVE_TEXTS_CACHE
     _NL_TEXTS_CACHE = None
+    _NL_ACTIVE_TEXTS_CACHE = None
     nlindex.forget_pool()
 
 

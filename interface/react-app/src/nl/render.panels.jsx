@@ -27,7 +27,7 @@ import { renderSettings } from './render.settings.jsx';
 import { renderFavPanel, renderHistPanel, renderStatsPanel, renderBlackPanel } from './render.data.jsx';
 
 // ---- рецепты стилей из renderVals ----
-const tabPill = (a) => 'appearance: none; border: none; background: transparent; border-radius: var(--radius); padding: 10px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; white-space: nowrap; min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; position: relative; z-index: 1; transition: color 180ms var(--ease); color: ' + (a ? 'var(--canvas)' : 'var(--muted)') + ';';
+const tabPill = (a) => 'appearance: none; border: none; background: transparent; border-radius: var(--radius); padding: 4px 8px; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; white-space: nowrap; min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; position: relative; z-index: 1; transition: color 180ms var(--ease); color: ' + (a ? 'var(--canvas)' : 'var(--muted)') + ';';
 const hudBtn = (on) => icoBtn(on ? 'var(--ink)' : 'var(--muted-soft)');
 // Значки сжатой шапки (ярус 2+): та же графика, что у остальных значков хрома —
 // тонкий штрих currentColor, 12px. Слово заменяется значком, а не пропадает.
@@ -88,7 +88,7 @@ export function hotRowsCalc() {
 // строка настроек документа / общих настроек — шаблон дизайна 1036..1048 и
 // 1075..1089 (различаются только min-width подписи и значения)
 // ================================================================
-// Шапка: вкладки с бегунком, правый блок пилюль, статус, часы
+// Шапка: вкладки с бегунком, правый блок пилюль, работы, часы
 // ================================================================
 export function renderHeader(c) {
   var st = c.state, isFs = st.tab === 'fs';
@@ -102,10 +102,10 @@ export function renderHeader(c) {
   // Ничего не пропадает: подписи становятся короче, потом значками, отступы и
   // просветы ужимаются. Что именно уходит с какого яруса — расписано у hdrFit.
   var hdrT = c.hdr ? c.hdr() : 0;
-  var hdrPad = ['18px 32px', '16px 22px', '13px 14px', '11px 10px'][hdrT];
-  var hdrGap = [16, 12, 10, 8][hdrT];          // между тремя блоками шапки
-  var hdrGap2 = [14, 12, 10, 8][hdrT];         // внутри блока
-  var hdrGap3 = [10, 9, 8, 7][hdrT];           // между значками хрома
+  var hdrPad = ['10px 20px', '9px 16px', '8px 12px', '7px 8px'][hdrT];
+  var hdrGap = [12, 10, 8, 6][hdrT];            // между тремя блоками шапки
+  var hdrGap2 = [10, 9, 7, 6][hdrT];            // внутри блока
+  var hdrGap3 = [8, 7, 6, 5][hdrT];             // между значками хрома
   // Половины шапки НЕ сжимаются сами (fit-content) — на этом стоит замер вылета
   // в hdrFit. Но на последнем ярусе сжимать больше нечем, и тогда единственный
   // честный выход — разрешить им ужаться: имя листа уедет в многоточие, а не
@@ -120,13 +120,14 @@ export function renderHeader(c) {
   // ---- индикатор фоновых работ ----
   var jobs = c.jobsSummary ? c.jobsSummary() : { state: 'покой', pct: 0, n: 0, running: 0 };
   var КРУГ = 2 * Math.PI * 7.4;
-  var jobsDash = (jobs.pct / 100 * КРУГ).toFixed(1) + ' ' + КРУГ.toFixed(1);
+  var jobsDash = (jobs.indeterminate ? КРУГ * 0.28 : jobs.pct / 100 * КРУГ).toFixed(1) + ' ' + КРУГ.toFixed(1);
   var jobsColor = jobs.state === 'ошибка' ? '#c96a6a'
     : (jobs.state === 'покой' ? 'var(--muted-soft)' : 'var(--ink)');
-  var jobsTitle = jobs.state === 'покой' ? 'Фоновых работ нет'
-    : (jobs.state === 'ошибка' ? 'Фоновая работа встала или упала'
-      : (jobs.state === 'готово' ? 'Фоновая работа закончена'
-        : 'Идёт обработка: ' + jobs.pct + '%'));
+  var jobsTitle;
+  if (jobs.state === 'покой') jobsTitle = 'Фоновых работ нет';
+  else if (jobs.state === 'ошибка') jobsTitle = jobs.detail || 'Фоновая работа встала или упала';
+  else if (jobs.state === 'готово') jobsTitle = 'Фоновая работа закончена';
+  else jobsTitle = jobs.detail || 'Идёт обработка: ' + jobs.pct + '%';
 
   var лента = st.lenta || [];
 
@@ -177,7 +178,7 @@ export function renderHeader(c) {
     };
   });
   var uiTintPickerStyle = 'position: absolute; left: ' + (Math.max(0, UI_TINT_PAL.indexOf(C.uiTint)) * 27 + 44) + 'px; top: 0; width: 20px; height: 20px; padding: 0; border: none; opacity: 0; pointer-events: none; background: none;';
-  var uiTintOffStyle = 'appearance: none; border: none; border-radius: var(--radius); padding: 4px 7px; font-family: inherit; font-size: 9px; cursor: pointer; ' + (!C.uiTint || C.uiTint === 'нет' ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--muted);');
+  var uiTintOffStyle = 'appearance: none; border: none; border-radius: var(--radius); padding: 2px 7px; font-family: inherit; font-size: 9px; cursor: pointer; ' + (!C.uiTint || C.uiTint === 'нет' ? 'background: var(--ink); color: var(--canvas);' : 'background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--muted);');
 
   // ---- настройки ленты + легенда ----
   // Те же три ручки, что управляли строками документа: размер, интерлиньяж и
@@ -193,10 +194,11 @@ export function renderHeader(c) {
   var legendRows = legendRowsCalc();
 
   // ---- стили панелей с display-переключением (renderVals 3920, 4003, 4059) ----
-  var cfgPanelStyle = 'position: absolute; top: calc(100% + 12px); right: 0; z-index: 80; width: 430px; max-height: 68vh; overflow-y: auto; background: var(--menu-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 14px 16px; display: ' + (st.openPill === 'cfg' ? 'block' : 'none') + ';';
+  var cfgPanelStyle = 'position: absolute; top: calc(100% + 6px); right: 0; z-index: 80; width: 400px; max-height: 68vh; overflow-y: auto; background: var(--menu-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 7px 9px; display: ' + (st.openPill === 'cfg' ? 'block' : 'none') + ';';
 
+  var попапОткрыт = !!(st.openPill || st.fsSetOpen || st.fsLineOpen);
   return (
-    <header ref={c.hdrRef} data-chrome="1" data-float={isFs ? '1' : null} style={s('display: flex; align-items: center; padding: ' + hdrPad + '; gap: ' + hdrGap + 'px; position: relative; z-index: 45; flex-shrink: 0; min-width: 0;')}>
+    <header ref={c.hdrRef} data-chrome="1" data-float={isFs ? '1' : null} style={s('display: flex; align-items: center; padding: ' + hdrPad + '; gap: ' + hdrGap + 'px; position: relative; z-index: ' + (попапОткрыт ? '80' : '45') + '; flex-shrink: 0; min-width: 0;')}>
       <div style={s('flex: 1 1 0; min-width: ' + hdrMin + '; display: flex; align-items: center; gap: ' + hdrGap2 + 'px;')}>
         {/* фристайл-хром (микрофон/трек/строка/сцена/профили/кадр/запись) —
             слот интегратора. Пилюля листов, «сохранено 12:44» и отмена-возврат
@@ -276,7 +278,7 @@ export function renderHeader(c) {
             <button onClick={() => { c.tog('jobs'); c.loadStats(); }} title={jobsTitle} aria-label="Фоновые работы" style={s(icoBtn(jobsColor))} className={hov('color: var(--ink)')}>
               <svg viewBox="0 0 20 20" width="14" height="14">
                 <circle cx="10" cy="10" r="7.4" fill="none" stroke="var(--border-soft)" strokeWidth="1.3" />
-                {jobs.state !== 'покой' ? (<circle cx="10" cy="10" r="7.4" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray={jobsDash} strokeLinecap="round" transform="rotate(-90 10 10)" />) : null}
+                {jobs.state !== 'покой' ? (<circle className={jobs.indeterminate ? 'nl-jobs-indeterminate' : null} cx="10" cy="10" r="7.4" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray={jobsDash} strokeLinecap="round" transform="rotate(-90 10 10)" />) : null}
                 {jobs.running > 1 ? (<circle cx="10" cy="10" r="2" fill="currentColor" />) : null}
               </svg>
             </button>
@@ -290,28 +292,25 @@ export function renderHeader(c) {
               существует вовсе — обычный пользователь её не видит никогда. */}
           <div data-pop="1" style={s('position: relative; z-index: 60;')}>
             {st.логОшибок ? (
-              <span onClick={function () { c.setState({ cfgTab: 'лог' }); c.tog('cfg'); c.обновитьЛог(); }}
+              <button type="button" className="nl-error-badge" onClick={function () { c.setState({ cfgTab: 'лог' }); c.tog('cfg'); c.обновитьЛог(); }}
+                aria-label={'Открыть журнал ошибок: ' + st.логОшибок}
                 title={'ошибок за сессию: ' + st.логОшибок + ' — нажми, чтобы отправить отчёт'}
                 style={s('position: absolute; top: -3px; right: -3px; z-index: 61; min-width: 14px; '
-                  + 'height: 14px; padding: 0 3px; border-radius: 999px; background: #e05252; '
+                  + 'height: 14px; padding: 0 3px; border: none; border-radius: 999px; background: #e05252; '
                   + 'color: #fff; font-size: 9px; line-height: 14px; text-align: center; '
                   + 'cursor: pointer; box-shadow: 0 0 0 2px var(--canvas);')}>
-                {st.логОшибок > 9 ? '9+' : st.логОшибок}</span>
+                {st.логОшибок > 9 ? '9+' : st.логОшибок}</button>
             ) : null}
             <button onClick={() => c.tog('cfg')} aria-label="Настройки" title="Общие настройки" style={s(hudBtn(st.openPill === 'cfg'))}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3.2"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.24.6.8 1 1.44 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"></path></svg>
             </button>
-            <div data-pa="down" data-po={pO('cfg')} style={s(cfgPanelStyle)}>
+            <div data-panel="settings" data-pa="down" data-po={pO('cfg')} style={s(cfgPanelStyle + ' max-width: calc(100vw - 24px);')}>
               {renderSettings(c, { cfgSections, uiTintSwatches, uiTintOffStyle, uiTintPickerStyle, docCfgItems, legendRows, statRows })}
             </div>
           </div>
         </div>
 
 
-        {/* ---- статус-виджет: строку пишут методы генерации ('тема: …' / 'без темы' / 'генерация…', state.genStatus в methods.gen.js) ---- */}
-        {!isFs && st.genStatus ? (
-          <span title={st.genStatus} style={s('max-width: 260px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 10.5px; color: ' + (st.genBusy ? 'var(--ink)' : 'var(--muted-soft)') + '; font-variant-numeric: tabular-nums;')}>{st.genStatus}</span>
-        ) : null}
         {/* Часы: перерисовываются с любым setState — этого достаточно.
             В редакторе от яруса 1 уходят: рядом стоит «сохранено 12:44», то
             есть время там и так есть, плюс оно всегда есть в строке меню
@@ -337,8 +336,8 @@ export function renderLegend(c) {
   // говорит пилюля в шапке.
   var hotRows = hotRowsCalc();
   return (
-    <div data-chrome="1" style={s('padding: 18px 32px; display: flex; flex-shrink: 0; position: relative; z-index: 45;')}>
-      <div style={s('width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 35px;')}>
+    <div data-chrome="1" style={s('padding: 8px 20px; display: flex; flex-shrink: 0; position: relative; z-index: 45;')}>
+      <div style={s('width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 22px;')}>
         <div style={s('flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; font-size: 9px; line-height: 1.6; color: var(--muted);')}>
           {hotRows.map((h, i) => (
             <span key={i} style={s('white-space: nowrap;')}><span style={s('color: var(--muted-hard); font-variant-numeric: tabular-nums;')}>{h.k}</span> {h.v}</span>

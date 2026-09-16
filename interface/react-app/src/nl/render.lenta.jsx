@@ -82,7 +82,7 @@ export function renderLenta(c) {
   // экрану. Теперь ширина — ровно выбранная колонка: столб стоит по центру
   // (`margin: auto`), текст в нём слева, край неподвижен от строфы к строфе.
   var блокStyle = 'margin: auto; width: min(var(--content-max-width), 100%); '
-    + 'padding: 24px 28px; font-size: ' + кегль + 'px; line-height: ' + интер
+    + 'padding: 12px 18px; font-size: ' + кегль + 'px; line-height: ' + интер
     + '; font-family: ' + шрифт + ';';
 
   return (
@@ -114,7 +114,7 @@ export function renderLenta(c) {
         ) : строфа.map(function (r, i) {
           var есть = c.строкаВИзбранном(r.text);
           return (
-            <div key={i} style={s('display: flex; gap: 16px; align-items: flex-start;')}>
+            <div key={i} style={s('display: flex; gap: 10px; align-items: flex-start;')}>
               {/* ЗВЕЗДА СПРАВА ОТ СТРОКИ (2026-08-28, требование: «значки
                   звёздочки… справа должен быть, а не слева»; вечером того же
                   дня — «с несколько большим отступом», отсюда gap 16px).
