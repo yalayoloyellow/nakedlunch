@@ -13,6 +13,12 @@ const GEN_TIMEOUT_MS = 180000;
 async function req(url, opts, timeoutMs) {
   const ms = timeoutMs || TIMEOUT_MS;
   const ac = new AbortController();
+  const outer = opts && opts.signal;
+  const stop = () => ac.abort();
+  if (outer) {
+    if (outer.aborted) stop();
+    else outer.addEventListener('abort', stop, { once: true });
+  }
   const timer = setTimeout(() => ac.abort(), ms);
   let res;
   try {
@@ -23,6 +29,7 @@ async function req(url, opts, timeoutMs) {
       : 'нет связи с сервером');
   } finally {
     clearTimeout(timer);
+    if (outer) outer.removeEventListener('abort', stop);
   }
   let data = null;
   try { data = await res.json(); } catch (e) { /* не-JSON — ниже честная ошибка по статусу */ }
@@ -55,7 +62,7 @@ export function post(url, body, timeoutMs) {
 export const generate = (payload) => post('/api/generate', payload, GEN_TIMEOUT_MS);
 // {corpus, accepted} — accepted это список строк избранного, новые сверху
 export const state = () => get('/api/state');
-// {available, sources, pool_total, pool_available} — поле retention убрано
+// {available, sources, pool_total, pool_available, revision} — поле retention убрано
 // 2026-08-18 вместе с роутами /api/nl/retention: экрана у срока хранения
 // «показанного» самого nakedlunch не было никогда, и форма ответа обещала
 // значение, которого больше нет
@@ -75,6 +82,29 @@ export const favRemove = (text) => post('/api/favorite/remove', { text });
 export const settingsGet = () => get('/api/settings');
 // патч как в api_settings_post: {knobs?, stanza?, stanza_profile?}
 export const settingsSet = (patch) => post('/api/settings', patch);
+// Telegram — только локальный пульт Ленты. GET намеренно не возвращает токен
+// или ссылку привязки; ссылка бывает только в ответе на connect.
+export const telegramStatus = () => get('/api/telegram/status');
+export const telegramConnect = (token) => post('/api/telegram/connect', { token });
+export const telegramDisconnect = () => post('/api/telegram/disconnect', {});
+// Долгий опрос пульта: сервер отдаёт ticket только когда Telegram нажал
+// кнопку, а затем React исполняет обычную lentaСтрофа().
+export const telegramLentaNext = (client, signal) => req('/api/telegram/lenta/next', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ client: client }), signal,
+}, 25000);
+export const telegramLentaDone = (payload) => post('/api/telegram/lenta/done', payload);
+export const telegramLentaLeave = (client) => {
+  const body = JSON.stringify({ client: client });
+  // При закрытии webview обычный fetch может не успеть уйти. Beacon не ждёт
+  // ответа, зато освобождает долгий опрос старого окна до запуска нового.
+  if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function'
+      && typeof Blob === 'function') {
+    const blob = new Blob([body], { type: 'application/json' });
+    if (navigator.sendBeacon('/api/telegram/lenta/leave', blob)) return Promise.resolve({ ok: true });
+  }
+  return post('/api/telegram/lenta/leave', { client: client });
+};
 // {builtin, custom} — формы строф
 export const stanzaProfiles = () => get('/api/stanza/profiles');
 // params — положения крутилок в координатах интерфейса, сохраняются вместе

@@ -41,6 +41,7 @@
 //   методы палитры (loadPal/applyPal/pickPal) — модуль панелей.
 
 import * as api from './api.js';
+import { nlSourceKey } from './methods.corpus.js';
 import { защёлкнуть } from './methods.shelves.js';
 import { создатьВарп, испечьТекст } from './freestyle/warpgl.js';
 import { журнал } from './methods.fsglue.js';
@@ -443,8 +444,16 @@ export const fsMethods = {
     var res = await api.generate(payload);
     // ответ придерживаем: из него берётся честная причина пустой выдачи
     this._fsLastRes = res;
+    var естьСемя = !!(res && res.seed
+      && Object.prototype.hasOwnProperty.call(res.seed, 'seed'));
     return ((res && res.shortlist) || [])
-      .map(function (r) { return { text: (r && r.text) || '', template: (r && r.template) || '' }; })
+      .map(function (r) {
+        var строка = Object.assign({}, r || {}, {
+          text: (r && r.text) || '', template: (r && r.template) || '',
+        });
+        if (естьСемя) строка._seed = res.seed.seed;
+        return строка;
+      })
       .filter(function (r) { return r.text; });
   },
   // дозаказ в фоне: одна заявка за раз, тяжёлую генерацию редактора не перебиваем
@@ -629,12 +638,12 @@ export const fsMethods = {
       // мешок пуст (пустая сессия) — берём живые строки: пустая сцена хуже
     }
     return this.fsTake(n).map(function (r) {
-      return { text: r.text, template: r.template, shown: true };
+      return Object.assign({}, r, { shown: true });
     });
   },
 
   // Подпись заявки к генератору: всё, что влияет на СОДЕРЖИМОЕ строк. Ручки,
-  // строфа, тема. Меняется — и буфер, и очередь становятся вчерашними: они
+  // строфа и состав активных книг. Меняется — и буфер, и очередь становятся вчерашними: они
   // набраны по прежним настройкам (Раунд 37).
   //
   // Подпись обязана сниматься С ТОГО ЖЕ, что уезжает в запросе (починка
@@ -646,7 +655,8 @@ export const fsMethods = {
   fsGenKey() {
     var проф = this.fsНастройки();
     return JSON.stringify([this.knobsOfProfile(проф), проф.spec,
-                           проф.полосы || {}, проф.доли || {}]);
+                           проф.полосы || {}, проф.доли || {},
+                           nlSourceKey(this.state && this.state.nl)]);
   },
 
   // Дозаполнить очередь до нужного числа единиц. Тянет строки, пока не хватит
@@ -885,7 +895,7 @@ export const fsMethods = {
     });
     if (fresh.length) {
       this._fsSeen = (this._fsSeen || []).concat(fresh.map(function (r) { return r.text; })).slice(-400);
-      if (this.markShownQueue) this.markShownQueue(fresh.map(function (r) { return { text: r.text, template: r.template || '' }; }));
+      if (this.markShownQueue) this.markShownQueue(fresh);
     }
   },
 

@@ -41,6 +41,7 @@
 // ИМЕННО с ней, а генератор не умеет принимать фиксированную строку.
 
 import * as api from './api.js';
+import { nlSourceKey } from './methods.corpus.js';
 
 // РАЗМЕР ПАЧКИ ЗАМЕРЕН, А НЕ ВЫБРАН (2026-08-14, схема «абба», его настройки
 // из журнала). Стоимость одной строфы:
@@ -97,7 +98,7 @@ export const lentaMethods = {
     var st = this.state;
     return JSON.stringify([st.knobMode, st.params, this.curSpec(),
                            st.полосы || {}, st.доли || {},
-                           String(st.seedDraft || '').trim()]);
+                           String(st.seedDraft || '').trim(), nlSourceKey(st.nl)]);
   },
 
   // ЧТО НАПИСАНО ПОСРЕДИ ПУСТОГО ЭКРАНА. Одна строка, три состояния, и все три
@@ -130,6 +131,135 @@ export const lentaMethods = {
     this._буфер = [];
     this._буферПодпись = null;
     this._буферИдёт = false;
+  },
+
+  // ---- Telegram как пульт настоящей Ленты ----
+  //
+  // Бот НЕ ходит в /api/generate сам. Он ставит ticket в сервере, это окно
+  // забирает ticket долгим опросом, вызывает ЭТУ ЖЕ lentaСтрофа(), а ответ
+  // возвращает только callback после React-отрисовки. Поэтому у удалённого
+  // нажатия ровно те же текущие ручки, буфер и история, что у Enter.
+  пультЛентыЗапустить() {
+    if (this._пультЛентыЖив || this._mounted === false || typeof AbortController !== 'function') return;
+    this._пультЛентыВерсия = (this._пультЛентыВерсия || 0) + 1;
+    this._пультЛентыКлиент = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID()
+      : String(Date.now()) + '-' + Math.random().toString(36).slice(2);
+    this._пультЛентыЖив = true;
+    this._пультЛентыTicket = null;
+    this._пультЛентыTicketКлиент = null;
+    this._пультЛентыОжидание = null;
+    this.пультЛентыСлушать(this._пультЛентыВерсия, this._пультЛентыКлиент);
+  },
+
+  пультЛентыОстановить() {
+    this._пультЛентыЖив = false;
+    this._пультЛентыВерсия = (this._пультЛентыВерсия || 0) + 1;
+    if (this._пультЛентыAbort) this._пультЛентыAbort.abort();
+    this._пультЛентыAbort = null;
+    // Если окно закрыли или пульт отключили посреди строфы, Telegram не ждёт
+    // до своего общего тайм-аута. Это именно отмена удалённого нажатия: Лента
+    // ничего не собрала отдельно и не успела выдать текст за его пределами.
+    var ticket = this._пультЛентыTicket;
+    var client = this._пультЛентыTicketКлиент || this._пультЛентыКлиент;
+    this._пультЛентыTicket = null;
+    this._пультЛентыTicketКлиент = null;
+    if (ticket) this.пультЛентыОтветить(ticket, 'cancelled', null, client);
+    if (client) api.telegramLentaLeave(client).catch(function () {});
+    var ожидание = this._пультЛентыОжидание;
+    if (ожидание && typeof ожидание.готово === 'function') ожидание.готово();
+  },
+
+  async пультЛентыСлушать(версия, client) {
+    while (this._пультЛентыЖив && this._mounted !== false
+           && this._пультЛентыВерсия === версия) {
+      var abort = new AbortController();
+      this._пультЛентыAbort = abort;
+      try {
+        var next = await api.telegramLentaNext(client, abort.signal);
+        if (!this._пультЛентыЖив || this._mounted === false
+            || this._пультЛентыВерсия !== версия) break;
+        var ticket = next && next.ticket;
+        if (typeof ticket === 'string' && ticket) await this.пультЛентыНажать(ticket, версия, client);
+      } catch (e) {
+        if (!this._пультЛентыЖив || this._mounted === false || abort.signal.aborted
+            || this._пультЛентыВерсия !== версия) break;
+        // Сервер мог перезапускаться в этот момент. Не крутить короткий цикл,
+        // но и не считать пульт навсегда мёртвым из-за одной сетевой икоты.
+        await new Promise(function (resolve) { setTimeout(resolve, 750); });
+      } finally {
+        if (this._пультЛентыAbort === abort) this._пультЛентыAbort = null;
+      }
+    }
+  },
+
+  async пультЛентыОтветить(ticket, state, rows, client) {
+    if (this._пультЛентыTicket === ticket) {
+      this._пультЛентыTicket = null;
+      this._пультЛентыTicketКлиент = null;
+    }
+    client = client || this._пультЛентыКлиент;
+    if (!client) return;
+    var payload = { ticket: ticket, state: state, client: client };
+    if (state === 'shown') {
+      payload.rows = (rows || []).map(function (row) { return { text: row.text }; });
+    }
+    try {
+      await api.telegramLentaDone(payload);
+    } catch (e) {
+      // Запрос мог быть отменён при отключении бота или закрытии окна. В этот
+      // момент сервер уже честно ответит Telegram, а локальный экран не надо
+      // засорять вторым сообщением о том же действии.
+      if (this._пультЛентыЖив && this._mounted !== false) console.error('telegram lenta:', e);
+    }
+  },
+
+  async пультЛентыНажать(ticket, версия, client) {
+    var self = this;
+    if (this._пультЛентыВерсия !== версия || this._пультЛентыКлиент !== client) return;
+    this._пультЛентыTicket = ticket;
+    this._пультЛентыTicketКлиент = client;
+    var готово;
+    var ответОтправлен = new Promise(function (resolve) { готово = resolve; });
+    this._пультЛентыОжидание = { ticket: ticket, готово: готово };
+    try {
+      // Пульт Ленты обязан показать результат именно в Ленте, даже если на
+      // компьютере перед этим был открыт фристайл: иначе история записала бы
+      // невидимую строфу, а Telegram перестал бы быть настоящим нажатием.
+      if (this.state.tab !== 'lenta') {
+        await new Promise(function (resolve) { self.setTab('lenta', resolve); });
+      }
+      if (this._mounted === false || !this._пультЛентыЖив
+          || this._пультЛентыВерсия !== версия || this._пультЛентыКлиент !== client) return;
+      if (this.state.genBusy || this.state.genState === 'background' || this._буферИдёт) {
+        await this.пультЛентыОтветить(ticket, 'busy', null, client);
+        return;
+      }
+      var sent = false;
+      var shown = function (rows) {
+        if (sent) return;
+        sent = true;
+        self.пультЛентыОтветить(ticket, rows && rows.length ? 'shown' : 'busy', rows, client)
+          .finally(готово);
+      };
+      var outcome = await this.lentaСтрофа(shown);
+      if (sent || (outcome && outcome.state === 'placed')) {
+        await ответОтправлен;
+        return;
+      }
+      await this.пультЛентыОтветить(ticket,
+        outcome && outcome.state === 'impossible' ? 'impossible' :
+        outcome && outcome.state === 'cancelled' ? 'cancelled' :
+        outcome && outcome.state === 'busy' ? 'busy' : 'error', null, client);
+    } finally {
+      if (this._пультЛентыОжидание && this._пультЛентыОжидание.ticket === ticket) {
+        this._пультЛентыОжидание = null;
+      }
+      if (this._пультЛентыTicket === ticket) {
+        this._пультЛентыTicket = null;
+        this._пультЛентыTicketКлиент = null;
+      }
+    }
   },
 
   // ВОРОНКА — ТОЛЬКО ПРО ТО, ЧТО ЧЕЛОВЕК УВИДЕЛ. Бэк может заранее собрать
@@ -239,9 +369,11 @@ export const lentaMethods = {
       // «а б а» по порядку значило бы соврать буквой. Движок присылает
       // настоящее место (`_поз`), по нему и берём.
       var одеть = function (гр) {
+        var естьСемя = !!(res && res.seed
+          && Object.prototype.hasOwnProperty.call(res.seed, 'seed'));
         return гр.map(function (r, j) {
           var м = (r._поз === undefined ? j : r._поз);
-          return { text: r.text, letter: spec && spec[м] ? spec[м].letter : 'а',
+          var строка = { text: r.text, letter: spec && spec[м] ? spec[м].letter : 'а',
                    rk: r.rhyme || '', book: r.source || '', bookId: r.source_id || '',
                    _исходный: r._исходный || '',
                    // НОМЕР СТРОКИ В ИНДЕКСЕ (2026-09-03). Едет до истории и
@@ -249,6 +381,8 @@ export const lentaMethods = {
                    // выдачи БЕЗ словаря «текст → номер» на 2.3 млн ключей,
                    // который стоил 5.4 с при каждом запуске.
                    _ном: (typeof r._ном === 'number' ? r._ном : null) };
+          if (естьСемя) строка._seed = res.seed.seed;
+          return строка;
         });
       };
       var положить = function (гр) {
@@ -348,15 +482,17 @@ export const lentaMethods = {
   // читала подпись буфера, и перерисовка ради него была бы ценой без покупки.
   // Снято вместе с темой — решение: «вырезать всё вместе с темой».
   // Строфа теперь ровно одна и заказывается одинаково откуда угодно.
-  async lentaСтрофа() {
+  async lentaСтрофа(послеПоказа) {
+    var пульт = typeof послеПоказа === 'function' ? послеПоказа : null;
     // Повторное нажатие во время холодного запроса не должно запускать второй
     // секундомер, не должно затирать ошибку и не должно съедать пустой ответ.
-    if (this.state.genBusy) return;
+    if (this.state.genBusy) return пульт ? { state: 'busy' } : undefined;
     if (this._буферДолитьT) {
       clearTimeout(this._буферДолитьT);
       this._буферДолитьT = null;
     }
     if (this._буферИдёт) {
+      if (пульт) return { state: 'busy' };
       // Фоновый запас уже считает следующую строфу. Нажатие запоминаем и
       // показываем человеку, что оно принято, вместо молчаливого игнора.
       if (this.state.genState === 'background') {
@@ -379,19 +515,26 @@ export const lentaMethods = {
         this._генИсход = null;
       }
     }
-    if (this._mounted === false) return;
+    if (this._mounted === false) return пульт ? { state: 'error' } : undefined;
+    // Человек мог уйти из Ленты, пока удалённое нажатие ждало холодную пачку.
+    // Не вынимаем строфу из буфера и не отмечаем скрытый результат как
+    // показанный: следующее настоящее нажатие в Ленте увидит ту же пачку.
+    if (пульт && this.state.tab !== 'lenta') return { state: 'cancelled' };
     var строфа = (this._буфер || []).shift();
     if (!строфа || !строфа.length) {
       // Ошибка и устаревший ответ уже имеют более точное состояние. Не
       // заменяем их общей фразой «пусто».
-      if (исход || this.state.genState === 'error' || this.state.genState === 'cancelled' || this.state.genState === 'stale') return;
+      if (исход || this.state.genState === 'error' || this.state.genState === 'cancelled' || this.state.genState === 'stale') {
+        return пульт ? { state: 'error' } : undefined;
+      }
       var причина = this.почемуПусто(res, { params: this.state.params, полосы: this.state.полосы });
       this.setState({ genState: 'impossible', genStatus: 'полная строфа не найдена', genError: причина,
                       genResult: { stanzas: 0, lines: 0 } });
       this.flash(причина);
-      return;
+      return пульт ? { state: 'impossible' } : undefined;
     }
-    this.lentaПоложить(строфа, { вид: 'строфа' });
+    this.lentaПоложить(строфа, { вид: 'строфа', послеПоказа: пульт,
+                                 толькоЛента: !!пульт });
     // СЕКУНДОМЕР ГАСИМ ЗДЕСЬ, И ЭТО ПОЧИНКА (2026-08-18). `stopGenClock` гасит
     // только флажок занятости — и в холодном случае в шапке НАВСЕГДА зависало
     // «строфа… 3с», то есть счётчик давно кончившегося прогона.
@@ -404,6 +547,7 @@ export const lentaMethods = {
     this.setState({ genState: 'done', genBusy: false, genStatus: 'готово', genError: '',
                     genResult: { stanzas: 1, lines: строфа.length } });
     this.lentaДолить();
+    return пульт ? { state: 'placed' } : undefined;
   },
 
   // ---- текущая строфа ----
@@ -423,9 +567,11 @@ export const lentaMethods = {
   // ЗАПИСЬ В ИСТОРИЮ ОТСЮДА УШЛА — см. lentaОтметитьПоказ ниже.
   lentaПоложить(строки, мета) {
     var блок = (this._блокN = (this._блокN || 0) + 1);
+    var послеПоказа = мета && typeof мета.послеПоказа === 'function' ? мета.послеПоказа : null;
+    var self = this;
     this.setState({
       lenta: строки.map(function (r) {
-        return { text: r.text, letter: r.letter || '', rk: r.rk || '',
+        var строка = { text: r.text, letter: r.letter || '', rk: r.rk || '',
                  book: r.book || '', bookId: r.bookId || '',
                  // ИСХОДНЫЙ ТЕКСТ ЕДЕТ ДО САМОЙ ИСТОРИИ (2026-09-02). Отбор
                  // умеет подрезать длинную строку и наращивать короткую под
@@ -437,8 +583,18 @@ export const lentaMethods = {
                  // ломалось на каждой подрезанной строке.
                  _исходный: r._исходный || '',
                  _ном: (typeof r._ном === 'number' ? r._ном : null),
-                 блок: блок, вид: (мета && мета.вид) || 'строфа' };
+                 блок: блок, вид: (мета && мета.вид) || 'строфа',
+                 _толькоЛента: !!(мета && мета.толькоЛента) };
+        if (Object.prototype.hasOwnProperty.call(r, '_seed')) строка._seed = r._seed;
+        return строка;
       })
+    }, function () {
+      if (!послеПоказа) return;
+      var видимые = self.state.lenta || [];
+      // Другая строфа успела вытеснить эту до коммита: Telegram не получает
+      // текст, которого на экране не было, ровно как и история.
+      послеПоказа(self.state.tab === 'lenta' && видимые.length && видимые[0].блок === блок
+        ? видимые : null);
     });
     // Длинная строфа (ода в 14 строк) не влезает и прокручивается. Новая
     // обязана начинаться сверху: иначе она открывалась бы на том месте, до
@@ -463,13 +619,20 @@ export const lentaMethods = {
   // отмечается вовсе.
   lentaОтметитьПоказ() {
     var л = this.state.lenta || [];
+    // Только ticket пульта меняет вкладку принудительно. Если человек успел
+    // уйти во фристайл до коммита, это не показ: не записываем скрытую строфу
+    // в историю. Обычные вызовы Ленты этого флага не имеют и не меняют свой
+    // давний контракт (в том числе общий стенд Ленты и фристайла).
+    if (л.length && л[0]._толькоЛента && this.state.tab !== 'lenta') return;
     var блок = л.length ? л[0].блок : null;
     if (блок == null || блок === this._показанБлок) return;
     this._показанБлок = блок;
     if (this.markShownQueue) {
       this.markShownQueue(л.map(function (r) {
-        return { text: r.text, template: '', _исходный: r._исходный || '',
-                 _ном: (typeof r._ном === 'number' ? r._ном : null) };
+        var строка = { text: r.text, template: '', _исходный: r._исходный || '',
+                       _ном: (typeof r._ном === 'number' ? r._ном : null) };
+        if (Object.prototype.hasOwnProperty.call(r, '_seed')) строка._seed = r._seed;
+        return строка;
       }));
     }
   },

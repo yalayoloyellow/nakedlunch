@@ -13,6 +13,7 @@ import argparse
 import logging
 import json
 import os
+import secrets
 import sys
 import threading
 import subprocess
@@ -44,6 +45,7 @@ import jobs                  # noqa: E402  (цепочка фоновых сбо
 import журнал                # noqa: E402  (один журнал на всё приложение, см. core/журнал.py)
 import пути                  # noqa: E402  (где что лежит, см. core/пути.py)
 import дочерний              # noqa: E402  (как запускаются части программы)  (один журнал на всё приложение, см. core/журнал.py)
+import телеграм              # noqa: E402  (приватный пульт Ленты)
 from corpus import Corpus  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -132,7 +134,11 @@ def _записать_итог(ответ):
             журнал.запись("сервер", f"{ответ.status_code} {request.method} {request.path}", "ошибка")
         elif ответ.status_code >= 400 and ответ.status_code not in (404, 405):
             журнал.запись("сервер", f"{ответ.status_code} {request.method} {request.path}", "внимание")
-        elif сек > 5.0 and not request.path.endswith("/status"):
+        # Лента намеренно держит один 20-секундный long poll: пустой ответ —
+        # это её обычный пульс, не зависание. Ошибки прошли двумя ветками выше
+        # и всё равно останутся в журнале.
+        elif (сек > 5.0 and not request.path.endswith("/status")
+              and request.path != "/api/telegram/lenta/next"):
             журнал.запись("сервер", f"{request.method} {request.path} — {сек:.1f} с", "внимание")
     except Exception:
         pass
@@ -151,6 +157,11 @@ def _записать_итог(ответ):
 # тридцать четыре шанса ошибиться ради десяти миллисекунд, которых никто не
 # заметит. Опасна была запись, а не чтение; её и убрали.
 CORPUS = Corpus.load()
+# Любая запись корпуса проходит целой парой «изменить → сохранить». Flask
+# обслуживает запросы параллельно; без общей критической секции второй запрос
+# мог вклиниться между этими двумя действиями и один из снимков на диске не
+# соответствовал ни одному завершённому запросу.
+_CORPUS_WRITE_LOCK = threading.RLock()
 
 # Прогревы, чтобы первый запрос был так же быстр, как второй.
 #
@@ -314,18 +325,30 @@ def _перепривязать_историю() -> None:
     # несовпадении не спрашивает, а МЕТИТ записи в памяти (так и написано в его
     # докстринге), и «дешёвая проверка» стала бы порчей истории.
     штамп = nlindex.штамп(idx)
-    if not штамп or штамп == "без индекса" or штамп == CORPUS.index_stamp:
+    with _CORPUS_WRITE_LOCK:
+        прежний_штамп = CORPUS.index_stamp
+    if not штамп or штамп == "без индекса" or штамп == прежний_штамп:
         return
     тексты = nlindex.text_ids(idx)
     # `номер` — та же карта, только спрашиваем не «есть ли», а «который». По
     # нему история потом вычитается из выдачи БЕЗ словаря вовсе (разбор — в
     # `corpus.скрытые_номера`). Словарь строится здесь ОДИН РАЗ на смену
     # состава, а не при каждом запуске, как было до 2026-09-03.
-    итог = CORPUS.перепривязать(штамп, тексты.__contains__, _как_чистит,
-                                номер=тексты.get)
-    if not итог["нужна"]:
-        return
-    CORPUS.save()
+    # Карта строится секунды. За это время могла закончиться ещё одна
+    # перепечка или соседняя перепривязка. Старой картой нельзя откатывать
+    # уже обновлённые номера: финальная проверка и запись составляют одну
+    # операцию под замками в общем порядке «индекс → корпус».
+    with nlindex.ЗАМОК:
+        if nlindex.load() is not idx:
+            return
+        with _CORPUS_WRITE_LOCK:
+            if CORPUS.index_stamp != прежний_штамп:
+                return
+            итог = CORPUS.перепривязать(штамп, тексты.__contains__, _как_чистит,
+                                        номер=тексты.get)
+            if not итог["нужна"]:
+                return
+            CORPUS.save()
     журнал.запись("история",
                   f"перепривязка к корпусу {итог['штамп']}: на месте "
                   f"{итог['на_месте']}, перепривязано {итог['история']} истории "
@@ -435,17 +458,27 @@ def _прогрев() -> None:
         idx = nlindex.load()
         if idx is None:
             return
-        _, хвост = CORPUS.скрытые_номера(nlindex.штамп(idx))
+        штамп = nlindex.штамп(idx)
+        with _CORPUS_WRITE_LOCK:
+            _, хвост = CORPUS.скрытые_номера(штамп)
         if not хвост:
             return                      # все на номерах — словарь не нужен
         тексты = nlindex.text_ids(idx)
-        сделано = CORPUS.проставить_номера(тексты.get)
-        if сделано:
-            CORPUS.save()
-            журнал.запись("история",
-                          f"перевод в номера строк: дописано {сделано}, "
-                          f"осталось без номера {len(хвост) - сделано} "
-                          f"(это сироты — их строк в корпусе нет)")
+        with nlindex.ЗАМОК:
+            if nlindex.load() is not idx:
+                return                 # карта уже относится к прежнему индексу
+            with _CORPUS_WRITE_LOCK:
+                if CORPUS.index_stamp != штамп:
+                    return             # перепривязка сменила состав под руками
+                сделано = CORPUS.проставить_номера(тексты.get)
+                # Сироты тоже изменены: им ставится −1, чтобы следующий запуск не
+                # строил словарь заново. Поэтому сохраняем даже при сделано == 0.
+                CORPUS.save()
+                _, осталось = CORPUS.скрытые_номера(штамп)
+        журнал.запись("история",
+                      f"перевод в номера строк: дописано {сделано}, "
+                      f"осталось без номера {len(осталось)}; "
+                      f"сироты отмечены как проверенные")
 
     этап("история", история)
     # СКЛАД — ПОСЛЕДНИМ. Генерации он больше не нужен: список включённых книг
@@ -535,6 +568,10 @@ _NL_RHYME_STALE_SECONDS = 180   # no checkpoint in 3min → probably not activel
 # плюс тишина дольше этого читается как чужой процесс, занявший номер.
 _NL_RHYME_ЗАБЫТЬ_СЕКУНД = 6 * _NL_RHYME_STALE_SECONDS
 _NL_RHYME_PROC = None            # this process's own handle — avoids double-spawn
+# Проверка «уже идёт?» и присваивание Popen — одна операция для обоих
+# запускателей. Иначе два HTTP-потока успевали оба увидеть None и поднимали
+# двух писателей одного временного файла.
+_NL_BUILD_START_LOCK = threading.Lock()
 
 
 def _процесс_жив(pid) -> bool | None:
@@ -582,7 +619,7 @@ def _сборка_идёт(s: dict) -> bool:
     return молчит < _NL_RHYME_ЗАБЫТЬ_СЕКУНД
 
 
-def _nl_rhyme_ensure_running(full: bool = False) -> None:
+def _nl_rhyme_ensure_running(full: bool = False) -> bool:
     """Spawn the rhyme-cache build in the background if it isn't already
     running. Called after a source is added — new fragments should start
     getting covered without the user having to open a terminal. Safe to call
@@ -603,36 +640,27 @@ def _nl_rhyme_ensure_running(full: bool = False) -> None:
     has fresh-only work to do, a full rebuild there would just be slower for
     no benefit."""
     global _NL_RHYME_PROC
-    if _nl() is None:
-        return False
-    if _NL_RHYME_PROC is not None and _NL_RHYME_PROC.poll() is None:
-        return False
-    # A build from OUTSIDE this process (the user's own terminal, or a
-    # previous run of this same server) may already be writing nl_rhyme.json
-    # right now — this process's own _NL_RHYME_PROC handle only knows about
-    # builds IT started. A fresh updated_at means skip; two ONNX sessions
-    # racing to write the same cache file is the actual failure mode, not
-    # the (harmless, by design) redundant re-skip of already-cached text.
-    if _NL_RHYME_STATUS_PATH.exists():
-        try:
-            s = json.loads(_NL_RHYME_STATUS_PATH.read_text(encoding="utf-8"))
-            if _сборка_идёт(s):
-                # ВЕРНУТЬ False, А НЕ ПРОСТО ВЫЙТИ (Раунд 56). Нажатие «прогнать
-                # всё заново» при уже идущей сборке исчезало БЕЗ СЛЕДА: ни отказа,
-                # ни отметки в интерфейсе. Молчаливый отказ хуже отказа.
-                return False
-        except Exception:
-            pass
-    import subprocess
-    args = дочерний.команда("ударения")
-    if full:
-        args.append("--full")
-    # Режим `--reban` отсюда снят 2026-08-21 вместе с кнопкой (надгробие ниже):
-    # он подмножество полного прогона и нужен только в день смены формулы.
-    _журнал = _лог_сборки("ударения" + (" (полный пересчёт)" if full else ""))
-    _NL_RHYME_PROC = subprocess.Popen(
-        args, cwd=str(ROOT), stdout=_журнал, stderr=subprocess.STDOUT,
-    )
+    with _NL_BUILD_START_LOCK:
+        if _NL_RHYME_PROC is not None and _NL_RHYME_PROC.poll() is None:
+            return False
+        # A build from OUTSIDE this process (the user's own terminal, or a
+        # previous run of this same server) may already be writing the cache.
+        if _NL_RHYME_STATUS_PATH.exists():
+            try:
+                s = json.loads(_NL_RHYME_STATUS_PATH.read_text(encoding="utf-8"))
+                if _сборка_идёт(s):
+                    return False
+            except Exception:
+                pass
+        args = дочерний.команда("ударения")
+        if full:
+            args.append("--full")
+        _журнал = _лог_сборки(
+            "ударения" + (" (полный пересчёт)" if full else ""))
+        _NL_RHYME_PROC = subprocess.Popen(
+            args, cwd=str(ROOT), stdout=_журнал, stderr=subprocess.STDOUT,
+        )
+        процесс = _NL_RHYME_PROC
     # Кэш рифм — только ПОЛОВИНА пути новой книги. Вторая половина, колоночный
     # индекс, печётся ИЗ него, поэтому цепляется следом, а не параллельно
     # (Раунд 52). Без этого шага книга попадала в источники и не попадала в
@@ -644,8 +672,8 @@ def _nl_rhyme_ensure_running(full: bool = False) -> None:
     #
     # Теперь смерть ловится и записывается: «не удалось, код такой-то». Это не
     # чинит саму нехватку памяти — это перестаёт врать о ней.
-    _после(_NL_RHYME_PROC, _nl_index_ensure_running)
-    _проследить_за_сборкой(_NL_RHYME_PROC)
+    _после(процесс, _nl_index_ensure_running)
+    _проследить_за_сборкой(процесс)
     return True
 
 
@@ -828,6 +856,27 @@ def _погасить_детей(timeout: float = 3.0) -> None:
                 pass        # уже мёртв или номер занят другим — не наша беда
 
 
+def _погасить_бота(timeout: float = 2.0) -> None:
+    """Не создавать пульт на выходе: гасить только уже запущенный."""
+    bridge = globals().get("_ПУЛЬТ_ЛЕНТЫ")
+    if bridge is not None:
+        try:
+            bridge.отменить()
+        except Exception:
+            pass
+    bot = globals().get("_ТЕЛЕГРАМ")
+    if bot is not None:
+        try:
+            bot.остановить(timeout=timeout)
+        except Exception:
+            pass
+
+
+def _погасить_свои_работы(timeout: float = 3.0) -> None:
+    _погасить_детей(timeout)
+    _погасить_бота(min(timeout, 2.0))
+
+
 def _гасить_детей_при_выходе() -> None:
     """Зарегистрировать гашение на ВСЕХ выходах, а не на одном.
 
@@ -844,10 +893,14 @@ def _гасить_детей_при_выходе() -> None:
     import atexit
     import signal
 
+    # Сборки остаются отдельной регистрацией: это старый и проверяемый
+    # контракт выхода. Пульт добавлен вторым независимым хвостом, чтобы не
+    # превратить его в невидимую замену гашения детей.
     atexit.register(_погасить_детей)
+    atexit.register(_погасить_бота)
 
     def по_сигналу(номер, _кадр):
-        _погасить_детей()
+        _погасить_свои_работы()
         # `sys.exit`, а не `os._exit`: сокет и журнал должны закрыться
         # по-человечески. Повторный заход из atexit безвреден — гасить уже
         # некого, список живых детей к тому мигу пуст.
@@ -901,19 +954,18 @@ def _проследить_за_сборкой(proc) -> None:
     threading.Thread(target=смотреть, name="nl-rhyme-watch", daemon=True).start()
 
 
-def _nl_index_ensure_running() -> None:
+def _nl_index_ensure_running() -> bool:
     """Перепечь колоночный индекс в фоне, если он не печётся прямо сейчас."""
     global _NL_INDEX_PROC
-    if _nl() is None:
-        return
-    if _NL_INDEX_PROC is not None and _NL_INDEX_PROC.poll() is None:
-        return
-    import subprocess
-    _журнал = _лог_сборки("индекс корпуса")
-    _NL_INDEX_PROC = subprocess.Popen(
-        дочерний.команда("индекс"), cwd=str(ROOT),
-        stdout=_журнал, stderr=subprocess.STDOUT,
-    )
+    with _NL_BUILD_START_LOCK:
+        if _NL_INDEX_PROC is not None and _NL_INDEX_PROC.poll() is None:
+            return False
+        _журнал = _лог_сборки("индекс корпуса")
+        _NL_INDEX_PROC = subprocess.Popen(
+            дочерний.команда("индекс"), cwd=str(ROOT),
+            stdout=_журнал, stderr=subprocess.STDOUT,
+        )
+        процесс = _NL_INDEX_PROC
     # Испекли — но процесс держит в памяти СТАРЫЙ индекс и старую карту
     # «текст → номер». Без перезагрузки новые строки появились бы только
     # после перезапуска окна.
@@ -921,7 +973,8 @@ def _nl_index_ensure_running() -> None:
     # Перепривязка идёт СРАЗУ ЗА перезагрузкой, а не ждёт следующего запуска:
     # именно перепечь и меняет строки, а между ней и перезапуском пользователь
     # успевает нагенерировать — и получил бы уже показанное (2026-08-18).
-    _после(_NL_INDEX_PROC, lambda: (nlindex.reload(), _перепривязать_историю()))
+    _после(процесс, lambda: (nlindex.reload(), _перепривязать_историю()))
+    return True
 
 
 _NL_TEXTS_CACHE: tuple | None = None      # (сколько фрагментов, множество текстов)
@@ -1560,12 +1613,8 @@ def api_nl_index_run():
 
     Кнопки на экране у этого нет НАРОЧНО: перепечка нужна при смене колонок,
     то есть при работе над кодом, а не в обычной работе."""
-    err = _nl_guard()
-    if err:
-        return err
-    if _NL_INDEX_PROC is not None and _NL_INDEX_PROC.poll() is None:
+    if not _nl_index_ensure_running():
         return {"error": "индекс уже печётся"}, 409
-    _nl_index_ensure_running()
     return {"начали": True}
 
 
@@ -1578,9 +1627,6 @@ def api_nl_rhyme_run():
     ~100% complete — the button looked broken. "Ручной" is the user
     explicitly asking for a from-scratch recompute, not a repeat of what
     already happens automatically)."""
-    err = _nl_guard()
-    if err:
-        return err
     начали = _nl_rhyme_ensure_running(full=True)
     if not начали:
         return {"ok": False, "busy": True,
@@ -1626,9 +1672,6 @@ def api_nl_clean():
     длинная, и решать, когда отдать под неё машину, — дело человека.
 
     Разбор правил и замеры — в докстринге `NakedLunchStore.почистить`."""
-    err = _nl_guard()
-    if err:
-        return err
     if _ЧИСТКА["state"] == "running":
         return {"ok": False, "busy": True, "detail": "чистка уже идёт"}
     # ОТКАЗ, ЕСЛИ ПЕРЕСЧЁТ УЖЕ ИДЁТ, И ПРОВЕРКА ДО, А НЕ ПОСЛЕ (2026-08-21).
@@ -1719,6 +1762,7 @@ def _чистка_поток(считать_только: bool) -> None:
     def доклад(этап: str, сделано: int, всего: int) -> None:
         _ЧИСТКА.update({"этап": этап, "done": сделано, "total": всего})
     try:
+        _ЧИСТКА["этап"] = "загружаю склад"
         if not считать_только:
             _ЧИСТКА["этап"] = "делаю снимок склада"
             _снимок_склада()
@@ -1926,16 +1970,20 @@ def _подписать_источники(shortlist) -> None:
                     continue
                 r["source_id"] = cid
                 r["source"] = имена.get(cid, cid)
-        if сироты_подписи:
-            нужные = {r.get("text") for r in сироты_подписи}
+        # Поиск дубля требует самих фрагментов. Если склад уже в памяти —
+        # уточняем подпись; если нет, оставляем её пустой. Будить сотни
+        # мегабайт ради необязательной метки у одной строки нельзя.
+        if сироты_подписи and _склад is not None:
+            ключ = lambda r: r.get("_исходный") or r.get("text")  # noqa: E731
+            нужные = {ключ(r) for r in сироты_подписи}
             найдено = {}
-            for f in _nl().state.fragments:
+            for f in _склад.state.fragments:
                 if f.text in нужные and активна.get(f.corpus_id)                         and f.text not in найдено:
                     найдено[f.text] = f.corpus_id
                     if len(найдено) == len(нужные):
                         break
             for r in сироты_подписи:
-                cid = найдено.get(r.get("text"))
+                cid = найдено.get(ключ(r))
                 if cid:
                     r["source_id"] = cid
                     r["source"] = имена.get(cid, cid)
@@ -2138,19 +2186,24 @@ def api_pool_shape():
     return {"готово": True, **форма}
 
 
-@app.post("/api/generate")
-def api_generate():
-    # Один прогон на приложение: два одновременных запроса не дают честного
-    # ответа о пуле и могут конкурировать за историю/индекс. Пользовательский
-    # интерфейс дополнительно блокирует повторную кнопку, но сервер обязан
-    # защищать инвариант и для второго клиента, старого бандла или скрипта.
+class _ГенерацияЗанята(RuntimeError):
+    """Единственный прогон Ленты уже занял общий замок."""
+
+
+def _сгенерировать(собрать):
+    """Запустить одну сборку из прямого HTTP или локального входа.
+
+    Telegram намеренно не входит сюда: пульт ждёт, пока открытая Лента сама
+    вызовет этот путь. Поэтому удалённая кнопка не обходит её настройки, буфер
+    и отметку истории.
+    """
     if not _ГЕНЕРАЦИЯ_ЗАМОК.acquire(blocking=False):
-        return {"error": "расчёт уже идёт", "detail": "дождись текущей строфы"}, 409
+        raise _ГенерацияЗанята()
     _генерация_обновить(state="running", phase="подготовка", started_at=time.time(),
                         updated_at=round(time.time() * 1000), elapsed_ms=0,
                         error="", result=None)
     try:
-        result = _api_generate_body()
+        result = собрать()
         _генерация_обновить(state="done", phase="готово",
                             result={"stanzas": 0 if not result.get("shortlist") else 1,
                                     "lines": len(result.get("shortlist") or [])})
@@ -2163,9 +2216,26 @@ def api_generate():
         _ГЕНЕРАЦИЯ_ЗАМОК.release()
 
 
+@app.post("/api/generate")
+def api_generate():
+    # Один прогон на приложение: два одновременных запроса не дают честного
+    # ответа о пуле и могут конкурировать за историю/индекс. Пользовательский
+    # интерфейс дополнительно блокирует повторную кнопку, но сервер обязан
+    # защищать инвариант и для второго клиента, старого бандла или скрипта.
+    try:
+        return _сгенерировать(_api_generate_body)
+    except _ГенерацияЗанята:
+        return {"error": "расчёт уже идёт", "detail": "дождись текущей строфы"}, 409
+
+
 def _api_generate_body():
-    t0 = time.time()
     payload = request.get_json(force=True, silent=True) or {}
+    return _собрать_строфу(payload)
+
+
+def _собрать_строфу(payload):
+    t0 = time.time()
+    payload = payload if isinstance(payload, dict) else {}
     _генерация_обновить(phase="проверяю настройки")
 
     # НАДГРОБИЕ 2026-08-29: ЗДЕСЬ ПРИНИМАЛАСЬ ТЕМА. Поле `theme` разбиралось
@@ -2225,10 +2295,17 @@ def _api_generate_body():
     #
     # Нет индекса — прежний путь целиком, вместе с ожиданием склада: запасной
     # ветке нужны сами тексты, и взять их больше неоткуда.
-    if nlindex.load() is not None and nlbridge.активные_книги():
-        nl_active = knobs["nl_mix"] > 0
-    else:
-        nl_active = knobs["nl_mix"] > 0 and _nl() is not None
+    активные = nlbridge.активные_книги()
+    склад = None
+    книги = активные
+    if книги is None:
+        # Маленького файла нет или он повреждён — только тогда платим за
+        # тяжёлый источник правды. Заодно получаем точный активный состав:
+        # само наличие склада ещё не означает, что включена хоть одна книга.
+        склад = _nl()
+        if склад is not None:
+            книги = {к["id"] for к in склад.list_corpora() if к.get("active")}
+    nl_active = knobs["nl_mix"] > 0 and bool(книги)
 
     # СЕМЯ ВЫБИРАЕТСЯ ЗДЕСЬ, ДО ОБОИХ КОНВЕЙЕРОВ (Раунд 62). Их два, и оба
     # случайны: грамматический генератор ниже и каскад отбора в filters.run.
@@ -2247,43 +2324,16 @@ def _api_generate_body():
         # slower requests, not better output).
         pass
 
-    nl_frags = []
-    if nl_active:
-        # The WHOLE active-and-not-yet-shown pool, every request — not a
-        # sample (2026-07-14, user: "пусть обрабатывается и перебирается
-        # всегда именно полная база абсолютно везде"). Previously fetched a
-        # capped random/weighted slice (as few as 320 of 257,630 fragments for
-        # an unthemed max-real_text request — the user's own "это бред"
-        # finding); that cap only existed because scoring needed live
-        # pymorphy3/zipf calls per fragment. tools/build_nl_rhyme.py now
-        # precomputes banal/taut/lemmas/tokens offline, so filters._nl_scored
-        # scans the full pool as dict lookups — measured ~24ms/200k entries,
-        # see DECISIONS.md. Theme relevance still matters: it's now a SCORE
-        # (shared tokens with `tags`) computed inside _nl_scored instead of a
-        # pre-filter, so on-theme fragments rank first without needing a
-        # smaller candidate set to find them in.
-        # Раунд 40: активный пул целиком. Показанное скрывает НАША история
-        # (единственный источник, см. _merge_nl_used_once) — filters.run
-        # вычитает corpus.hidden_set() сам.
-        # СПИСОК ТЕКСТОВ БЕРЁМ, ТОЛЬКО ЕСЛИ ОН НУЖЕН (2026-09-03).
-        #
-        # Он нужен запасному пути — тому, что работает без колоночного индекса.
-        # Индексному пути хватает списка ВКЛЮЧЁННЫХ КНИГ (см. ниже, `книги`), а
-        # он читается из `active.json` на 1.4 КБ. Каждый вызов
-        # `get_active_pool()` тянет за собой загрузку склада `state.json` на
-        # 363 МБ — 5.3 секунды, которые первая генерация ждала впустую.
-        # ТЕКСТЫ БЕРЁМ, ТОЛЬКО ЕСЛИ КОЛОНКА НЕ СРАБОТАЛА. Она не срабатывает,
-        # когда индекса нет вовсе или когда включённые книги с ним не сошлись
-        # (индекс из другого состава, чужое хранилище) — тогда отбор идёт
-        # прежним путём, и текстов ему взять больше неоткуда.
-        _idx = nlindex.load()
-        if _idx is None or nlindex.маска_книг(_idx, nlbridge.активные_книги()) is None:
-            nl_frags = _nl().get_active_pool()
+    # Активный пул проверяется целиком; показанное вычитает сама история.
+    # Список текстов нужен только запасному пути без совместимого колоночного
+    # индекса. Саму проверку делаем ниже под тем же замком, что и отбор:
+    # перепечка не должна вклиниться между решением «тексты не нужны» и run.
 
-    # Замок берёт сам `filters.run` (2026-08-18): он держит объект индекса от
-    # начала до конца прогона, и перепечка, доехавшая в середину, оставляла
-    # запрос со старыми колонками и новой маской чёрного списка — та самая
-    # пятисотка. Обязанность, о которой можно забыть здесь, — не починка.
+    # `filters.run` сам держит этот реентрантный замок на всём отборе. Здесь
+    # берём его на один шаг раньше: совместимость активных книг и решение о
+    # текстовом запасном пути обязаны относиться к ТОМУ ЖЕ объекту индекса.
+    # Иначе reload между проверкой и run давал пустую выдачу на новом индексе,
+    # хотя тексты для запасного пути уже были отвергнуты по старому.
     # СПИСОК ВКЛЮЧЁННЫХ КНИГ, А НЕ СПИСОК ТЕКСТОВ (2026-09-03).
     #
     # Отбору нужна МАСКА активного пула, и до сих пор она строилась так: склад
@@ -2296,19 +2346,21 @@ def _api_generate_body():
     # включённых книг (все, минус 1, минус 5, минус 20): ноль расхождений.
     # Разбор — в `nlindex.маска_книг`.
     #
-    # `nl_frags` остаётся: на нём стоит запасной путь без индекса и подсчёт
-    # «сколько всего было». Но ЖДАТЬ его больше незачем.
-    # Флаги активности читаются из `active.json` (1.4 КБ) — БЕЗ загрузки склада
-    # на 363 МБ. Нет файла — спрашиваем склад, как раньше.
-    книги = nlbridge.активные_книги()
-    if книги is None:
-        try:
-            книги = {к["id"] for к in _nl().list_corpora() if к.get("active")}
-        except Exception:
-            pass      # склада нет — уходим на прежний путь через тексты
+    # `nl_frags` остаётся: на нём стоит запасной путь без совместимого индекса
+    # и подсчёт «сколько всего было». На обычном пути список не создаётся.
     _генерация_обновить(phase="проверяю полную базу и совместимость")
-    result = filters.run(lines, knobs, CORPUS, nl_fragments=nl_frags, rhyme=rhyme,
-                         stanza=stanza, семя=семя, книги=книги)
+    with nlindex.ЗАМОК:
+        idx_прогона = nlindex.load()
+        nl_frags = []
+        if nl_active and (
+                idx_прогона is None
+                or nlindex.маска_книг(idx_прогона, книги) is None):
+            склад = склад or _nl()
+            if склад is not None:
+                nl_frags = склад.get_active_pool()
+        result = filters.run(
+            lines, knobs, CORPUS, nl_fragments=nl_frags, rhyme=rhyme,
+            stanza=stanza, семя=семя, книги=книги)
     _генерация_обновить(phase="оформляю результат",
                         result={"stanzas": 0 if not result.get("shortlist") else 1,
                                 "lines": len(result.get("shortlist") or [])})
@@ -2330,12 +2382,25 @@ def _api_generate_body():
     # числа кормили, вырезана с фронта ещё в Раунде 50 — там даже переменная
     # `fu` присваивалась и не использовалась.
     #
-    # Теперь: плоские счётчики каскада отдаём как есть (они бесплатны, их
-    # считает сам filters.run), а дорогое число доливаем ТОЛЬКО когда выдача
-    # пуста — то есть ровно тогда, когда фронту надо объяснить причину.
-    if not result["shortlist"] and nl_active and _nl() is not None:
-        result["funnel"]["pool_available"] = len(
-            set(_nl().get_active_pool()) - CORPUS.hidden_set())
+    # Теперь плоские счётчики каскада отдаём как есть. На индексном пути
+    # «твои книги» и «показано» уже посчитаны масками, поэтому при пустой
+    # выдаче доступный остаток — их бесплатная разность. К складу обращаемся
+    # только на старом пути и только если он уже загружен.
+    if not result["shortlist"] and nl_active:
+        воронка = result.setdefault("funnel", {})
+        ступени = воронка.get("ступени") or {}
+        всего = ступени.get("твои_книги")
+        показано = ступени.get("показано")
+        if isinstance(всего, (int, float)) and isinstance(показано, (int, float)):
+            воронка["pool_available"] = max(0, int(всего) - int(показано))
+        else:
+            # Старый индекс этих двух ступеней не отдавал. Пользуемся складом
+            # лишь если он уже готов; неизвестное число честнее 15-секундной
+            # остановки всего сервера ради сообщения о пустой выдаче.
+            склад = nlbridge.store_if_ready()
+            if склад is not None:
+                воронка["pool_available"] = len(
+                    set(склад.get_active_pool()) - CORPUS.hidden_set())
 
     # Only the user-facing sliders (matching App.jsx's KNOBS) — clean.knobs()
     # also carries old-name aliases (explore/meter/banal/nl_mix) for the same
@@ -2440,11 +2505,14 @@ def api_favorite():
     # text, and is more correct on homographs than a cold re-guess.
     raw = payload.get("lemmas")
     lemmas = [w for w in raw if isinstance(w, str)][:20] if isinstance(raw, list) else None
-    CORPUS.accept(text, lemmas=lemmas, rhyme=payload.get("rhyme", ""))
-    CORPUS.save()                                  # favorites can't be lost (ergonomic invariant)
+    with _CORPUS_WRITE_LOCK:
+        CORPUS.accept(text, lemmas=lemmas, rhyme=payload.get("rhyme", ""))
+        CORPUS.save()                              # favorites can't be lost (ergonomic invariant)
+        состояние = CORPUS.stats()
+        избранное = CORPUS.accepted_texts()
     stats_mod.log("favorite", text=text, template=(payload.get("template") or ""),
                    lemmas=lemmas or [])
-    return {"corpus": CORPUS.stats(), "accepted": CORPUS.accepted_texts()}
+    return {"corpus": состояние, "accepted": избранное}
 
 
 @app.post("/api/favorite/remove")
@@ -2455,10 +2523,13 @@ def api_favorite_remove():
     text = (payload.get("text") or "").strip()
     if not text:
         return {"error": "пустая строка"}, 400
-    CORPUS.unaccept(text)
-    CORPUS.save()
+    with _CORPUS_WRITE_LOCK:
+        CORPUS.unaccept(text)
+        CORPUS.save()
+        состояние = CORPUS.stats()
+        избранное = CORPUS.accepted_texts()
     stats_mod.log("unfavorite", text=text)
-    return {"corpus": CORPUS.stats(), "accepted": CORPUS.accepted_texts()}
+    return {"corpus": состояние, "accepted": избранное}
 
 
 # ---- history — reversible hiding of shown lines -------------------------
@@ -2469,6 +2540,45 @@ def api_history_list():
     return {"items": CORPUS.history_list(q), "stats": CORPUS.stats()}
 
 
+def _проверить_номера_истории(items: list[dict]) -> list[dict]:
+    """Оставить клиентский ``_ном`` только если он указывает на этот текст.
+
+    Браузер может пережить перепечку индекса и прислать номер из прежнего
+    состава. Такой номер — лишь подсказка: показанную строку всё равно
+    записываем, но чужой указатель снимаем, чтобы не спрятать другую строку.
+    """
+    idx = nlindex.load()
+    проверенные = []
+    for исходная in items:
+        строка = dict(исходная)
+        номер = строка.get("_ном")
+        полный = строка.get("_исходный")
+        ожидаем = полный if isinstance(полный, str) and полный else строка.get("text")
+        верен = isinstance(номер, int) and not isinstance(номер, bool) and номер >= 0
+        if верен and idx is not None and isinstance(ожидаем, str):
+            try:
+                верен = номер < int(idx.n) and idx.text(номер) == ожидаем
+            except (AttributeError, IndexError, OSError, TypeError, ValueError):
+                верен = False
+        else:
+            верен = False
+        if not верен:
+            строка.pop("_ном", None)
+        проверенные.append(строка)
+    return проверенные
+
+
+def _отметить_показанные(items: list[dict], *, семя=None, theme: str = "") -> dict:
+    """Записать только действительно показанные строки из любого входа."""
+    with _CORPUS_WRITE_LOCK:
+        clean_items = _проверить_номера_истории(items)
+        CORPUS.mark_shown(clean_items, theme=theme, семя=clean.семя(семя))
+        CORPUS.save()
+        состояние = CORPUS.stats()
+    stats_mod.log("shown", count=len(clean_items), theme=theme)
+    return состояние
+
+
 @app.post("/api/history/mark_shown")
 def api_history_mark_shown():
     """Called at the moment lines are actually DISPLAYED — not at generation
@@ -2477,15 +2587,16 @@ def api_history_mark_shown():
     items = payload.get("items")
     if not isinstance(items, list):
         return {"error": "нужен список items"}, 400
-    clean_items = [it for it in items if isinstance(it, dict) and (it.get("text") or "").strip()][:400]
+    clean_items = [it for it in items
+                   if isinstance(it, dict) and isinstance(it.get("text"), str)
+                   and it["text"].strip()][:400]
     theme = payload.get("theme") or ""
     # Номер прогона, который эти строки породил (Раунд 62) — по нему повтор
     # отличает свой след от чужого. Не пришёл (фристайл, старый клиент) — None,
     # и запись ведёт себя ровно как раньше: прячется всегда.
-    CORPUS.mark_shown(clean_items, theme=theme, семя=clean.семя(payload.get("seed")))
-    CORPUS.save()
-    stats_mod.log("shown", count=len(clean_items), theme=theme)
-    return {"stats": CORPUS.stats()}
+    состояние = _отметить_показанные(clean_items, семя=payload.get("seed"),
+                                      theme=theme)
+    return {"stats": состояние}
 
 
 @app.post("/api/history/restore")
@@ -2494,10 +2605,12 @@ def api_history_restore():
     texts = payload.get("texts")
     if not isinstance(texts, list) or not texts:
         return {"error": "нужен непустой список texts"}, 400
-    n = CORPUS.restore([t for t in texts if isinstance(t, str)])
-    CORPUS.save()
+    with _CORPUS_WRITE_LOCK:
+        n = CORPUS.restore([t for t in texts if isinstance(t, str)])
+        CORPUS.save()
+        состояние = CORPUS.stats()
     stats_mod.log("restore", count=n)
-    return {"restored": n, "stats": CORPUS.stats()}
+    return {"restored": n, "stats": состояние}
 
 
 # НАДГРОБИЕ 2026-08-29: РОУТ `/api/history/restore_theme` — «вернуть в пул
@@ -2510,10 +2623,12 @@ def api_history_restore():
 
 @app.post("/api/history/clear")
 def api_history_clear():
-    n = CORPUS.clear_history()
-    CORPUS.save()
+    with _CORPUS_WRITE_LOCK:
+        n = CORPUS.clear_history()
+        CORPUS.save()
+        состояние = CORPUS.stats()
     stats_mod.log("clear_history", count=n)
-    return {"cleared": n, "stats": CORPUS.stats()}
+    return {"cleared": n, "stats": состояние}
 
 
 @app.get("/api/history/retention")
@@ -2528,9 +2643,11 @@ def api_history_retention_set():
         days = float(payload.get("days"))
     except (TypeError, ValueError):
         return {"error": "days должен быть числом"}, 400
-    CORPUS.set_retention(days)
-    CORPUS.save()
-    return {"days": CORPUS.retention_days}
+    with _CORPUS_WRITE_LOCK:
+        CORPUS.set_retention(days)
+        CORPUS.save()
+        срок = CORPUS.retention_days
+    return {"days": срок}
 
 
 @app.get("/api/stats")
@@ -2562,7 +2679,8 @@ def api_corpus_export():
     user's only copy of this data lives in data/corpus.json, outside git
     (no repo here at all), so a one-click backup costs nothing and saves
     everything if the machine ever loses that file."""
-    CORPUS.save()   # make sure the file on disk matches in-memory state
+    with _CORPUS_WRITE_LOCK:
+        CORPUS.save()   # make sure the file on disk matches in-memory state
     return send_from_directory(corpus_mod.DATA_DIR, corpus_mod.CORPUS_PATH.name,
                                 as_attachment=True, download_name="extendo-corpus-backup.json")
 
@@ -2667,6 +2785,254 @@ def api_settings_post():
     if "stanza" in payload:
         to_save["stanza"] = clean.stanza_spec(payload["stanza"])
     return settings_mod.write(to_save)
+
+
+_ТЕЛЕГРАМ_ЗАМОК = threading.Lock()
+_ТЕЛЕГРАМ = None
+
+
+class _ПультЛенты:
+    """Один запрос Telegram, который исполняет только живое окно Ленты.
+
+    Сервер здесь не собирает строк и не пишет историю: он на короткое время
+    передаёт нажатие открытому React-окну. Оно вызывает `lentaСтрофа()` — тот
+    же путь, что Enter, — и отвечает лишь после отрисовки. Поэтому буфер,
+    текущие несохранённые ручки и отметка показанного остаются у Ленты.
+    """
+
+    _ОКНО_ЖИВО = 5.0
+    _ДОЛГОЕ_ОЖИДАНИЕ = 20.0
+    _ВЫДАЧА_ЖДЁТ = 210.0
+    _МАКС_КЛИЕНТ = 128
+
+    def __init__(self) -> None:
+        self._условие = threading.Condition()
+        self._окно_до = 0.0
+        self._клиент = ""
+        self._задача: dict | None = None
+
+    @classmethod
+    def _имя_клиента(cls, raw: object) -> str:
+        client = str(raw or "").strip()
+        return client if 0 < len(client) <= cls._МАКС_КЛИЕНТ else ""
+
+    def взять_нажатие(self, client: object = "local",
+                      timeout: float | None = None) -> str | None:
+        """Долгий опрос окна: вернуть ровно одно ожидающее нажатие."""
+        client = self._имя_клиента(client)
+        if not client:
+            return None
+        ждать = self._ДОЛГОЕ_ОЖИДАНИЕ if timeout is None else max(0.0, float(timeout))
+        срок = time.monotonic() + ждать
+        with self._условие:
+            # Перезагрузка окна обрывает fetch, но Flask не всегда узнаёт это
+            # мгновенно. Новый client вытесняет старый long poll, чтобы тот не
+            # смог забрать ticket и оставить Telegram ждать пустого ответа.
+            if client != self._клиент:
+                self._клиент = client
+                задача = self._задача
+                if задача is not None and задача["state"] in {"pending", "claimed"}:
+                    задача["state"] = "cancelled"
+                self._условие.notify_all()
+            # Сам ожидающий запрос — доказательство, что React-окно живо.
+            # Маленький хвост закрывает зазор между ответом и новым long poll.
+            self._окно_до = max(self._окно_до, срок + self._ОКНО_ЖИВО)
+            self._условие.notify_all()
+            while True:
+                if client != self._клиент:
+                    return None
+                задача = self._задача
+                if задача is not None and задача["state"] == "pending":
+                    задача["state"] = "claimed"
+                    задача["client"] = client
+                    return задача["id"]
+                осталось = срок - time.monotonic()
+                if осталось <= 0:
+                    return None
+                self._условие.wait(осталось)
+
+    def нажать(self, timeout: float | None = None) -> tuple[str, list[dict] | None]:
+        """Поставить одно нажатие и дождаться ответа от настоящей Ленты."""
+        ждать = self._ВЫДАЧА_ЖДЁТ if timeout is None else max(0.0, float(timeout))
+        срок = time.monotonic() + ждать
+        with self._условие:
+            if self._задача is not None:
+                return "busy", None
+            if self._окно_до <= time.monotonic():
+                return "offline", None
+            задача = {"id": secrets.token_urlsafe(18), "state": "pending",
+                      "client": "", "result": None}
+            self._задача = задача
+            self._условие.notify_all()
+            while задача["state"] in {"pending", "claimed"}:
+                осталось = срок - time.monotonic()
+                if осталось <= 0:
+                    if self._задача is задача:
+                        self._задача = None
+                    return "timeout", None
+                self._условие.wait(осталось)
+            if self._задача is задача:
+                self._задача = None
+            if задача["state"] == "done":
+                state, rows = задача["result"]
+                return state, rows
+            return "cancelled", None
+
+    def завершить(self, ticket: object, state: object,
+                  rows: object = None, client: object = "local") -> bool:
+        """Принять итог только от окна, забравшего именно этот запрос."""
+        ticket = str(ticket or "")
+        state = str(state or "")
+        client = self._имя_клиента(client)
+        with self._условие:
+            задача = self._задача
+            if (not ticket or задача is None or задача.get("id") != ticket
+                    or задача.get("state") != "claimed" or not client
+                    or задача.get("client") != client):
+                return False
+            if state == "shown":
+                if not isinstance(rows, list) or not rows or len(rows) > 64:
+                    return False
+                clean_rows = []
+                for row in rows:
+                    text = row.get("text") if isinstance(row, dict) else None
+                    if not isinstance(text, str) or not text.strip() or len(text) > телеграм.MAX_TEXT:
+                        return False
+                    clean_rows.append({"text": text.strip()})
+                задача["result"] = ("shown", clean_rows)
+            elif state in {"busy", "impossible", "error", "cancelled"}:
+                задача["result"] = (state, None)
+            else:
+                return False
+            задача["state"] = "done"
+            self._условие.notify_all()
+            return True
+
+    def отменить(self, client: object | None = None) -> bool:
+        """Разбудить бот при отключении, перезагрузке окна или завершении."""
+        client = None if client is None else self._имя_клиента(client)
+        if client == "":
+            return False
+        with self._условие:
+            if client is not None and client != self._клиент:
+                return False
+            self._окно_до = 0.0
+            self._клиент = ""
+            if (self._задача is not None
+                    and (client is None or self._задача.get("client") in {"", client})):
+                self._задача["state"] = "cancelled"
+            self._условие.notify_all()
+            return True
+
+
+_ПУЛЬТ_ЛЕНТЫ = _ПультЛенты()
+
+
+def _телеграм_нажать_ленту() -> tuple[str, list[dict] | None]:
+    """Telegram только ставит нажатие; генерирует и показывает окно Ленты."""
+    return _ПУЛЬТ_ЛЕНТЫ.нажать()
+
+
+def _телеграм_сообщить(text: str) -> None:
+    журнал.запись("telegram", text, "внимание")
+
+
+def _пульт_телеграм() -> телеграм.Пульт:
+    global _ТЕЛЕГРАМ
+    with _ТЕЛЕГРАМ_ЗАМОК:
+        if _ТЕЛЕГРАМ is None:
+            _ТЕЛЕГРАМ = телеграм.Пульт(
+                телеграм.Хранилище(), _телеграм_нажать_ленту,
+                _телеграм_сообщить)
+        return _ТЕЛЕГРАМ
+
+
+def _статус_телеграм() -> dict:
+    try:
+        return _пульт_телеграм().статус()
+    except телеграм.ОшибкаХранилища as exc:
+        return {"configured": False, "username": "", "paired": False,
+                "awaiting_pair": False, "running": False, "state": "error",
+                "error": str(exc)}
+
+
+@app.get("/api/telegram/status")
+def api_telegram_status():
+    """Безопасный снимок: ни токен, ни ссылка привязки наружу не уходят."""
+    return _статус_телеграм()
+
+
+@app.post("/api/telegram/connect")
+def api_telegram_connect():
+    payload = request.get_json(force=True, silent=True) or {}
+    raw = payload.get("token") if isinstance(payload, dict) else None
+    try:
+        token, username = телеграм.проверить_токен(raw)
+    except ValueError as exc:
+        return {"error": str(exc)}, 400
+    except телеграм.ОшибкаTelegram as exc:
+        message = ("Telegram не принял токен" if exc.code == 401
+                   else "Telegram не смог проверить токен")
+        return {"error": message}, 400 if exc.code == 401 else 503
+    except телеграм.НетСвязи:
+        return {"error": "нет связи с Telegram — токен не сохранён"}, 503
+    try:
+        _ПУЛЬТ_ЛЕНТЫ.отменить()
+        secret = _пульт_телеграм().подключить(token, username)
+    except (RuntimeError, телеграм.ОшибкаХранилища) as exc:
+        return {"error": str(exc)}, 409
+    return {
+        "username": username,
+        # Секрет одноразовый и намеренно возвращается ТОЛЬКО этим ответом.
+        # Повторный GET /status, перезагрузка окна и журнал его не содержат.
+        "link": f"https://t.me/{username}?start={secret}",
+        "status": _статус_телеграм(),
+    }
+
+
+@app.post("/api/telegram/disconnect")
+def api_telegram_disconnect():
+    try:
+        _ПУЛЬТ_ЛЕНТЫ.отменить()
+        _пульт_телеграм().отключить()
+    except (RuntimeError, телеграм.ОшибкаХранилища) as exc:
+        return {"error": str(exc)}, 409
+    return _статус_телеграм()
+
+
+@app.post("/api/telegram/lenta/next")
+def api_telegram_lenta_next():
+    """Long poll из открытой Ленты: забрать одно удалённое нажатие."""
+    payload = request.get_json(force=True, silent=True) or {}
+    if not isinstance(payload, dict) or not _ПультЛенты._имя_клиента(payload.get("client")):
+        return {"error": "не указан живой клиент Ленты"}, 400
+    return {"ticket": _ПУЛЬТ_ЛЕНТЫ.взять_нажатие(payload.get("client"))}
+
+
+@app.post("/api/telegram/lenta/done")
+def api_telegram_lenta_done():
+    """Только реально отрисованная Лента может завершить свой ticket."""
+    payload = request.get_json(force=True, silent=True) or {}
+    if not isinstance(payload, dict):
+        return {"error": "нужен объект результата Ленты"}, 400
+    if not _ПультЛенты._имя_клиента(payload.get("client")):
+        return {"error": "не указан живой клиент Ленты"}, 400
+    if not _ПУЛЬТ_ЛЕНТЫ.завершить(payload.get("ticket"), payload.get("state"),
+                                    payload.get("rows"), payload.get("client")):
+        return {"error": "запрос Ленты уже завершён или устарел"}, 409
+    return {"ok": True}
+
+
+@app.post("/api/telegram/lenta/leave")
+def api_telegram_lenta_leave():
+    """Окно закрылось или перезагрузилось: его long poll больше не живой."""
+    payload = request.get_json(force=True, silent=True) or {}
+    if not isinstance(payload, dict) or not _ПультЛенты._имя_клиента(payload.get("client")):
+        return {"error": "не указан живой клиент Ленты"}, 400
+    # Устаревший leave нельзя превращать в ошибку: новое окно уже могло
+    # вытеснить старое, и его ticket трогать нельзя.
+    _ПУЛЬТ_ЛЕНТЫ.отменить(payload.get("client"))
+    return {"ok": True}
 
 
 @app.get("/api/stanza/profiles")
@@ -2847,7 +3213,7 @@ def _import_worker(payload: list) -> None:
     added, errors = [], []
     try:
         for i, (имя, data) in enumerate(payload):
-            _IMPORT.update({"i": i, "detail": "начинаю"})
+            _IMPORT.update({"i": i, "detail": "загружаю склад"})
 
             def шаг(этап, _и=i):
                 _IMPORT.update({"i": _и, "detail": этап})
@@ -2947,9 +3313,14 @@ def api_nl_state():
     # Как только склад дочитан, отвечаем по нему: он источник правды, а опись —
     # его слепок. Расходятся они ровно на то, что залили после слепка, и на это
     # время опись честно занижает — но не врёт о составе.
-    if nlbridge.store_if_ready() is None:
+    готовый_склад = nlbridge.store_if_ready()
+    idx = nlindex.load()
+    if idx is None:
+        ревизия = "без индекса"
+    else:
+        ревизия = str(getattr(idx, "built_at", "") or nlindex.штамп(idx))
+    if готовый_склад is None:
         книги = nlbridge.опись_книг()
-        idx = nlindex.load()
         if книги and idx is not None:
             акт = {к["id"] for к in книги if к.get("active")}
             маска = nlindex.маска_книг(idx, акт)
@@ -2958,6 +3329,7 @@ def api_nl_state():
                 return {"available": True, "sources": книги,
                         "pool_total": int(маска.sum()),
                         "pool_available": int(маска.sum()) - скрыто,
+                        "revision": ревизия,
                         "по_описи": True}
     err = _nl_guard()
     if err:
@@ -2977,6 +3349,10 @@ def api_nl_state():
         "pool_total": len(_nl().get_active_pool()),
         # «Доступно» — по НАШЕЙ истории, единственному учёту показанного
         "pool_available": len(set(_nl().get_active_pool()) - CORPUS.hidden_set()),
+        # Меняется после каждой перепечки, даже если id книг и число строк те
+        # же. Клиент по ней выбрасывает префетч, рассчитанный на старых
+        # колонках индекса.
+        "revision": ревизия,
         # Поле `retention` (срок хранения сессий CLI) убрано 2026-08-18 вместе
         # с роутами `/api/nl/retention` — см. надгробие ниже. Его не читал
         # никто: во фронте оно упоминалось только в комментарии-описании формы
@@ -2992,9 +3368,6 @@ def api_nl_state():
 
 @app.post("/api/nl/source/add")
 def api_nl_source_add():
-    err = _nl_guard()
-    if err:
-        return err
     files = request.files.getlist("files")
     if not files:
         return {"error": "нет файлов"}, 400
@@ -3021,25 +3394,35 @@ def api_nl_source_add():
                      name="nl-import", daemon=True).start()
     # Ответ СРАЗУ: список пока прежний, а имена в работе фронт показывает сам
     # (см. methods.corpus.addBooks) и следит за ходом через /api/status.
-    return {"queued": [n for n, _ in payload], "sources": _nl().list_corpora()}
+    return {"queued": [n for n, _ in payload],
+            "sources": nlbridge.опись_книг() or []}
 
 
 @app.post("/api/nl/source/toggle")
 def api_nl_source_toggle():
-    err = _nl_guard()
-    if err:
-        return err
     payload = request.get_json(force=True, silent=True) or {}
     cid = payload.get("id")
-    # toggle_active returns the NEW active state, which is False both when the
-    # corpus was switched off and when cid doesn't exist — ambiguous on its
-    # own, so check existence first rather than trusting the return value.
-    if not cid or _nl().get_corpus(cid) is None:
+    if not cid:
         return {"error": "источник не найден"}, 404
-    _nl().toggle_active(cid)
+    try:
+        источники = nlbridge.переключить_активность(cid)
+    except KeyError:
+        return {"error": "источник не найден"}, 404
+    if источники is None:
+        # Старый склад без малых служебных файлов: один раз платим прежнюю
+        # загрузку, после чего все следующие переключения уже быстрые.
+        склад = _nl()
+        if склад is None:
+            return {"error": "nakedlunch не найден на этой машине"}, 503
+        try:
+            источники = nlbridge.переключить_активность(cid)
+        except KeyError:
+            return {"error": "источник не найден"}, 404
+        if источники is None:                    # защитный случай: склад уже готов
+            return {"error": "не удалось переключить источник"}, 503
     _forget_pool_mask()
-    _обновить_опись()
-    return {"sources": _nl().list_corpora()}
+    nlbridge.забыть_опись()
+    return {"sources": источники}
 
 
 @app.post("/api/nl/source/remove")
@@ -3068,9 +3451,6 @@ def api_nl_source_remove():
 
 @app.post("/api/nl/open-dir")
 def api_nl_open_dir():
-    err = _nl_guard()
-    if err:
-        return err
     import subprocess
     subprocess.run(["open", str(nlbridge.NAKEDLUNCH_PROG_DIR)], check=False)
     return {"ok": True}
@@ -3173,9 +3553,22 @@ def _добавка_к_отчёту() -> dict:
     except Exception as e:                                       # noqa: BLE001
         добавка["состояние"] = f"не удалось прочитать: {e}"
     try:
-        добавка["источников включено"] = str(len(_nl().list_corpora())) if _nl() else "нет корпуса"
+        склад = nlbridge.store_if_ready()
+        if склад is not None:
+            книги = склад.list_corpora()
+            добавка["источников включено"] = str(
+                sum(1 for к in книги if к.get("active")))
+        else:
+            книги = nlbridge.опись_книг()
+            активные = nlbridge.активные_книги()
+            if книги is None or активные is None:
+                добавка["источников включено"] = "не удалось определить"
+            else:
+                известные = {к.get("id") for к in книги}
+                добавка["источников включено"] = str(
+                    len(известные & set(активные)))
     except Exception:
-        pass
+        добавка["источников включено"] = "не удалось определить"
     return добавка
 
 
@@ -3266,9 +3659,10 @@ def dist_root_file(root_file):
 # ДОСТУП-ЛОГ БЕЗ САМООПРОСА (2026-09-02).
 #
 # Окно опрашивает `/api/status` каждые 12 секунд в покое и каждые 1.2 секунды,
-# пока идёт работа. Werkzeug печатает КАЖДЫЙ такой запрос, и это уходит в
-# `~/Library/Logs/nakedlunch.log` — единственное место, куда идут,
-# когда что-то сломается.
+# пока идёт работа. Лента вдобавок держит один 20-секундный long poll, пока
+# открыта: его пустые ответы столь же штатны. Werkzeug печатает КАЖДЫЙ такой
+# запрос, и это уходит в `~/Library/Logs/nakedlunch.log` — единственное место,
+# куда идут, когда что-то сломается.
 #
 # Замер на его живом журнале: 30 102 строки, из них 19 711 — «GET /api/status»,
 # то есть 65% шума. За всё время в нём одна настоящая ошибка (пятисотая
@@ -3281,7 +3675,8 @@ def dist_root_file(root_file):
 # значило бы сэкономить на том единственном, ради чего журнал ведут. Всё
 # остальное — заливка книг, генерация, перепечка — тоже остаётся: они редкие и
 # именно они рассказывают, что человек делал.
-_ТИХИЕ_ПУТИ = ("/api/status", "/api/stats", "/healthz")
+_ТИХИЕ_ПУТИ = ("/api/status", "/api/stats", "/healthz",
+                "/api/telegram/lenta/next")
 
 
 class _БезСамоопроса(logging.Filter):
@@ -3312,6 +3707,7 @@ def main() -> None:
     # `_погасить_детей`.
     _гасить_детей_при_выходе()
     _поднять_прогрев()
+    _пульт_телеграм().запустить()
     app.run(host=args.host, port=args.port, threaded=True, use_reloader=False)
 
 

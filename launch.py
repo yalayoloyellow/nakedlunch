@@ -935,6 +935,14 @@ def main() -> int:
 
         def подняться():
             """Ждём сервер в фоне, окно уже на экране; готов — переезжаем на него."""
+            # pywebview внедряет мост в страницу двумя отдельными run_js из
+            # фонового потока: сначала создаёт window.pywebview, затем зовёт
+            # его _createApi. Если сменить заставку между этими вызовами,
+            # второй прилетит уже в следующую страницу без первого и даст
+            # `window.pywebview._createApi is undefined`. `loaded` выставляется
+            # только после обоих шагов; ждём его ДО любой навигации — и к
+            # приложению, и к странице отказа, — не пряча настоящие ошибки.
+            window.events.loaded.wait()
             if not wait_health(port, proc):
                 print("nakedlunch: server did not come up in time", file=sys.stderr)
                 try:

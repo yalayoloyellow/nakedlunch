@@ -33,7 +33,7 @@ import { СРОКИ_ИСТОРИИ } from './methods.corpus.js';
 // ВКЛАДКА «ЛОГ» (Раунд 59). Программу дают людям, которые пишут тексты, а не
 // читают стеки: они не пойдут в папку за файлом и не найдут консоль. Значит
 // журнал живёт там же, где всё остальное, и отдаётся одной кнопкой.
-export const CFG_TABS = ['лента', 'вид', 'корпус', 'лог'];
+export const CFG_TABS = ['лента', 'вид', 'корпус', 'бот', 'лог'];
 
 // строка настройки: подпись слева, ползунок или переключалка справа
 export function cfgItemRow(it, key, labelStyle, showStyle) {
@@ -310,6 +310,72 @@ export function renderSettings(c, vals) {
               <div style={s(РЯД)}><span>фрагментов во включённых</span><span style={s(ЧИСЛО)}>{фмт(nl.pool_total)}</span></div>
               <div style={s(РЯД + ' border-top: 1px solid var(--border-subtle);')}><span>ещё не показано</span><span style={s(ЧИСЛО)}>{фмт(nl.pool_available)}</span></div>
             </div>
+          </Fragment>
+        );
+      })()}
+
+      {tab === 'бот' && (function () {
+        var bot = st.telegram || {};
+        var configured = !!bot.configured;
+        var waiting = bot.state === 'waiting';
+        var error = st.telegramError || bot.error || '';
+        var phase = bot.running ? ' · подключён'
+          : waiting ? ' · ждёт Telegram'
+          : bot.state === 'starting' ? ' · запускается'
+          : bot.state === 'stopping' ? ' · останавливается'
+          : ' · остановлен';
+        var status = !configured ? 'не подключён'
+          : bot.paired ? ('@' + (bot.username || 'бот') + phase)
+          : ('@' + (bot.username || 'бот') + ' · ждёт привязки');
+        var busy = !!st.telegramBusy;
+        var connect = function () { c.connectTelegram(); };
+        var disconnect = function () {
+          if (window.confirm('Отключить Telegram-бота? Токен и привязка будут удалены с этого компьютера.')) c.disconnectTelegram();
+        };
+        return (
+          <Fragment>
+            <div style={s(ЗАГОЛОВОК)}>telegram</div>
+            <div style={s(БЛОК + ' margin-bottom: 7px;')}>
+              <div style={s(РЯД)}>
+                <span>состояние</span>
+                <span style={s('min-width: 0; max-width: 68%; overflow-wrap: anywhere; font-size: 9px; color: ' + (error ? 'var(--danger)' : 'var(--muted)') + '; text-align: right;')}>{error || status}</span>
+              </div>
+              <div style={s(РЯД + ' border-top: 1px solid var(--border-subtle);')}>
+                <input type="password" autoComplete="off" spellCheck="false" aria-label="Токен Telegram-бота"
+                  placeholder={configured ? 'новый токен BotFather' : 'токен BotFather'}
+                  value={st.telegramToken || ''}
+                  onChange={function (e) { c.setState({ telegramToken: e.target.value, telegramError: '' }); }}
+                  disabled={busy}
+                  style={s('min-width: 0; flex: 1; border: none; outline: none; background: transparent; color: var(--ink); font: inherit; font-size: 10.5px; padding: 1px 0;')} />
+                <button onClick={connect} disabled={busy}
+                  style={s(КНОПКА + (busy ? ' opacity: 0.5; cursor: wait;' : ''))}
+                  className={hov('color: var(--ink); border-color: var(--border-soft)')}>{busy ? 'проверяю…' : configured ? 'сменить' : 'подключить'}</button>
+              </div>
+            </div>
+
+            {st.telegramLink ? (
+              <div style={s(БЛОК + ' margin-bottom: 7px;')}>
+                <div style={s(РЯД)}>
+                  <span>привязка</span>
+                  <button onClick={function () { c.copyText(st.telegramLink); }} style={s(ССЫЛКА)} className={hov('color: var(--ink)')}>скопировать ссылку</button>
+                </div>
+                <a href={st.telegramLink} target="_blank" rel="noreferrer"
+                  style={s('padding: 2px 8px 5px; font-size: 10.5px; color: var(--ink); text-decoration: underline; text-underline-offset: 2px;')}>открыть Telegram и привязать</a>
+              </div>
+            ) : null}
+
+            {configured && !bot.paired && !st.telegramLink ? (
+              <div style={s('font-size: 9px; line-height: 1.5; color: var(--muted-soft); margin: 0 0 7px 2px;')}>
+                Ссылка привязки показывается один раз после подключения. Вставь тот же токен снова, чтобы выпустить новую.
+              </div>
+            ) : null}
+
+            <div style={s('font-size: 9px; line-height: 1.5; color: var(--muted-soft); margin: 0 0 7px 2px;')}>
+              В боте одна кнопка «выдать текст». Она нажимает Ленту в этом окне: строфа появляется на компьютере и затем приходит в Telegram.
+            </div>
+            {configured ? (
+              <button onClick={disconnect} disabled={busy} style={s(ССЫЛКА + (busy ? ' opacity: 0.5;' : ''))} className={hov('color: var(--ink)')}>отключить бота</button>
+            ) : null}
           </Fragment>
         );
       })()}

@@ -93,6 +93,27 @@ function держатель(лента) {
   Object.assign(c, lentaMethods);
   return c;
 }
+// В React callback setState приходит после componentDidUpdate. Отдельный
+// двойник нужен только пульту: он доказывает порядок «видно → история →
+// Telegram», не меняя старые проверки, которым нужна ручная отрисовка.
+function держательПослеОтрисовки(лента) {
+  const c = держатель(лента);
+  const setState = c.setState;
+  const слить = c.слить;
+  c._послеКоммита = [];
+  c.setState = function (п, done) {
+    setState.call(this, п);
+    if (typeof done === 'function') this._послеКоммита.push(done);
+  };
+  c.слить = function () {
+    слить.call(this);
+    this.lentaОтметитьПоказ();
+    const callbacks = this._послеКоммита.splice(0);
+    callbacks.forEach(function (done) { done(); });
+    return this;
+  };
+  return c;
+}
 // Тексты РАЗНЫЕ у разных строф: иначе «показали не ту» и «показали ту»
 // выглядели бы одинаково.
 const строки = (n, метка) => Array.from({length: n}, (_, i) =>
@@ -205,6 +226,111 @@ console.log(JSON.stringify({доОтрисовки, отметок: c._отме�
     assert d["отметок"] == 1, f"историю дёрнули {d['отметок']} раз вместо одного"
     assert d["отмечено"] == [["строка 2.0", "строка 2.1", "строка 2.2", "строка 2.3"]], \
         f"в историю ушло не то, что на экране: {d['отмечено']}"
+
+
+def test_пульт_получает_строфу_только_после_показа_и_истории():
+    """Удалённая кнопка не имеет своей выдачи: она ждёт обычный путь Ленты.
+
+    Порядок здесь существенен. Если Telegram получил текст раньше, чем Лента
+    показала и отметила его, пульт снова стал бы параллельным генератором с
+    другой правдой об истории.
+    """
+    d = node(ДВОЙНИК + """
+const c = держательПослеОтрисовки([]);
+const события = [];
+c.markShownQueue = items => события.push({вид: 'история', строки: items.map(i => i.text)});
+c.lentaПоложить(строки(4, 8), { вид: 'строфа', толькоЛента: true, послеПоказа: rows =>
+  события.push({вид: 'telegram', строки: rows && rows.map(r => r.text)}) });
+const до = события.slice();
+c.слить();
+console.log(JSON.stringify({до, после: события}));
+""")
+    expected = ["строка 8.0", "строка 8.1", "строка 8.2", "строка 8.3"]
+    assert d["до"] == [], "пульт получил текст до коммита Ленты"
+    assert d["после"] == [
+        {"вид": "история", "строки": expected},
+        {"вид": "telegram", "строки": expected},
+    ], "пульт получил не ту строфу или обошёл историю"
+
+
+def test_пульт_ведёт_ticket_в_обычную_ленту_без_прямой_генерации():
+    """Фронтендовый стык целиком: ticket → обычная Лента → commit → история
+    → /done. Здесь намеренно нет /api/generate: его имеет право вызвать только
+    `lentaСтрофа`, а не Telegram-код вокруг неё."""
+    d = node(ДВОЙНИК + """
+const c = держательПослеОтрисовки([]);
+c._mounted = true;
+const события = [];
+c.markShownQueue = items => события.push({вид: 'история', строки: items.map(i => i.text)});
+c.lentaСтрофа = async function (послеПоказа) {
+  this.lentaПоложить(строки(4, 10), {вид: 'строфа', толькоЛента: true, послеПоказа});
+  return {state: 'placed'};
+};
+const запросы = [];
+let опросов = 0;
+const ответ = body => ({ok: true, json: async () => body});
+globalThis.fetch = (url, opts) => {
+  const body = opts && opts.body ? JSON.parse(opts.body) : {};
+  запросы.push({url, body});
+  if (url === '/api/telegram/lenta/next') {
+    опросов++;
+    if (опросов === 1) return Promise.resolve(ответ({ticket: 'ticket-1'}));
+    return new Promise((resolve, reject) => {
+      opts.signal.addEventListener('abort', () => {
+        const e = new Error('aborted'); e.name = 'AbortError'; reject(e);
+      }, {once: true});
+    });
+  }
+  if (url === '/api/telegram/lenta/done' || url === '/api/telegram/lenta/leave') {
+    return Promise.resolve(ответ({ok: true}));
+  }
+  throw new Error('запрещённый путь: ' + url);
+};
+const тик = () => new Promise(resolve => setTimeout(resolve, 0));
+c.пультЛентыЗапустить();
+for (let i = 0; i < 12 && !c._пультЛентыОжидание; i++) await тик();
+const доКоммита = запросы.filter(r => r.url === '/api/telegram/lenta/done').length;
+c.слить();
+for (let i = 0; i < 12 && !запросы.some(r => r.url === '/api/telegram/lenta/done'); i++) await тик();
+c.пультЛентыОстановить();
+await тик();
+const next = запросы.find(r => r.url === '/api/telegram/lenta/next');
+const done = запросы.find(r => r.url === '/api/telegram/lenta/done');
+const leave = запросы.find(r => r.url === '/api/telegram/lenta/leave');
+console.log(JSON.stringify({доКоммита, события, next, done, leave,
+  запрещён: запросы.filter(r => r.url === '/api/generate').length}));
+""")
+    expected = ["строка 10.0", "строка 10.1", "строка 10.2", "строка 10.3"]
+    assert d["доКоммита"] == 0, "Telegram получил ответ раньше React-коммита"
+    assert d["события"] == [{"вид": "история", "строки": expected}], \
+        "обычный путь истории не сработал до ответа пульта"
+    assert d["done"]["body"] == {"ticket": "ticket-1", "state": "shown",
+                                  "client": d["next"]["body"]["client"],
+                                  "rows": [{"text": text} for text in expected]}
+    assert d["leave"]["body"]["client"] == d["next"]["body"]["client"]
+    assert d["запрещён"] == 0, "пульт пошёл в отдельный /api/generate"
+
+
+def test_скрытая_строфа_не_уходит_ни_в_историю_ни_в_пульт():
+    """Если человек ушёл во фристайл, удалённая выдача не имеет права сжечь
+    невидимый результат. Он остаётся в Ленте до реального возвращения."""
+    d = node(ДВОЙНИК + """
+const c = держательПослеОтрисовки([]);
+c.state.tab = 'fs';
+let ответ = 'не вызван';
+c.lentaПоложить(строки(4, 9), { вид: 'строфа', толькоЛента: true, послеПоказа: rows => {
+  ответ = rows ? rows.map(r => r.text) : null;
+} });
+c.слить();
+const скрыто = {история: c._отмечено.map(rows => rows.slice()), ответ};
+c.state.tab = 'lenta';
+c.lentaОтметитьПоказ();
+console.log(JSON.stringify({скрыто, после: c._отмечено}));
+""")
+    assert d["скрыто"] == {"история": [], "ответ": None}, \
+        "скрытая строфа была выдана или записана в историю"
+    assert d["после"] == [["строка 9.0", "строка 9.1", "строка 9.2", "строка 9.3"]], \
+        "строфа не попала в историю после настоящего возврата в Ленту"
 
 
 def test_zvezda_kladyot_rovno_svoyu_stroku():

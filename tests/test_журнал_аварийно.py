@@ -150,3 +150,41 @@ def test_замок_отметки_снимается_новой_сессией(
     assert not жур.ОТМЕТКА.exists()
     жур.закрыть_сессию()
     assert жур.ОТМЕТКА.exists(), "вторая сессия в том же процессе осталась без отметки"
+
+
+def test_среда_darwin_показывает_macos_и_версию_ядра(monkeypatch):
+    monkeypatch.setattr(журнал.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(журнал.platform, "release", lambda: "21.6.0")
+    monkeypatch.setattr(журнал.platform, "mac_ver",
+                        lambda: ("12.7.6", ("", "", ""), ""))
+    monkeypatch.setattr(журнал.platform, "machine", lambda: "x86_64")
+
+    assert журнал.среда_строкой() == (
+        f"macOS 12.7.6 · Darwin 21.6.0 · x86_64 · "
+        f"python {sys.version.split()[0]}"
+    )
+
+
+def test_среда_darwin_без_macos_версии_остаётся_чистой(monkeypatch):
+    monkeypatch.setattr(журнал.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(журнал.platform, "release", lambda: "21.6.0")
+    monkeypatch.setattr(журнал.platform, "mac_ver",
+                        lambda: ("", ("", "", ""), ""))
+    monkeypatch.setattr(журнал.platform, "machine", lambda: "x86_64")
+
+    результат = журнал.среда_строкой()
+
+    assert результат == (
+        f"macOS · Darwin 21.6.0 · x86_64 · python {sys.version.split()[0]}"
+    )
+    assert "  " not in результат
+
+
+def test_среда_не_darwin_сохраняет_прежний_формат(monkeypatch):
+    monkeypatch.setattr(журнал.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(журнал.platform, "release", lambda: "6.8.0")
+    monkeypatch.setattr(журнал.platform, "machine", lambda: "x86_64")
+
+    assert журнал.среда_строкой() == (
+        f"Linux 6.8.0 · x86_64 · python {sys.version.split()[0]}"
+    )

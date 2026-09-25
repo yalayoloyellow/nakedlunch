@@ -54,6 +54,45 @@ export const panelMethods = {
   // ---- пилюли шапки: одна открыта — остальные закрыты ----
   tog(p) { if (this.state.openPill === p) this.closePop(); else this.openPop({ openPill: p }); },
 
+  async connectTelegram() {
+    var token = String(this.state.telegramToken || '').trim();
+    if (!token) {
+      this.setState({ telegramError: 'вставь токен из BotFather' });
+      return;
+    }
+    // Не оставляем секрет в React после отправки даже при ошибке проверки.
+    this.setState({ telegramBusy: true, telegramError: '', telegramLink: '', telegramToken: '' });
+    try {
+      var result = await api.telegramConnect(token);
+      if (this._mounted !== false) {
+        this.setState({ telegramBusy: false, telegram: result.status || null,
+                        telegramLink: result.link || '', telegramError: '' });
+        if (this.пультЛентыЗапустить) this.пультЛентыЗапустить();
+      }
+    } catch (e) {
+      if (this._mounted !== false) {
+        this.setState({ telegramBusy: false,
+                        telegramError: e && e.message ? e.message : String(e) });
+      }
+    }
+  },
+
+  async disconnectTelegram() {
+    this.setState({ telegramBusy: true, telegramError: '', telegramLink: '' });
+    try {
+      var status = await api.telegramDisconnect();
+      if (this._mounted !== false) {
+        if (this.пультЛентыОстановить) this.пультЛентыОстановить();
+        this.setState({ telegramBusy: false, telegram: status });
+      }
+    } catch (e) {
+      if (this._mounted !== false) {
+        this.setState({ telegramBusy: false,
+                        telegramError: e && e.message ? e.message : String(e) });
+      }
+    }
+  },
+
   // ---- сжатие шапки (Раунд 38) ---------------------------------------------
   // Отчёт: в маленьком окне шапка и панели не подстраивались под размер.. Так и было: у обеих половин шапки стоял
   // `min-width: fit-content`, у самой шапки — `overflow: visible`, и при узком

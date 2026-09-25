@@ -2828,7 +2828,10 @@ def select_light(idx, *, pool_mask, hidden_mask, no_mat, only_mat, cap, seed=Non
     # Ступени той же формы, что у `select` (Раунд 62): у ответа один вид на обеих
     # ветках, иначе разбирающему пришлось бы гадать, какой ярус перед ним. Здесь
     # «жребий» — не фигура речи: это буквально `rng.choice` ниже.
-    счёт = {"корпус": int(idx.n), "ворота": int(len(table_ids)), "пул": n_survived,
+    счёт = {"корпус": int(idx.n),
+            "твои_книги": int(pool_mask.sum()),
+            "показано": int((pool_mask & hidden_mask).sum()),
+            "ворота": int(len(table_ids)), "пул": n_survived,
             "тема_буквально": 0, "резерв": 0, "предел_жребия": int(cap)}
     if n_survived == 0:
         return [], 0, {**счёт, "жребий": 0, "в_сборку": 0}

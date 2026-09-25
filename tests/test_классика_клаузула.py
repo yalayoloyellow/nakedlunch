@@ -99,3 +99,14 @@ def test_классика_отдаёт_всё_и_никогда_не_ноль(с
     assert len(строки) == 6
     assert {r["clausula"] for r in строки} == {1, 2, 3}, (
         "в выдаче не все концовки — где-то остались ворота формы")
+
+
+def test_классика_считает_остаток_пула_до_жребия(стенд):
+    пул = np.array([True, True, True, True, False, False])
+    скрыт = np.array([False, True, False, False, True, False])
+    _, _, ступени = nlindex.select_light(
+        стенд, pool_mask=пул, hidden_mask=скрыт,
+        no_mat=False, only_mat=False, cap=10, seed=1)
+    assert ступени["твои_книги"] == 4
+    assert ступени["показано"] == 1
+    assert ступени["пул"] == 3

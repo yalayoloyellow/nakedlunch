@@ -114,7 +114,9 @@ def test_опрос_не_хоронит_живой_сервер():
     src = _нл("methods.corpus.js")
     н = src.find("async statusTick()")
     assert н > 0
-    кусок = src[н:н + 4000]
+    к = src.find("\n  },\n\n  statusSchedule", н)
+    assert к > н, "не найден конец statusTick"
+    кусок = src[н:к]
     assert "e.живой" in кусок, (
         "statusTick не проверяет, ответил ли сервер, — пятисотая от живого "
         "ядра снова будет показана как его смерть")

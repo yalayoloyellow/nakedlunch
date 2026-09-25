@@ -208,7 +208,18 @@ def не_закрыто() -> bool:
 
 
 def среда_строкой() -> str:
-    return (f"{platform.system()} {platform.release()} · {platform.machine()} · "
+    система = platform.system()
+    релиз = platform.release()
+    if система == "Darwin":
+        # Darwin — имя ядра macOS. Само по себе оно точно для диагностики, но
+        # человеку не говорит, какая у него версия системы. Оставляем оба
+        # факта: понятную macOS и технический Darwin для разбора сбоев.
+        версия = platform.mac_ver()[0]
+        система = f"macOS {версия}" if версия else "macOS"
+        система = f"{система} · Darwin {релиз}"
+    else:
+        система = f"{система} {релиз}"
+    return (f"{система} · {platform.machine()} · "
             f"python {sys.version.split()[0]}")
 
 

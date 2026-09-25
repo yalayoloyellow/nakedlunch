@@ -119,9 +119,10 @@ export const genMethods = {
   почемуПусто(res, свои) {
     var f = (res && res.funnel) || {};
     var ст = f.ступени || {};
-    var nl = { active: f.nl_fetched > 0, pool_available: f.pool_available,
+    var nl = { active: f.nl_fetched > 0 || Number(ст['твои_книги'] || 0) > 0,
+               pool_available: f.pool_available,
                algo_survived: f.nl_survived, classic_survived: f.nl_classic_survived };
-    if (nl.active && !nl.pool_available) return 'в активном пуле не осталось непоказанных строк — верни что-нибудь из истории';
+    if (nl.active && nl.pool_available === 0) return 'в активном пуле не осталось непоказанных строк — верни что-нибудь из истории';
     // Пустая строфа не означает пустой отбор. Если полный поиск завершён и
     // доказал нулевую совместимую комбинацию, называем именно этот факт:
     // иначе 257 строк, переживших ворота, ошибочно превращались в «ни одна
@@ -197,11 +198,11 @@ export const genMethods = {
   markShownQueue(texts) {
     var self = this;
     if (!this._shownQ) this._shownQ = [];
-    // Номер прогона снимается ЗДЕСЬ, при постановке в очередь: пока пачка ждёт
-    // отправки, успевает пройти следующая генерация, и группировка по номеру
-    // не даёт смешать чужие строки под одним. Фристайл номера не ведёт — там
-    // он пустой, и запись ведёт себя как раньше.
-    var семя = this._lastSeed != null ? this._lastSeed : '';
+    // Каждая серверная строка несёт собственный номер прогона: пока пачка
+    // ждёт отправки, успевает пройти следующая генерация, и группировка не
+    // смешивает строки ленты и фристайла. `_lastSeed` остаётся запасным путём
+    // для строк старого клиента и собственного текста.
+    var семяПоУмолчанию = this._lastSeed != null ? this._lastSeed : '';
     (texts || []).forEach(function (t) {
       // `_исходный` ПРОХОДИТ НАСКВОЗЬ. Отбор подрезает длинную строку и
       // наращивает короткую под слоговую вилку; корпус прячет показанное по
@@ -213,6 +214,8 @@ export const genMethods = {
         ? { text: t, template: '', _исходный: '', _ном: null }
         : { text: t.text || '', template: t.template || '', _исходный: t._исходный || '',
             _ном: (typeof t._ном === 'number' ? t._ном : null) };
+      var семя = (t && typeof t === 'object'
+        && Object.prototype.hasOwnProperty.call(t, '_seed')) ? t._seed : семяПоУмолчанию;
       if (it.text) self._shownQ.push({ text: it.text, template: it.template,
                                        _исходный: it._исходный, _ном: it._ном, seed: семя });
     });

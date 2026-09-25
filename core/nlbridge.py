@@ -17,13 +17,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 import threading
-# НАДГРОБИЕ 2026-08-18: `json` и `time` осиротели вместе со сроком хранения
-# сессий (надгробие ниже) — других читателей в файле у них не было. Заодно
-# убраны `sys` и `os`: они не использовались здесь уже до этой правки —
-# `grep -n "sys\.\|os\." core/nlbridge.py` пуст, — то есть их держал не код,
-# а привычка.
 from functools import lru_cache
 from pathlib import Path
 
@@ -208,6 +205,64 @@ def store_if_ready():
     Для тех, кому нельзя ждать: опрос статуса раз в 12 с и любой роут, чей
     ответ — «идёт работа», а не сама работа."""
     return _STORE
+
+
+def переключить_активность(cid: str) -> list | None:
+    """Переключить книгу без разбора ``state.json``, если хватает малых файлов.
+
+    Возвращает свежий список книг. ``None`` означает, что описи или
+    ``active.json`` недостаточно и вызывающему нужен прежний путь через
+    загруженный склад. Весь read-modify-write защищён тем же замком, что и
+    первая загрузка склада: два одновременных клика не затирают друг друга, а
+    склад не может загрузиться посередине переключения со старым флагом.
+    """
+    global ОПИСЬ
+    with _STORE_LOCK:
+        if _STORE is not None:
+            if _STORE.get_corpus(cid) is None:
+                raise KeyError(cid)
+            _STORE.toggle_active(cid)
+            забыть_опись()
+            return _STORE.list_corpora()
+
+        книги = опись_книг()
+        if книги is None:
+            return None
+        if not any(к.get("id") == cid for к in книги):
+            raise KeyError(cid)
+
+        путь = NAKEDLUNCH_DATA / "active.json"
+        try:
+            флаги = json.loads(путь.read_text(encoding="utf-8"))
+            if not isinstance(флаги, dict) or not флаги or cid not in флаги:
+                return None
+        except Exception:
+            return None
+
+        флаги[cid] = not bool(флаги[cid])
+        путь.parent.mkdir(parents=True, exist_ok=True)
+        fd, имя = tempfile.mkstemp(dir=str(путь.parent),
+                                   prefix=путь.name + ".", suffix=".tmp")
+        врем = Path(имя)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as ф:
+                json.dump(флаги, ф, ensure_ascii=False)
+                ф.flush()
+                os.fsync(ф.fileno())
+            os.replace(врем, путь)
+        finally:
+            врем.unlink(missing_ok=True)
+
+        # Запись уже состоялась: ответ нельзя снова превращать в ``None`` из-за
+        # сбоя повторного чтения описи — сервер принял бы это за «не
+        # переключено» и инвертировал тот же флаг второй раз через склад.
+        свежие = []
+        for книга in книги:
+            новая = dict(книга)
+            новая["active"] = bool(флаги.get(книга.get("id"), False))
+            свежие.append(новая)
+        ОПИСЬ = свежие
+        return свежие
 
 
 # `warm_background` ВЫРЕЗАН (2026-08-14). Свой поток на корпус завёл Раунд 54

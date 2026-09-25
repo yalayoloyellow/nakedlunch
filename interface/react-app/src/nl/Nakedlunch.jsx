@@ -280,6 +280,9 @@ export default class Nakedlunch extends Component {
     // nakedlunch никуда не выводился — ни одной строки настроек, только
     // молчаливый запрос на старте и сеттер без вызывающих.
     jobs: [], corpusBusy: '', histRetention: 0, restoreTheme: '', cfgTab: 'лента',
+    // Пульт Telegram не хранит токен в состоянии дольше, чем нужно для POST:
+    // сервер никогда не возвращает его обратно.
+    telegram: null, telegramToken: '', telegramBusy: false, telegramError: '', telegramLink: '',
     // Раунд 40: полноценные избранное и история — поиск, правка, отмена.
     // blackDraft вырезан (Раунд 63): поле-черновик чёрного списка не читал никто.
     favQ: '', histQ: '', favEdit: '', favUndo: '', histCfg: false, statsData: null, funnel: null, black: null };
@@ -400,9 +403,9 @@ export default class Nakedlunch extends Component {
     ind.style.transform = 'translateX(' + btn.offsetLeft + 'px)';
     this._tabInd = true;
   }
-  setTab(t) {
-    if (t === this.state.tab) return;
-    this.openPop({ tab: t, marks: {} });
+  setTab(t, done) {
+    if (t === this.state.tab) { if (done) done(); return; }
+    this.openPop({ tab: t, marks: {} }, done);
     if (t === 'fs') { this._kicked = false; this._fsSeeded = false; this.enterFs(); }
   }
   // enterFs/loadEngine/syncEngine живут в methods.fsglue.js (связка со сценой,
@@ -451,9 +454,9 @@ export default class Nakedlunch extends Component {
 
   // ---- попап-система ----
   // открытие гасит всё остальное и снимает висящее закрытие
-  openPop(patch) {
+  openPop(patch, done) {
     clearTimeout(this._popT); this._popT = null;
-    this.setState(Object.assign({ openPill: '', fsSetOpen: false, fsLineOpen: false, closing: '' }, patch || {}));
+    this.setState(Object.assign({ openPill: '', fsSetOpen: false, fsLineOpen: false, closing: '' }, patch || {}), done);
   }
   // НАДГРОБИЕ 2026-09-02: ПОДСИСТЕМА ПОДМЕНЮ (`togSub`/`openSub`/`closeSub`,
   // состояние `subPill`/`subClosing`, таймер `_subT`).
@@ -545,12 +548,13 @@ export default class Nakedlunch extends Component {
     // Список листов (api.sheetsList) — тоже: листов нет с 2026-08-18.
     // Полка профилей настроек (api.knobProfiles) не спрашивается с 2026-08-18:
     // её заменили четыре пресета, зашитые в methods.shelves.js — ПРЕСЕТЫ.
-    const [st, nl, settings, forms, hist] = await Promise.all([
+    const [st, nl, settings, forms, hist, telegram] = await Promise.all([
       grab(api.state()),
       grab(api.nlState()),
       grab(api.settingsGet()),
       grab(api.stanzaProfiles()),
       grab(api.history('')),
+      grab(api.telegramStatus()),
     ]);
     if (this._mounted === false) return;
     // Сохранённых положений нет (чистая установка) — открываемся на П1, а не на
@@ -579,6 +583,7 @@ export default class Nakedlunch extends Component {
       nl: nl,
       settings: settings,
       stanzaForms: forms,
+      telegram: telegram,
       // профиль генерации поднимаем из настроек (2026-08-02). Раньше схема
       // читалась из settings.stanza только в момент генерации, а показать или
       // сменить её было нечем; крутилки не восстанавливались вовсе.
@@ -611,6 +616,7 @@ export default class Nakedlunch extends Component {
       // nl_ui_profiles / nl_palette / nl_view) лежат в тех же /api/settings —
       // bootFsSettings разложит их по состоянию и поднимет вид, затем сцену
       this.bootFsSettings();
+      if (telegram && telegram.configured && this.пультЛентыЗапустить) this.пультЛентыЗапустить();
     });
     // сроки хранения (история и «использованное» nakedlunch) — отдельными
     // роутами, поэтому не в общем Promise.all: их отсутствие не должно ронять
@@ -738,6 +744,7 @@ export default class Nakedlunch extends Component {
   }
   componentWillUnmount() {
     this._mounted = false;
+    if (this.пультЛентыОстановить) this.пультЛентыОстановить();
     window.removeEventListener('keydown', this._keys);
     window.removeEventListener('resize', this._resize);
     window.removeEventListener('pointerdown', this._away, true);

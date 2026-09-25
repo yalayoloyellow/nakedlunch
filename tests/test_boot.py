@@ -317,3 +317,45 @@ def test_progrev_ne_derzhit_port(сервер, monkeypatch):
             "сорокасекундный потолок")
     finally:
         держал.set()
+
+
+def test_переход_со_заставки_ждёт_инъекцию_pywebview():
+    """Мост заставки должен целиком подняться до проверки и навигации."""
+    import ast
+
+    дерево = ast.parse((ROOT / "launch.py").read_text("utf-8"))
+    main = next(n for n in дерево.body
+                if isinstance(n, ast.FunctionDef) and n.name == "main")
+    подняться = next((n for n in ast.walk(main)
+                      if isinstance(n, ast.FunctionDef) and n.name == "подняться"), None)
+    assert подняться is not None, "в launch.main не стало callback подняться"
+
+    def путь(узел):
+        части = []
+        while isinstance(узел, ast.Attribute):
+            части.append(узел.attr)
+            узел = узел.value
+        if isinstance(узел, ast.Name):
+            части.append(узел.id)
+        return tuple(reversed(части))
+
+    вызовы = [n for n in ast.walk(подняться) if isinstance(n, ast.Call)]
+    ожидания = [n for n in вызовы
+                if путь(n.func) == ("window", "events", "loaded", "wait")]
+    здоровье = [n for n in вызовы
+                if isinstance(n.func, ast.Name) and n.func.id == "wait_health"]
+    переходы = [n for n in вызовы
+                if путь(n.func) in (("window", "load_url"),
+                                    ("window", "load_html"))]
+
+    assert len(ожидания) == 1, "подняться обязан ровно один раз ждать loaded"
+    assert len(здоровье) == 1, "подняться обязан проверять wait_health"
+    assert {путь(n.func)[-1] for n in переходы} == {"load_url", "load_html"}, \
+        "сторож не нашёл обе навигации окна в подняться"
+
+    позиция = lambda n: (n.lineno, n.col_offset)
+    ждать = позиция(ожидания[0])
+    assert ждать < позиция(здоровье[0]), \
+        "loaded.wait должен завершиться до wait_health"
+    assert all(ждать < позиция(n) for n in переходы), \
+        "loaded.wait должен завершиться до любой навигации окна"

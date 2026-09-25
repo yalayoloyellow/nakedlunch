@@ -30,6 +30,9 @@
 #
 # Прогон: .venv/bin/python -m pytest tests/test_разнообразие.py -q
 
+import json
+import shutil
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -195,6 +198,219 @@ def test_freestyle_pishet_v_obshchuyu_istoriyu():
     assert "fresh" in окно or "shown" in окно, (
         "в историю уходит не показанное, а что-то другое — см. решение прожарки 7: "
         "строка засчитывается, когда с экрана ушла её последняя единица")
+
+
+# ---------------------------------------------------------------------------
+# ФРИСТАЙЛ: служебные поля строки и состав корпуса.
+#
+# Прежний сторож выше видит только слово `markShownQueue` в исходнике.
+# Он оставался зелёным, когда `genFsLines`, `fsPullRows` и `fsAdvance`
+# поочерёдно срезали `_исходный`, `_ном` и семя. Ниже исполняются
+# настоящие JS-методы; подменены только сеть и React-оболочка.
+
+ФРОНТ = КОРЕНЬ / "interface" / "react-app" / "src" / "nl"
+
+
+def _фронт_node(тело: str):
+    if shutil.which("node") is None:
+        pytest.skip("node не установлен — проверка фронта пропущена")
+    модули = [ФРОНТ / имя for имя in
+              ("methods.fs.js", "methods.gen.js", "methods.lenta.js")]
+    if not all(п.exists() for п in модули):
+        pytest.skip("frontend-модули ещё не на месте")
+    fs, gen, lenta = (п.as_uri() for п in модули)
+    src = f"""
+import {{ fsMethods }} from '{fs}';
+import {{ genMethods }} from '{gen}';
+import {{ lentaMethods }} from '{lenta}';
+{_ФРОНТ_СТЕНД}
+{тело}
+"""
+    p = subprocess.run(["node", "--input-type=module", "-e", src],
+                       capture_output=True, timeout=60)
+    вывод = (p.stdout or b"").decode("utf-8", "replace")
+    ошибки = (p.stderr or b"").decode("utf-8", "replace")
+    assert p.returncode == 0, f"node упал:\n{ошибки}"
+    assert вывод.strip(), f"node ничего не напечатал. stderr:\n{ошибки}"
+    return json.loads(вывод)
+
+
+_ФРОНТ_СТЕНД = r"""
+const ответ = data => ({ ok: true, status: 200, json: async () => data });
+
+function компонент() {
+  const c = Object.assign({}, fsMethods, genMethods, lentaMethods);
+  c.state = {
+    tab: 'fs', srcMode: 'генератор', algo: 'Алгоритм', srcChunk: 'строки',
+    knobMode: 'автор', params: {}, полосы: {}, доли: {}, seedDraft: '',
+    nl: { revision: 'rev-a',
+          sources: [{ id: 'book-a', active: true }, { id: 'book-b', active: false }] },
+  };
+  c._mounted = true;
+  c._lastSeed = 'seed-last-lenta';
+  c.setState = function (patch) {
+    if (typeof patch === 'function') patch = patch(this.state);
+    Object.assign(this.state, patch || {});
+  };
+  c.fsНастройки = () => ({ mode: 'автор', params: {}, полосы: {}, доли: {}, spec: null });
+  c.knobsOfProfile = проф => проф.params || {};
+  c.curSpec = () => null;
+  c.fsv = key => key === 'fsPer' ? 1 : (key === 'fsSec' ? 3.2 : 1);
+  c.paintLine = function (text) { this._painted = text; return true; };
+  c.fsFill = function () {};
+  c.flash = function () {};
+  return c;
+}
+
+async function дождатьсяИстории(c) {
+  await new Promise(resolve => setTimeout(resolve, 360));
+  clearTimeout(c._histReloadT);
+}
+"""
+
+
+def test_freestyle_dovozit_ishodnyy_i_nomer_do_istorii():
+    """Response проходит весь боевой путь, а не вызовы хелперов порознь."""
+    out = _фронт_node(r"""
+const записи = [];
+globalThis.fetch = async (url, opts = {}) => {
+  if (String(url) === '/api/generate') return ответ({
+    shortlist: [{ text: 'обрезок', template: 'текст',
+                  _исходный: 'полная строка до подрезки', _ном: 73 }],
+    seed: { seed: 'seed-fs-73' },
+  });
+  if (String(url) === '/api/history/mark_shown') {
+    записи.push(JSON.parse(opts.body)); return ответ({});
+  }
+  throw new Error('неожиданный URL: ' + url);
+};
+const c = компонент();
+c._fsBuf = await c.genFsLines(1);
+c.fsAdvance();
+await дождатьсяИстории(c);
+console.log(JSON.stringify({ painted: c._painted, записи }));
+process.exit(0);
+""")
+    assert out["painted"] == "обрезок", "тестовая строка не дошла до экрана"
+    assert len(out["записи"]) == 1, "показанная строка не дошла до history/mark_shown"
+    item = out["записи"][0]["items"][0]
+    assert item["_исходный"] == "полная строка до подрезки", \
+        "фристайл по дороге потерял _исходный"
+    assert item["_ном"] == 73, "фристайл по дороге потерял _ном"
+
+
+def test_freestyle_pishet_svoy_seed_a_ne_posledniy_seed_lenty():
+    out = _фронт_node(r"""
+const записи = [];
+globalThis.fetch = async (url, opts = {}) => {
+  if (String(url) === '/api/generate') return ответ({
+    shortlist: [{ text: 'строка фристайла', template: '' }],
+    seed: { seed: 'seed-own-fs' },
+  });
+  if (String(url) === '/api/history/mark_shown') {
+    записи.push(JSON.parse(opts.body)); return ответ({});
+  }
+  throw new Error('неожиданный URL: ' + url);
+};
+const c = компонент();
+c._lastSeed = 'seed-last-lenta';
+c._fsBuf = await c.genFsLines(1);
+c.fsAdvance();
+await дождатьсяИстории(c);
+console.log(JSON.stringify(записи));
+process.exit(0);
+""")
+    assert len(out) == 1
+    assert out[0].get("seed") == "seed-own-fs", (
+        "строка фристайла записалась под последним семенем ленты, "
+        "а не под семенем своего ответа")
+
+
+def test_mark_shown_gruppiruet_stroki_po_ih_seed():
+    out = _фронт_node(r"""
+const ответы = [
+  { shortlist: [{ text: 'из первого' }], seed: { seed: 'seed-fs-a' } },
+  { shortlist: [{ text: 'из второго' }], seed: { seed: 'seed-fs-b' } },
+];
+const записи = [];
+globalThis.fetch = async (url, opts = {}) => {
+  if (String(url) === '/api/generate') return ответ(ответы.shift());
+  if (String(url) === '/api/history/mark_shown') {
+    записи.push(JSON.parse(opts.body)); return ответ({});
+  }
+  throw new Error('неожиданный URL: ' + url);
+};
+const c = компонент();
+const первые = await c.genFsLines(1);
+const вторые = await c.genFsLines(1);
+c._lastSeed = 'seed-last-lenta';
+c.markShownQueue(первые.concat(вторые));
+await дождатьсяИстории(c);
+console.log(JSON.stringify(записи));
+process.exit(0);
+""")
+    группы = {
+        str(payload.get("seed", "")): [item["text"] for item in payload["items"]]
+        for payload in out
+    }
+    assert группы == {
+        "seed-fs-a": ["из первого"],
+        "seed-fs-b": ["из второго"],
+    }, f"markShownQueue смешал строки разных прогонов: {группы}"
+
+
+def test_lenta_sohranyaet_seed_zaranee_nabrannoy_strofy():
+    """Поздний префетч не имеет права переписать происхождение ранней строфы."""
+    out = _фронт_node(r"""
+const ответы = [
+  { shortlist: [0, 1, 2, 3].map(i => ({ text: 'первая ' + i })),
+    seed: { seed: 'seed-lenta-a' } },
+  { shortlist: [0, 1, 2, 3].map(i => ({ text: 'вторая ' + i })),
+    seed: { seed: 'seed-lenta-b' } },
+];
+const записи = [];
+globalThis.fetch = async (url, opts = {}) => {
+  if (String(url) === '/api/generate') return ответ(ответы.shift());
+  if (String(url) === '/api/history/mark_shown') {
+    записи.push(JSON.parse(opts.body)); return ответ({});
+  }
+  throw new Error('неожиданный URL: ' + url);
+};
+const c = компонент();
+await c.lentaНабрать(false);
+await c.lentaНабрать(false);
+const первая = c._буфер.shift();
+c.lentaПоложить(первая, { вид: 'строфа' });
+c.lentaОтметитьПоказ();
+await дождатьсяИстории(c);
+console.log(JSON.stringify(записи));
+process.exit(0);
+""")
+    assert len(out) == 1
+    assert out[0].get("seed") == "seed-lenta-a"
+    assert [item["text"] for item in out[0]["items"]] == [
+        "первая 0", "первая 1", "первая 2", "первая 3",
+    ]
+
+
+def test_klyuchi_lenty_i_freestyle_zavisyat_ot_korpusa_i_indeksa():
+    out = _фронт_node(r"""
+const c = компонент();
+const до = { lenta: c.lentaПодпись(), fs: c.fsGenKey() };
+c.state.nl.revision = 'rev-b';
+const послеИндекса = { lenta: c.lentaПодпись(), fs: c.fsGenKey() };
+c.state.nl.sources[1].active = true;
+const послеИсточника = { lenta: c.lentaПодпись(), fs: c.fsGenKey() };
+console.log(JSON.stringify({
+  индексЛента: до.lenta !== послеИндекса.lenta,
+  индексFs: до.fs !== послеИндекса.fs,
+  источникЛента: послеИндекса.lenta !== послеИсточника.lenta,
+  источникFs: послеИндекса.fs !== послеИсточника.fs,
+}));
+""")
+    assert all(out.values()), (
+        "ревизия индекса или состав активных книг не входят в подпись буфера; "
+        f"лента/фристайл могут допоказать старый префетч: {out}")
 
 
 # ---------------------------------------------------------------------------
