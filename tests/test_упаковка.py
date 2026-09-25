@@ -142,7 +142,7 @@ def test_секрет_игнорируется_гитом_на_самом_дел
 
 def test_релизная_сборка_полна_и_проверяет_чистый_профиль():
     """Не дать CI тихо вернуться к старым печкам или архиву с личными данными."""
-    for платформа in ("macos-13", "macos-14", "windows-latest", "ubuntu-latest"):
+    for платформа in ("macos-15-intel", "macos-14", "windows-latest", "ubuntu-latest"):
         assert платформа in РЕЛИЗ
     for устарело in ("скачать_векторы.py", "build_rhyme_index.py", "/api/word/suggest"):
         assert устарело not in РЕЛИЗ
