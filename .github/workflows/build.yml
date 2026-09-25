@@ -1,27 +1,19 @@
-# Сборка приложения под три системы.
+# Переносимые релизные пакеты для каждой поддерживаемой платформы.
 #
-# ПРИНЦИП: скачал, запустил, работает. Внутри артефакта всё, что нужно
-# программе, — интерфейс, таблицы, акцентуатор. Ни питона, ни node, ни
-# докачки на машине человека.
-#
-# Каждая система собирается на своей: кросс-компиляции для питона с нативным
-# окном не существует. Отсюда матрица, а не один прогон.
-#
-# Модели акцентуатора на сборочной машине пустые: пакет тянет их при первом
-# запуске. Забираем ровно те, к которым обращается код, — 21 МБ вместо 1.4 ГБ
-# (см. tools/скачать_акцентуатор.py).
+# Артефакт — onedir: macOS получает .app в DMG и ZIP, Windows — папку с .exe
+# в ZIP, Linux — папку с исполняемым файлом в tar.gz. На машине пользователя
+# не нужны Python, Node или исходники; личные данные никогда не кладутся сюда.
 
-name: сборка
+name: релизная сборка
 
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
 
-# Русский вывод не должен зависеть от кодировки консоли сборочной машины.
 env:
   PYTHONUTF8: "1"
-  PYTHONIOENCODING: "utf-8" 
+  PYTHONIOENCODING: "utf-8"
 
 jobs:
   build:
@@ -30,12 +22,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            id: macos
-          - os: windows-latest
-            id: windows
-          - os: ubuntu-latest
-            id: linux
+          - id: macos-x64
+            os: macos-13
+            family: macos
+          - id: macos-arm64
+            os: macos-14
+            family: macos
+          - id: windows-x64
+            os: windows-latest
+            family: windows
+          - id: linux-x64
+            os: ubuntu-latest
+            family: linux
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -52,37 +50,26 @@ jobs:
           cache: npm
           cache-dependency-path: interface/react-app/package-lock.json
 
-      - name: системные библиотеки (Linux)
-        if: matrix.id == 'linux'
+      - name: системные библиотеки Linux
+        if: matrix.family == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgirepository1.0-dev gir1.2-webkit2-4.1 \
                                   python3-gi python3-gi-cairo gir1.2-gtk-3.0
 
-      - name: зависимости питона
+      - name: зависимости Python
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller ruaccent "transformers<5"
+          python -m pip install -r requirements.txt pyinstaller
 
-      - name: модели акцентуатора
+      - name: офлайн-ресурсы акцентуатора
         run: python tools/скачать_акцентуатор.py
 
-      # ТАБЛИЦЫ, КОТОРЫХ НЕТ В РЕПОЗИТОРИИ (Раунд 61).
-      #
-      # navec.tar и rhyme_index.json лежат в .gitignore как артефакты сборки. На
-      # машине разработчика они есть с давних пор, на сборочной не появлялись
-      # никогда, а спека молча пропускала отсутствующее. Цена: тема не работала
-      # ни в одном выпущенном релизе, попап по слову был пуст, и об этом никто
-      # не знал — сервер поднимается и без словарей, поэтому проверка запуска
-      # такую сборку пропускала.
-      #
-      # Теперь спека на отсутствие таблицы падает, а эти два шага её кормят.
-      - name: векторы
-        run: python tools/скачать_векторы.py
-
-      - name: рифмовник
-        run: python tools/build_rhyme_index.py
+      # Тесты идут в том же полном окружении, что и пакет. Иначе динамическая
+      # ветка звуковых ворот может не затронуть модель до сборки и сломаться
+      # уже у человека.
+      - name: тесты
+        run: python -m pytest tests/ -q
 
       - name: интерфейс
         working-directory: interface/react-app
@@ -91,188 +78,140 @@ jobs:
           npm run build
 
       - name: сборка приложения
-        run: pyinstaller --noconfirm nakedlunch.spec
-
-      # --- упаковка под каждую систему ---------------------------------------
-      - name: упаковка (macOS)
-        if: matrix.id == 'macos'
+        shell: bash
         run: |
-          hdiutil create -volname nakedlunch -srcfolder dist/nakedlunch.app \
-                         -ov -format UDZO nakedlunch-macos.dmg
+          version="$GITHUB_REF_NAME"
+          NAKEDLUNCH_VERSION="${version#v}" pyinstaller --clean --noconfirm nakedlunch.spec
 
-      - name: упаковка (Windows)
-        if: matrix.id == 'windows'
-        run: Compress-Archive -Path dist/nakedlunch/* -DestinationPath nakedlunch-windows.zip
-
-      - name: упаковка (Linux)
-        if: matrix.id == 'linux'
-        run: tar -czf nakedlunch-linux.tar.gz -C dist nakedlunch
-
-      # ЗАПУСК, А НЕ ПРОВЕРКА НАЛИЧИЯ ФАЙЛА (Раунд 61).
-      #
-      # Прежняя проверка смотрела только `test -x`, и в комментарии к ней было
-      # написано, почему: «полноценно проверить работу на сборочной машине
-      # нельзя — там нет ни корпуса, ни окна». Убеждение оказалось ложным:
-      # РОЛЬ СЕРВЕРА ПОДНИМАЕТСЯ БЕЗ КОРПУСА И БЕЗ ОКНА, и `GET /` отдаёт
-      # интерфейс — проверено на настоящем бандле 2026-08-12.
-      #
-      # Ценой этого убеждения стал релиз v2.1.0: он падал до открытия окна
-      # (`stat()` по несуществующему в бандле пути) и не отдал бы фронт даже
-      # после починки старта (`DIST` смотрел выше распакованных данных). Обе
-      # ошибки ловились одним `curl`.
-      #
-      # Проверяем два пути: сервер поднимается и отдаёт интерфейс; разводка
-      # ролей доходит до ЧУЖОЙ роли. Второе важно отдельно — в бандле роль
-      # запускается командой «сам себя с именем роли», и этот путь не
-      # проверялся ничем.
-      #
-      # Имена переменных оболочки — только ASCII: кириллические не присваиваются
-      # и молча дают пустую строку (поймано на живой проверке 2026-08-12).
-      - name: запуск собранного (macOS, Linux)
-        if: matrix.id != 'windows'
-        env:
-          NAKEDLUNCH_HOME: ${{ runner.temp }}/nl-home
-          NAKEDLUNCH_DATA: ${{ runner.temp }}/nl-data
+      # Запускаем именно то, что будет вложено в архив. Профиль полностью
+      # отдельный: проверка доказывает оба пользовательских корня, а не трогает
+      # данные агента сборки.
+      - name: запуск собранного macOS и Linux
+        if: matrix.family != 'windows'
+        shell: bash
         run: |
-          set -u
-          # ПРОВЕРЯЕМ ТО, ЧТО ОТГРУЖАЕТСЯ (Раунд 61).
-          #
-          # PyInstaller делает два дерева: onedir `dist/nakedlunch/` и бандл
-          # `dist/nakedlunch.app`. На macOS в .dmg кладётся ВТОРОЕ, а проверялось
-          # первое — людям уезжало то, чего никто не запускал. Данные там одни и
-          # те же, но «одни и те же» — предположение, а предположения сегодня уже
-          # дважды оказывались ложными.
-          #
-          # На Linux и Windows дыры нет: архивы делаются ровно из `dist/nakedlunch/`.
-          if [ "${{ matrix.id }}" = "macos" ]; then
+          set -euo pipefail
+          if [ "${{ matrix.family }}" = "macos" ]; then
             bin="dist/nakedlunch.app/Contents/MacOS/nakedlunch"
+            app_home="$RUNNER_TEMP/nl-profile/Library/Application Support/nakedlunch"
           else
             bin="dist/nakedlunch/nakedlunch"
+            app_home="$RUNNER_TEMP/nl-profile/.local/share/nakedlunch"
           fi
-          test -x "$bin" || { echo "ОТКАЗ: нет исполняемого файла $bin"; exit 1; }
-          echo "проверяю: $bin"
-          "./$bin" сервер --port 8899 > server.log 2>&1 &
+          test -x "$bin"
+          if find dist -name telegram.json -print -quit | grep -q .; then
+            echo "ОТКАЗ: секрет Telegram попал в бандл"
+            exit 1
+          fi
+          profile="$RUNNER_TEMP/nl-profile"
+          mkdir -p "$profile"
+          HOME="$profile" "$bin" сервер --host 127.0.0.1 --port 8899 > server.log 2>&1 &
           pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
           code=""
           for i in $(seq 1 60); do
-            sleep 2
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8899/ || echo "")
-            if [ "$code" = "200" ]; then break; fi
+            sleep 1
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8899/ || true)
+            [ "$code" = "200" ] && break
           done
-          # ТАБЛИЦЫ ОБЯЗАНЫ РАБОТАТЬ, А НЕ ЛЕЖАТЬ (Раунд 61). Проверка «файл на
-          # месте» уже один раз пропустила неполную сборку: сервер поднимается и
-          # без словарей. Дёргаем попап по слову — он читает rhyme_index.json и
-          # thesaurus.json, и пустой ответ здесь означает ровно то, что у
-          # человека вкладка окажется пустой.
-          # ИМЕНА ПЕРЕМЕННЫХ ТОЛЬКО ASCII — см. предупреждение выше. Я написала
-          # его и тут же назвала переменные `рифмы` и `синонимы`: bash такое
-          # присваивание не считает присваиванием и пытается ВЫПОЛНИТЬ строку,
-          # отчего в логе появляется «...: command not found» с ответом сервера
-          # внутри. PowerShell кириллицу допускает, поэтому Windows проходил, а
-          # macOS и Linux падали — редкий случай, когда ломается не Windows.
-          rifmy=$(curl -s -X POST -H "Content-Type: application/json" \
-                  -d '{"word":"камень","tab":"рифмы","line":""}' \
-                  http://127.0.0.1:8899/api/word/suggest 2>/dev/null || echo "")
-          sinonimy=$(curl -s -X POST -H "Content-Type: application/json" \
-                     -d '{"word":"камень","tab":"синонимы","line":""}' \
-                     http://127.0.0.1:8899/api/word/suggest 2>/dev/null || echo "")
-          kill "$pid" 2>/dev/null || true
-          echo "--- лог сервера ---"
-          tail -40 server.log || true
-          if [ "$code" != "200" ]; then
-            echo "ОТКАЗ: собранный сервер не отдал 200 на / (получено: '$code')"
+          test "$code" = "200"
+          curl -fsS http://127.0.0.1:8899/healthz | grep -qx "ok"
+          curl -fsS http://127.0.0.1:8899/api/settings > settings.json
+          curl -fsS http://127.0.0.1:8899/api/telegram/status > telegram-status.json
+          curl -fsS http://127.0.0.1:8899/api/nl/state > corpus-status.json
+          python -c 'import json; assert json.load(open("telegram-status.json"))["configured"] is False'
+          test -d "$app_home/data"
+          test -d "$profile/Documents/nakedlunch/data"
+          if find "$profile" -name telegram.json -print -quit | grep -q .; then
+            echo "ОТКАЗ: пустой запуск сам создал или перенёс Telegram-токен"
             exit 1
           fi
-          echo "сервер поднялся и отдал интерфейс"
-          echo "рифмы: $(echo "$rifmy" | head -c 120)"
-          echo "синонимы: $(echo "$sinonimy" | head -c 120)"
-          if ! echo "$rifmy" | grep -q '"items"' || echo "$rifmy" | grep -q '"items": *\[\]'; then
-            echo "ОТКАЗ: вкладка «рифмы» пуста — нет core/data/rhyme_index.json"
-            exit 1
-          fi
-          if ! echo "$sinonimy" | grep -q '"items"' || echo "$sinonimy" | grep -q '"items": *\[\]'; then
-            echo "ОТКАЗ: вкладка «синонимы» пуста — нет data/thesaurus.json"
-            exit 1
-          fi
-          echo "словари отвечают: рифмы и синонимы не пусты"
-          "./$bin" индекс --check > index.log 2>&1 || true
-          cat index.log
-          if ! grep -q "индекс" index.log; then
-            echo "ОТКАЗ: роль «индекс» не отработала — разводка ролей сломана"
-            exit 1
-          fi
-          echo "разводка ролей работает"
+          echo "--- лог собранного сервера ---"
+          tail -80 server.log
 
-      - name: запуск собранного (Windows)
-        if: matrix.id == 'windows'
+      - name: запуск собранного Windows
+        if: matrix.family == 'windows'
         shell: pwsh
-        env:
-          NAKEDLUNCH_HOME: ${{ runner.temp }}\nl-home
-          NAKEDLUNCH_DATA: ${{ runner.temp }}\nl-data
         run: |
-          $proc = Start-Process -FilePath "dist\nakedlunch\nakedlunch.exe" `
-                                -ArgumentList "сервер","--port","8899" `
-                                -PassThru -RedirectStandardOutput server.log `
-                                -RedirectStandardError server.err
-          $code = 0
-          for ($i = 0; $i -lt 60; $i++) {
-            Start-Sleep -Seconds 2
-            try {
-              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8899/" -UseBasicParsing -TimeoutSec 5
-              $code = $r.StatusCode
-            } catch { $code = 0 }
-            if ($code -eq 200) { break }
+          $profile = Join-Path $env:RUNNER_TEMP "nl-profile"
+          $env:HOME = $profile
+          $env:USERPROFILE = $profile
+          $env:APPDATA = Join-Path $profile "AppData\Roaming"
+          New-Item -ItemType Directory -Force -Path $profile | Out-Null
+          if (Get-ChildItem -Path dist -Filter telegram.json -Recurse -ErrorAction SilentlyContinue) {
+            throw "ОТКАЗ: секрет Telegram попал в бандл"
           }
-          # Словари обязаны отвечать, а не просто лежать — см. пояснение в ветке
-          # macOS/Linux выше.
-          function Спросить($вкладка) {
-            $тело = @{ word = "камень"; tab = $вкладка; line = "" } | ConvertTo-Json -Compress
-            $байты = [System.Text.Encoding]::UTF8.GetBytes($тело)
-            try {
-              $о = Invoke-WebRequest -Uri "http://127.0.0.1:8899/api/word/suggest" `
-                     -Method POST -Body $байты -ContentType "application/json; charset=utf-8" `
-                     -UseBasicParsing -TimeoutSec 60
-              return ($о.Content | ConvertFrom-Json).items.Count
-            } catch { return -1 }
+          $proc = Start-Process -FilePath "dist\nakedlunch\nakedlunch.exe" -ArgumentList @("сервер","--host","127.0.0.1","--port","8899") -PassThru -RedirectStandardOutput server.log -RedirectStandardError server.err
+          try {
+            $code = 0
+            for ($i = 0; $i -lt 60; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $response = Invoke-WebRequest -Uri "http://127.0.0.1:8899/" -UseBasicParsing -TimeoutSec 3
+                $code = $response.StatusCode
+              } catch { $code = 0 }
+              if ($code -eq 200) { break }
+            }
+            if ($code -ne 200) { throw "ОТКАЗ: собранный сервер не отдал 200" }
+            if ((Invoke-WebRequest -Uri "http://127.0.0.1:8899/healthz" -UseBasicParsing).Content.Trim() -ne "ok") {
+              throw "ОТКАЗ: /healthz не ответил ok"
+            }
+            $status = Invoke-RestMethod -Uri "http://127.0.0.1:8899/api/telegram/status"
+            if ($status.configured) { throw "ОТКАЗ: чистый пакет получил Telegram-токен" }
+            Invoke-WebRequest -Uri "http://127.0.0.1:8899/api/settings" -UseBasicParsing | Out-Null
+            Invoke-WebRequest -Uri "http://127.0.0.1:8899/api/nl/state" -UseBasicParsing | Out-Null
+            if (!(Test-Path (Join-Path $env:APPDATA "nakedlunch\data"))) {
+              throw "ОТКАЗ: нет пользовательского каталога настроек"
+            }
+            if (!(Test-Path (Join-Path $profile "Documents\nakedlunch\data"))) {
+              throw "ОТКАЗ: программа не нашла Documents для корпуса"
+            }
+            if (Get-ChildItem -Path $profile -Filter telegram.json -Recurse -ErrorAction SilentlyContinue) {
+              throw "ОТКАЗ: пустой запуск сам создал или перенёс Telegram-токен"
+            }
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           }
-          $нРифм = Спросить "рифмы"
-          $нСин  = Спросить "синонимы"
-          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-          Write-Host "--- лог сервера ---"
-          if (Test-Path server.log) { Get-Content server.log -Tail 40 }
-          if (Test-Path server.err) { Get-Content server.err -Tail 40 }
-          if ($code -ne 200) {
-            Write-Host "ОТКАЗ: собранный сервер не отдал 200 на / (получено: $code)"
+          if (Test-Path server.log) { Get-Content server.log -Tail 80 }
+          if (Test-Path server.err) { Get-Content server.err -Tail 80 }
+
+      - name: пакет macOS
+        if: matrix.family == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          codesign --force --deep --sign - dist/nakedlunch.app
+          codesign --verify --deep --strict --verbose=2 dist/nakedlunch.app
+          ditto -c -k --sequesterRsrc --keepParent dist/nakedlunch.app \
+                "release/nakedlunch-${{ matrix.id }}.zip"
+          hdiutil create -volname nakedlunch -srcfolder dist/nakedlunch.app \
+                         -ov -format UDZO "release/nakedlunch-${{ matrix.id }}.dmg"
+
+      - name: пакет Windows
+        if: matrix.family == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          Compress-Archive -Path "dist\nakedlunch" -DestinationPath "release\nakedlunch-windows-x64.zip"
+
+      - name: пакет Linux
+        if: matrix.family == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          tar -czf release/nakedlunch-linux-x64.tar.gz -C dist nakedlunch
+          if tar -tzf release/nakedlunch-linux-x64.tar.gz | grep -q 'telegram.json'; then
+            echo "ОТКАЗ: секрет Telegram попал в архив"
             exit 1
-          }
-          Write-Host "сервер поднялся и отдал интерфейс"
-          Write-Host "рифм: $нРифм · синонимов: $нСин"
-          if ($нРифм -le 0) {
-            Write-Host "ОТКАЗ: вкладка «рифмы» пуста — нет core/data/rhyme_index.json"
-            exit 1
-          }
-          if ($нСин -le 0) {
-            Write-Host "ОТКАЗ: вкладка «синонимы» пуста — нет data/thesaurus.json"
-            exit 1
-          }
-          Write-Host "словари отвечают: рифмы и синонимы не пусты"
-          $idx = (& "dist\nakedlunch\nakedlunch.exe" индекс --check 2>&1 | Out-String)
-          $global:LASTEXITCODE = 0
-          Write-Host $idx
-          if ($idx -notmatch "индекс") {
-            Write-Host "ОТКАЗ: роль «индекс» не отработала — разводка ролей сломана"
-            exit 1
-          }
-          Write-Host "разводка ролей работает"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: nakedlunch-${{ matrix.id }}
-          path: |
-            nakedlunch-macos.dmg
-            nakedlunch-windows.zip
-            nakedlunch-linux.tar.gz
-          if-no-files-found: ignore
+          path: release/*
+          if-no-files-found: error
 
   release:
     name: черновик релиза

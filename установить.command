@@ -8,9 +8,9 @@
 # ЧЕГО ОН НЕ ТРЕБУЕТ. Node. Собранный интерфейс лежит в репозитории — среда
 # сборки нужна только тому, кто правит исходники интерфейса.
 #
-# ПОЧЕМУ ПОИСК ПИТОНА, А НЕ «поставь 3.12». Ядро написано синтаксисом 3.10, и
-# любой из 3.10, 3.11, 3.12, 3.13 подойдёт. Требовать ровно одну версию значит
-# посылать в установку того, у кого уже есть годная.
+# ПОЧЕМУ ПОИСК ПИТОНА, А НЕ «поставь 3.12». Ядро написано синтаксисом 3.10, а
+# ONNX Runtime для Intel-macOS пока даёт готовые колёса до Python 3.12. Годится
+# любой из 3.10, 3.11 и 3.12; 3.13 здесь не «свежее», а неустанавливаемое.
 
 set -e
 ROOT="${0:A:h}"
@@ -23,12 +23,12 @@ echo
 # ------------------------------------------------------------------ питон
 
 PY=""
-for cand in python3.13 python3.12 python3.11 python3.10 python3 \
+for cand in python3.12 python3.11 python3.10 python3 \
             /opt/homebrew/bin/python3 /usr/local/bin/python3; do
   bin=$(command -v "$cand" 2>/dev/null) || continue
   # версию спрашиваем У САМОГО ИНТЕРПРЕТАТОРА, а не по имени файла: python3.12
   # в PATH бывает ссылкой куда угодно
-  if "$bin" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3,10) else 1)' 2>/dev/null; then
+  if "$bin" -c 'import sys; raise SystemExit(0 if (3,10) <= sys.version_info[:2] < (3,13) else 1)' 2>/dev/null; then
     PY="$bin"; break
   fi
 done
@@ -36,7 +36,7 @@ done
 if [ -z "$PY" ]; then
   echo "НЕ НАШЁЛ ПОДХОДЯЩИЙ PYTHON."
   echo
-  echo "Нужен 3.10 или новее. Проверены: python3.13, python3.12, python3.11,"
+  echo "Нужен Python 3.10, 3.11 или 3.12. Проверены: python3.12, python3.11,"
   echo "python3.10, python3 и обычные места Homebrew."
   echo
   echo "Поставь любым способом:"
@@ -55,7 +55,8 @@ echo "питон: $("$PY" -V 2>&1)  ($PY)"
 # ------------------------------------------------------------- окружение
 
 if [ -x ".venv/bin/python" ] && \
-   .venv/bin/python -c 'import flask, pymorphy3, wordfreq' 2>/dev/null; then
+   .venv/bin/python -c 'import flask, pymorphy3, wordfreq, ruaccent' 2>/dev/null && \
+   .venv/bin/python -c 'import pathlib, ruaccent; p = pathlib.Path(ruaccent.__file__).resolve().parent; raise SystemExit(not ((p / "dictionary" / "accents.json.gz").is_file() and (p / "dictionary" / "yo_words.json.gz").is_file() and (p / "nn" / "nn_accent" / "model.onnx").is_file()))' 2>/dev/null; then
   echo "окружение: уже собрано"
 else
   echo "окружение: собираю…"
@@ -64,6 +65,8 @@ else
   .venv/bin/python -m pip install --quiet --upgrade pip
   echo "зависимости: ставлю (это разово, минуту-две)…"
   .venv/bin/pip install --quiet -r requirements.txt
+  echo "акцентуатор: кладу офлайн-модель…"
+  .venv/bin/python tools/скачать_акцентуатор.py
   echo "окружение: готово"
 fi
 
