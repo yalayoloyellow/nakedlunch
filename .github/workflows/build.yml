@@ -69,7 +69,15 @@ jobs:
       # ветка звуковых ворот может не затронуть модель до сборки и сломаться
       # уже у человека.
       - name: тесты
-        run: python -m pytest tests/ -q
+        shell: bash
+        run: |
+          # Полный прогон должен быть столь же изолирован, как последующий
+          # запуск собранного приложения: несколько тестов честно создают
+          # опись пустого корпуса. Без отдельного дома это была бы запись
+          # прямо в checkout, а сторож тестов справедливо считал бы её боевой.
+          profile="$RUNNER_TEMP/nl-tests"
+          mkdir -p "$profile"
+          HOME="$profile" NAKEDLUNCH_HOME="$profile/state" python -m pytest tests/ -q
 
       - name: интерфейс
         working-directory: interface/react-app
