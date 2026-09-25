@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -61,13 +62,16 @@ def test_процессы_разбираются():
 def test_bash_шаги_синтаксически_целы():
     """`bash -n` на каждом шаге. Ловит незакрытые кавычки, скобки и прочее —
     то, что иначе обнаружится через двадцать минут сборки."""
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("bash не установлен на этой платформе")
     беды = []
     for файл, работа, имя, скрипт in шаги_оболочки():
         with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False,
                                          encoding="utf-8") as ф:
             ф.write(ПОДСТАНОВКА.sub("подстановка", скрипт))
             путь = ф.name
-        готово = subprocess.run(["bash", "-n", путь],
+        готово = subprocess.run([bash, "-n", путь],
                                 capture_output=True, text=True)
         Path(путь).unlink(missing_ok=True)
         if готово.returncode:

@@ -583,6 +583,30 @@ def _процесс_жив(pid) -> bool | None:
         return None
     if pid <= 0:
         return None
+    if os.name == "nt":
+        # `os.kill(pid, 0)` на Windows не является проверкой существования:
+        # для некоторых несуществующих номеров он возвращает успех. Открываем
+        # процесс с правом только на запрос; отсутствие номера — однозначно
+        # ERROR_INVALID_PARAMETER, защищённый чужой процесс — всё ещё живой.
+        try:
+            import ctypes
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            open_process = kernel32.OpenProcess
+            open_process.argtypes = [ctypes.c_uint32, ctypes.c_int,
+                                     ctypes.c_uint32]
+            open_process.restype = ctypes.c_void_p
+            handle = open_process(0x1000, False, pid)  # QUERY_LIMITED_INFORMATION
+            if handle:
+                kernel32.CloseHandle(ctypes.c_void_p(handle))
+                return True
+            error = ctypes.get_last_error()
+            if error == 5:       # ERROR_ACCESS_DENIED: существует, но чужой
+                return True
+            if error == 87:      # ERROR_INVALID_PARAMETER: номера нет
+                return False
+        except Exception:
+            return None
+        return None
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

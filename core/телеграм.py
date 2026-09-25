@@ -213,10 +213,14 @@ class Хранилище:
         try:
             fd, temp_name = tempfile.mkstemp(prefix=".telegram-", suffix=".new",
                                              dir=str(self.path.parent))
-            try:
-                os.fchmod(fd, 0o600)
-            except OSError:
-                pass
+            # Windows не даёт POSIX-дескриптору `fchmod`; файл там наследует
+            # ACL пользовательского AppData. На Unix закрываем его до записи,
+            # чтобы даже короткое окно до `replace` не было общедоступным.
+            if os.name != "nt":
+                try:
+                    os.fchmod(fd, 0o600)
+                except OSError:
+                    pass
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 json.dump(data, handle, ensure_ascii=False, separators=(",", ":"))
                 handle.write("\n")

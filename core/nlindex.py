@@ -222,6 +222,18 @@ def при_перепечке(слушатель) -> None:
 # выключением соответствующей книги. См. план, часть 6.
 
 
+def _mmap_mode() -> str | None:
+    """Режим открытия колонок для текущей ОС.
+
+    Unix позволяет удалить файл, пока его читает mmap: старый индекс живёт
+    до `reload`, а печка уже атомарно ставит новый. Windows держит такой файл
+    занятым, из-за чего добавление книги не могло заменить текущий индекс.
+    Там читаем колонки в обычную память: это дороже по RAM, но не оставляет
+    блокировок и сохраняет рабочую горячую перепечку.
+    """
+    return None if os.name == "nt" else "r"
+
+
 class Index:
     """Колонки корпуса. Массивы открыты через mmap: старт не платит разбор
     файла, а память растёт страницами по факту обращения — именно это снимает
@@ -236,7 +248,8 @@ class Index:
         self.lemmas = meta.get("lemmas") or []
         self.tokens = meta.get("tokens") or []
         self._lem_id: dict[str, int] | None = None
-        load = lambda name: np.load(d / f"{name}.npy", mmap_mode="r")  # noqa: E731
+        mmap_mode = _mmap_mode()
+        load = lambda name: np.load(d / f"{name}.npy", mmap_mode=mmap_mode)  # noqa: E731
         self.banal = load("banal")
         self.taut = load("taut")
         self.mat = load("mat")
@@ -342,8 +355,12 @@ class Index:
         # пустой массив; остальные колонки пустыми грузятся сами (`np.load`
         # с mmap_mode на нулевом .npy отдаёт форму (0,), проверено).
         блоб = d / "text_blob.bin"
-        self.blob = (np.memmap(блоб, dtype=np.uint8, mode="r")
-                     if блоб.stat().st_size else np.zeros(0, dtype=np.uint8))
+        if not блоб.stat().st_size:
+            self.blob = np.zeros(0, dtype=np.uint8)
+        elif mmap_mode is None:
+            self.blob = np.fromfile(блоб, dtype=np.uint8)
+        else:
+            self.blob = np.memmap(блоб, dtype=np.uint8, mode="r")
         self._tok_id: dict[str, int] | None = None
         self._отпечаток: str | None = None
         # производные, считаются один раз на процесс

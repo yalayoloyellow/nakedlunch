@@ -13,6 +13,7 @@
 # Прогон: .venv/bin/python -m pytest tests/test_скрипты_оболочки.py -q
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -66,6 +67,12 @@ def test_скрипт_разбирается(файл):
     """`zsh -n` — разбор без выполнения. Ловит то, что переживает беглый взгляд."""
     if not (КОРЕНЬ / ".git").exists():
         pytest.skip("не репозиторий")
-    п = subprocess.run(["zsh", "-n", str(файл)], capture_output=True, text=True)
+    zsh = shutil.which("zsh")
+    if zsh is None:
+        # Это проверка именно синтаксиса zsh-ярлыков macOS. На Linux и Windows
+        # их исполнителя может честно не быть; переносимый пакет там проверяет
+        # собственный исполняемый файл, а не чужой для ОС установщик.
+        pytest.skip("zsh не установлен на этой платформе")
+    п = subprocess.run([zsh, "-n", str(файл)], capture_output=True, text=True)
     assert п.returncode == 0, (
         f"{файл.relative_to(КОРЕНЬ)} не разбирается:\n{п.stderr.strip()}")

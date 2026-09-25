@@ -13,10 +13,13 @@
 #
 # Прогон: .venv/bin/python -m pytest tests/test_имена_файлов.py -q
 
+import os
 import shutil
 import sys
 import unicodedata
 from pathlib import Path
+
+import pytest
 
 КОРЕНЬ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(КОРЕНЬ))
@@ -87,6 +90,8 @@ def test_перенос_переживает_кириллицу(tmp_path):
     Если этот тест однажды покраснеет, чинить надо не его, а скрипт: значит
     перенос стал раскладывать имена, и на той стороне программа не поднимется
     до починки в launch.py."""
+    if os.name == "nt":
+        pytest.skip("tar-перенос — сценарий macOS, Windows получает ZIP-пакет")
     исход = tmp_path / "src"
     (исход / "d").mkdir(parents=True)
     (исход / "d" / "кэш.py").write_text("q = 1\n", encoding="utf-8")

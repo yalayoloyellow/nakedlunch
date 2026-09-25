@@ -158,6 +158,11 @@ def clean_text(text: str, шаг=None) -> str:
     if not text or not text.strip():
         return ""
 
+    # `Path.write_text` на Windows кладёт CRLF. До схлопывания пробелов ниже
+    # нам нужны именно границы абзацев: летопись в хвосте книги ищется по
+    # двойному `\n`, поэтому \r нельзя оставлять до этого этапа.
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+
     # Remove script and style blocks entirely (with content)
     text = re.sub(r'<script[^>]*>.*?</script>', ' ', text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<style[^>]*>.*?</style>', ' ', text, flags=re.DOTALL | re.IGNORECASE)

@@ -186,6 +186,19 @@ def испечь_индекс(дом: Path, тексты: list[str], rules: str 
     return d
 
 
+def test_windows_индекс_не_держит_файлы_при_перепечке(tmp_path, monkeypatch):
+    """На Windows mmap блокирует замену каталога, поэтому колонки читаются
+    обычными массивами и фоновая перепечка может поставить новый индекс."""
+    дом = tmp_path / "дом"
+    d = испечь_индекс(дом, СТРОКИ_А)
+    monkeypatch.setattr(nlindex, "_mmap_mode", lambda: None)
+    idx = nlindex.Index(d)
+    assert not isinstance(idx.banal, np.memmap)
+    assert not isinstance(idx.blob, np.memmap)
+    испечь_индекс(дом, СТРОКИ_Б)
+    assert (дом / "core" / "data" / "nl_index" / "meta.json").exists()
+
+
 def испечь_склад(дом: Path, тексты: list[str]) -> Path:
     """Хранилище nakedlunch с одной активной книгой из этих строк."""
     from nlsrc.store import NakedLunchStore, Corpus, Fragment

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import stat
 import sys
 import threading
@@ -59,7 +60,8 @@ def test_токен_лежит_в_закрытом_файле_а_статус_е
     secret = store.подключить(ТОКЕН, "nakedlunch_test_bot")
 
     assert path.exists()
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert json.loads(path.read_text("utf-8"))["token"] == ТОКЕН
     status = store.статус()
     assert status == {
