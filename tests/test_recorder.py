@@ -248,13 +248,15 @@ def rec_root(tmp_path, monkeypatch):
     return tmp_path / "записи"
 
 
-def test_session_dir_and_status(rec_root):
+def test_session_dir_and_status(rec_root, monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(recorder.time, "monotonic", lambda: now[0])
     s = recorder.Session()
     assert s.dir.parent == rec_root and s.dir.is_dir()
     s.open_track("mic", kind="wav", channels=1, rate=RATE)
     s.open_track("video", kind="blob", ext="mp4")
     s.append("mic", tone(RATE // 10, channels=1), 0)
-    time.sleep(0.05)
+    now[0] += 0.05
     st = s.status()
     assert set(st) == {"mic", "video"}
     for track in st.values():
@@ -263,7 +265,7 @@ def test_session_dir_and_status(rec_root):
     assert st["mic"]["peak"] > 0
     assert st["video"]["bytes"] == 0
     # видео молчит с самого открытия — интерфейсу это и есть сигнал сбоя
-    assert st["video"]["last_write_ago"] >= 0.05
+    assert st["video"]["last_write_ago"] == 0.05
     assert (s.dir / "video.mp4.partial").exists()
     s.stop_all()
     assert s.all_closed()
